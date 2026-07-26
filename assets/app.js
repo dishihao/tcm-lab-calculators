@@ -100,70 +100,37 @@ const TECH = {
   gc:   { label:'气相色谱法',     gz:'0521', plates:'10000' }
 };
 
-/* ---------------------------------------------------------------- 品种预设 */
+const RSD_LIM_DEFAULT = '2.0';
 
-const PRODUCTS = {
-  baixianpi: {
-    name: '白鲜皮',
-    spec: '切制',
-    grade: '精选',
-    origin: '黑龙江黑河',
-    basis: '《中国药典》2020年版一部及四部、《国家中药饮片炮制规范》、药品检验补充检验方法和检验项目批准件2010002',
-    docBase: 'TS-45-XXXXX-a',
-    /* val 用字符串保留末位零（"3" 与 "3.0" 在药典里精度不同）；
-       dp 为该品种该项目的修约位数，缺省时回落到 CALCS 里的通用值 */
-    limits: {
-      impurity: { op:'≤', val:'3',    dp:{ ind:1, mean:0 } },
-      moisture: { op:'≤', val:'14.0', dp:{ ind:2, mean:1 } },
-      ash:      null,
-      extract:  { op:'≥', val:'20.0', dp:{ ind:2, mean:1 } }
-    },
-    hplc: { column:'C18', colTemp:'30', wavelength:'236', mobile:'甲醇-水（60:40）', flow:'1.0' },
-    analytes: [
-      { key:'cenketone',  name:'梣酮',   formulaText:'C₁₄H₁₆O₃',  op:'≥', val:'0.050', indDp:4, meanDp:3, tech:'hplc', plates:'3000' },
-      { key:'obakunone',  name:'黄柏酮', formulaText:'C₂₆H₃₄O₇', op:'≥', val:'0.15',  indDp:3, meanDp:2, tech:'hplc', plates:'3000' }
-    ]
-  },
-  jiaozhizi: {
-    name: '焦栀子',
-    spec: '清炒',
-    grade: '选',
-    origin: '江西吉安',
-    basis: '《中国药典》2020年版一部及四部',
-    docBase: 'TS-45-XXXXX-a',
-    limits: {
-      impurity: { op:'≤', val:'3.0', dp:{ ind:1, mean:1 } },
-      moisture: { op:'≤', val:'8.5', dp:{ ind:2, mean:1 } },
-      ash:      { op:'≤', val:'6.0', dp:{ ind:2, mean:1 } },
-      extract:  null
-    },
-    hplc: { column:'C18', colTemp:'30', wavelength:'238', mobile:'乙腈-水（15:85）', flow:'1.0' },
-    analytes: [
-      { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:'1.0', indDp:2, meanDp:1, tech:'hplc', plates:'2000' }
-    ]
-  },
-  /* 薄荷：含量测定为气相色谱法（通则 0521），薄荷脑外标法 */
-  mint: {
-    name: '薄荷',
-    spec: '切制',
-    grade: '',
-    origin: '',
-    basis: '《中国药典》2025年版一部及四部',
-    docBase: 'TS-45-XXXXX-a',
-    limits: { impurity:null, moisture:null, ash:null, extract:null },
-    hplc: { column:'聚乙二醇毛细管柱 30m×0.32mm×0.25μm', colTemp:'程序升温', wavelength:'', mobile:'', flow:'' },
-    analytes: [
-      { key:'menthol', name:'薄荷脑', formulaText:'C₁₀H₂₀O', op:'≥', val:'0.13', indDp:3, meanDp:2, tech:'gc', plates:'10000' }
-    ]
-  },
-  custom: {
-    name: '', spec:'', grade:'', origin:'', basis:'《中国药典》2020年版一部及四部',
-    docBase: 'TS-45-XXXXX-a',
-    limits: { impurity:null, moisture:null, ash:null, extract:null },
-    hplc: { column:'C18', colTemp:'30', wavelength:'', mobile:'', flow:'1.0' },
-    analytes: [ { key:'a1', name:'待测成分', formulaText:'', op:'≥', val:'', indDp:3, meanDp:2, tech:'hplc' } ]
-  }
-};
+/** 当前选用的色谱方法 */
+function techOf(a){ return get(`assay.${a.key}.tech`) || a.tech || 'hplc'; }
+
+/**
+ * 理论板数的默认限度。成分自带的限度只在其本身的方法下成立，
+ * 换了方法就回落到该方法的通用限度。
+ * 渲染与判定共用此函数 —— 默认值不写进 store，store 里只放用户真正填过的值，
+ * 否则换方法时旧默认值会被当成"用户已填"而不再跟随。
+ */
+function platesDefault(a){
+  const t = techOf(a);
+  const T = TECH[t] || TECH.hplc;
+  return (t === (a.tech || 'hplc')) ? (a.plates || T.plates) : T.plates;
+}
+
+/* ---------------------------------------------------------------- 待测成分 */
+
+/**
+ * 含量测定的已知待测成分。限度值用字符串保存以保留末位零 ——
+ * "0.050" 与 "0.05" 在药典里精度不同，按数字存会退化成同一个值，
+ * 而平均值的修约位数正是由限度的位数决定的（见 calcDp）。
+ */
+const ANALYTES = [
+  { key:'cenketone',   name:'梣酮',   formulaText:'C₁₄H₁₆O₃',   op:'≥', val:'0.050', indDp:4, tech:'hplc', plates:'3000'  },
+  { key:'obakunone',   name:'黄柏酮', formulaText:'C₂₆H₃₄O₇',  op:'≥', val:'0.15',  indDp:3, tech:'hplc', plates:'3000'  },
+  { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:'1.0',   indDp:2, tech:'hplc', plates:'2000'  },
+  { key:'menthol',     name:'薄荷脑', formulaText:'C₁₀H₂₀O',   op:'≥', val:'0.13',  indDp:3, tech:'gc',   plates:'10000' },
+  { key:'other',       name:'其他',   formulaText:'',           op:'≥', val:'',      indDp:3, tech:'hplc' }
+];
 
 /* ---------------------------------------------------------------- 计算器定义 */
 
@@ -344,25 +311,20 @@ const ASSAY = {
 
 /* ---------------------------------------------------------------- 状态 */
 
-const LS_KEY = 'tcm-lab-calc-v1';
+const LS_KEY = 'tcm-lab-calc-v2';
 let store = {};
-let curProduct = 'baixianpi';
-let curTab = 'header';
+let curTab = 'impurity';
 let curAnalyte = 0;
 
 function load(){
   try{
     const raw = localStorage.getItem(LS_KEY);
-    if (raw){
-      const o = JSON.parse(raw);
-      store = o.store || {};
-      curProduct = o.product || 'baixianpi';
-    }
+    if (raw) store = JSON.parse(raw).store || {};
   }catch(e){ /* 忽略损坏的本地数据 */ }
 }
 function save(){
   try{
-    localStorage.setItem(LS_KEY, JSON.stringify({ product: curProduct, store }));
+    localStorage.setItem(LS_KEY, JSON.stringify({ store }));
   }catch(e){ /* 隐私模式下 localStorage 可能不可用 */ }
 }
 
@@ -370,19 +332,45 @@ const get  = k => (store[k] === undefined ? '' : store[k]);
 const getN = k => num(store[k]);
 const set  = (k, v) => { store[k] = v; };
 
-function useHE(){ const el = $('#roundHalfEven'); return el ? el.checked : true; }
+/** 药典修约规则固定为四舍六入五成双 */
+const useHE = () => true;
+
+/** 字符串里小数点后的位数；"3"→0，"3.0"→1，"0.050"→3 */
+function decimalsOf(s){
+  const m = /^\s*-?\d*\.(\d+)\s*$/.exec(String(s || ''));
+  return m ? m[1].length : 0;
+}
 
 /**
- * 解析某项目的修约位数：用户手改 > 品种预设 > 项目通用默认。
- * 品种预设是必要的 —— 同一个"杂质"项，白鲜皮限度写"不得过3%"（整数位），
- * 焦栀子写"不得过3.0%"（一位小数），报告值也就分别修约到 1% 与 1.1%。
+ * 解析修约位数：用户手改 › 由限度推导 › 项目通用默认。
+ *
+ * 平均值一律修约到与标准限度相同的位数 —— 这是从原始记录反推出来的规律，
+ * 也解释了同一个"杂质"项为什么会有两种写法：限度写"不得过 3%"（整数位）
+ * 报告 1%，写"不得过 3.0%"（一位小数）报告 1.1%。所以限度栏一填，
+ * 平均值的位数就定了，不需要再按品种维护一张表。
+ * 单值的位数与限度无关（杂质无论限度几位都只报一位），故仍取各项默认值。
  */
 function calcDp(c, which){
   const k = store[`${c.id}.dp.${which}`];
   if (k !== undefined && k !== '') return parseInt(k, 10);
-  const L = PRODUCTS[curProduct].limits[c.id];
-  if (L && L.dp && L.dp[which] !== undefined) return L.dp[which];
+  if (which === 'mean'){
+    const lim = store[`${c.id}.limval`];
+    if (lim !== undefined && String(lim).trim() !== '') return decimalsOf(lim);
+  }
   return c.dp[which];
+}
+
+/** 含量测定的修约位数，同上，限度取自该成分 */
+function assayDp(a, which){
+  const pre = `assay.${a.key}.`;
+  const k = store[pre + 'dp.' + which];
+  if (k !== undefined && k !== '') return parseInt(k, 10);
+  if (which === 'mean'){
+    const lim = store[pre + 'limval'];
+    if (lim !== undefined && String(lim).trim() !== '') return decimalsOf(lim);
+    return decimalsOf(a.val);
+  }
+  return a.indDp;
 }
 
 /* ---------------------------------------------------------------- 渲染片段 */
@@ -483,11 +471,11 @@ function renderSheet(c){
 }
 
 /** 含量测定页 */
-function renderAssaySheet(p){
-  const a = p.analytes[curAnalyte] || p.analytes[0];
+function renderAssaySheet(){
+  const a = ANALYTES[curAnalyte] || ANALYTES[0];
   const pre = `assay.${a.key}.`;
-  const bar = p.analytes.map((x, i) =>
-    `<button data-analyte="${i}" class="${i === curAnalyte ? 'on' : ''}">${esc(x.name || ('成分' + (i+1)))}</button>`
+  const bar = ANALYTES.map((x, i) =>
+    `<button data-analyte="${i}" class="${i === curAnalyte ? 'on' : ''}">${esc(x.name)}</button>`
   ).join('');
 
   const refPeaks = Array.from({length: ASSAY.refShots}, (_, i) =>
@@ -502,17 +490,16 @@ function renderAssaySheet(p){
   const ic = k => `<input class="cell" type="text" inputmode="decimal" autocomplete="off"
                       data-k="${esc(pre + k)}" value="${esc(get(pre + k))}">`;
 
-  const dpSel = (k, def) => {
-    const v = store[pre + 'dp.' + k] !== undefined ? store[pre + 'dp.' + k] : def;
+  const dpSel = k => {
+    const v = assayDp(a, k);
     let o = '';
-    for (let i = 0; i <= 5; i++) o += `<option value="${i}"${String(v) === String(i) ? ' selected' : ''}>${i}</option>`;
+    for (let i = 0; i <= 5; i++) o += `<option value="${i}"${v === i ? ' selected' : ''}>${i}</option>`;
     return `<select class="dpsel" data-k="${pre}dp.${k}">${o}</select>`;
   };
 
-  const tech = get(pre + 'tech') || a.tech || 'hplc';
+  const tech = techOf(a);
   const T = TECH[tech] || TECH.hplc;
-  // analyte 自带的板数限度只在其本身的方法下成立；换了方法就回落到该方法的通用限度
-  const platesDef = (tech === (a.tech || 'hplc')) ? (a.plates || T.plates) : T.plates;
+  const platesDef = platesDefault(a);
   const techSel = `<select class="dpsel" data-k="${pre}tech">` +
     Object.keys(TECH).map(k =>
       `<option value="${k}"${k === tech ? ' selected' : ''}>${TECH[k].label}（通则 ${TECH[k].gz}）</option>`
@@ -524,7 +511,7 @@ function renderAssaySheet(p){
     <div class="method">照${T.label}（通则 ${T.gz}）测定，外标法。</div>
 
     <div class="analyte-bar no-print">
-      <span>待测成分：</span>${bar}
+      ${bar}
       <span style="margin-left:12px">方法：</span>${techSel}
     </div>
 
@@ -536,7 +523,7 @@ function renderAssaySheet(p){
       <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th><td colspan="2"><div class="peaks">${refPeaks}</div></td></tr>
       <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
           <td colspan="2">${outCell('assay.out.Aref')}</td></tr>
-      <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', '2.0', 'w40')}%</span></th>
+      <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%</span></th>
           <td colspan="2">${outCell('assay.out.RSD')}
               <span class="judge none" id="assay.rsdJudge">—</span></td></tr>
       <tr><th class="rowlab">理论板数<span class="lim">应不低于 ${ii('platesLim', platesDef, 'w120')}</span></th>
@@ -563,7 +550,7 @@ function renderAssaySheet(p){
     </table></div>
 
     <div class="analyte-bar">
-      <span>修约位数：单值 ${dpSel('ind', a.indDp)} 位小数，平均值 ${dpSel('mean', a.meanDp)} 位小数</span>
+      <span>修约位数：单值 ${dpSel('ind')} 位小数，平均值 ${dpSel('mean')} 位小数</span>
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}useS" ${get(pre + 'useS') === '1' ? 'checked' : ''}>
         按纯度 S 折算 C<sub>对</sub>
@@ -594,9 +581,7 @@ function renderAssaySheet(p){
       C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
       气相（0521）与液相（0512）外标法公式一致，切换方法只改变通则号与理论板数限度。
-      ${curProduct === 'mint' ? '<br><b>薄荷示例说明：</b>原始记录中对照品五针与样品四针峰面积均已录入，' +
-        '但<b>取样量 W<sub>样</sub> 与水分 Q 在该份记录上为空白</b>，需按实际填写后才会算出含量。' +
-        '稀释倍数按供试品制备（约 2g 加无水乙醇 50ml，不再稀释）预置为 50。' : ''}
+      平均含量的修约位数默认跟随上方标准规定的位数（填 0.050 修约到 3 位，填 1.0 修约到 1 位），也可手动改。
     </div>
   </section>`;
 }
@@ -671,12 +656,12 @@ function computeCalc(c){
   judge(`${c.id}.judge`, isFinite(r.mean) ? roundTo(r.mean, meanDp, he) : NaN, op, lim);
 }
 
-function computeAssay(p){
-  const a = p.analytes[curAnalyte] || p.analytes[0];
+function computeAssay(){
+  const a = ANALYTES[curAnalyte] || ANALYTES[0];
   const pre = `assay.${a.key}.`;
   const he = useHE();
-  const indDp  = parseInt(get(pre + 'dp.ind')  || a.indDp,  10);
-  const meanDp = parseInt(get(pre + 'dp.mean') || a.meanDp, 10);
+  const indDp  = assayDp(a, 'ind');
+  const meanDp = assayDp(a, 'mean');
 
   /* 对照品 */
   const refA = Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refA.${i}`)).filter(isFinite);
@@ -685,8 +670,11 @@ function computeAssay(p){
   setOut('assay.out.Aref', fmtArea(Aref));
   setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
-  judge('assay.rsdJudge', isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', getN(pre + 'rsdLim'));
-  judge('assay.platesJudge', getN(pre + 'plates'), 'ge', getN(pre + 'platesLim'));
+  // 限度栏留空时按默认限度判定（默认值只渲染在输入框里，不写入 store）
+  const rsdLim    = isFinite(getN(pre + 'rsdLim'))    ? getN(pre + 'rsdLim')    : num(RSD_LIM_DEFAULT);
+  const platesLim = isFinite(getN(pre + 'platesLim')) ? getN(pre + 'platesLim') : num(platesDefault(a));
+  judge('assay.rsdJudge', isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', rsdLim);
+  judge('assay.platesJudge', getN(pre + 'plates'), 'ge', platesLim);
 
   /* 供试品 */
   let Cref = getN(pre + 'Cref');
@@ -735,56 +723,58 @@ function computeAssay(p){
         get(pre + 'limop') || 'ge', getN(pre + 'limval'));
 }
 
+/**
+ * 平均值的修约位数是从限度推导的，用户改限度时要让位数选择器跟着走。
+ * 只在用户没有手动指定位数时同步 —— 手改过的不动，且不整页重绘（否则输入框会丢焦点）。
+ */
+function syncDpSelects(){
+  const put = (key, val) => {
+    if (store[key] !== undefined && store[key] !== '') return;   // 用户手改过
+    const s = document.querySelector(`select[data-k="${CSS.escape(key)}"]`);
+    if (s) s.value = String(val);
+  };
+  CALCS.forEach(c => put(`${c.id}.dp.mean`, calcDp(c, 'mean')));
+  const a = ANALYTES[curAnalyte] || ANALYTES[0];
+  put(`assay.${a.key}.dp.mean`, assayDp(a, 'mean'));
+}
+
 function recompute(){
-  const p = PRODUCTS[curProduct];
   CALCS.forEach(computeCalc);
-  computeAssay(p);
+  computeAssay();
+  syncDpSelects();
   save();
 }
 
 /* ---------------------------------------------------------------- 挂载 */
 
-function applyLimitDefaults(p, force){
+/** 各检查项的判定方向：浸出物是"不得少于"，其余是"不得过" */
+function seedDefaults(){
   CALCS.forEach(c => {
-    const L = p.limits[c.id];
-    const kv = `${c.id}.limval`, ko = `${c.id}.limop`;
-    if (force || store[kv] === undefined || store[kv] === ''){
-      store[kv] = L ? String(L.val) : '';
-      store[ko] = L ? (L.op === '≤' ? 'le' : 'ge') : (c.id === 'extract' ? 'ge' : 'le');
-    }
-    if (force){
-      // 换品种时修约位数必须回到新品种的默认，否则会把上一个品种的位数带过来
-      delete store[`${c.id}.dp.ind`];
-      delete store[`${c.id}.dp.mean`];
-    }
+    const ko = `${c.id}.limop`;
+    if (store[ko] === undefined) store[ko] = (c.id === 'extract' ? 'ge' : 'le');
   });
-  p.analytes.forEach(a => {
-    const kv = `assay.${a.key}.limval`;
-    if (force || store[kv] === undefined || store[kv] === ''){
-      store[kv] = a.val ? String(a.val) : '';
-      store[`assay.${a.key}.limop`] = a.op === '≥' ? 'ge' : 'le';
-    }
+  ANALYTES.forEach(a => {
+    const kv = `assay.${a.key}.limval`, ko = `assay.${a.key}.limop`;
+    if (store[kv] === undefined) store[kv] = a.val || '';
+    if (store[ko] === undefined) store[ko] = (a.op === '≥' ? 'ge' : 'le');
   });
 }
 
 function build(){
-  const p = PRODUCTS[curProduct];
-  if (curAnalyte >= p.analytes.length) curAnalyte = 0;
-  applyLimitDefaults(p, false);
+  if (curAnalyte >= ANALYTES.length) curAnalyte = 0;
+  seedDefaults();
 
-  /* 选项卡 */
-  const tabs = [{ id:'header', tab:'结果汇总' }]
-    .concat(CALCS.map(c => ({ id:c.id, tab:c.tab })))
+  const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
     .concat([{ id:'assay', tab:ASSAY.tab }]);
+  if (!tabs.some(t => t.id === curTab)) curTab = tabs[0].id;
+
   $('#tabs').innerHTML = tabs.map(t =>
     `<div class="tab${t.id === curTab ? ' active' : ''}" data-tab="${t.id}">${t.tab}</div>`
   ).join('');
 
-  /* 纸张 */
   $('#sheets').innerHTML =
-      renderReport(p)
-    + CALCS.map(c => renderSheet(c)).join('')
-    + renderAssaySheet(p);
+      CALCS.map(c => renderSheet(c)).join('')
+    + renderAssaySheet();
 
   /* 恢复 select 值 */
   $$('select[data-k]').forEach(s => {
@@ -796,127 +786,6 @@ function build(){
   recompute();
 }
 
-/** 结果汇总页 */
-function renderReport(p){
-  const rows = CALCS.map(c => `
-    <tr>
-      <th class="rowlab">${c.tab}</th>
-      <td id="rpt.std.${c.id}" style="text-align:left;padding-left:12px">—</td>
-      <td id="rpt.res.${c.id}">—</td>
-    </tr>`).join('');
-  const arows = p.analytes.map(a => `
-    <tr>
-      <th class="rowlab">含量测定·${esc(a.name)}</th>
-      <td id="rpt.std.assay.${a.key}" style="text-align:left;padding-left:12px">—</td>
-      <td id="rpt.res.assay.${a.key}">—</td>
-    </tr>`).join('');
-
-  return `
-  <section class="sheet" data-sheet="header">
-    <h2 class="sec">结果汇总</h2>
-    <div class="tscroll"><table class="form">
-      <tr><th class="rowlab" style="width:26%">检测项目</th>
-          <th style="width:44%">标准规定</th><th style="width:30%">检测结果</th></tr>
-      ${rows}${arows}
-    </table></div>
-    <div class="verdict">
-      <div class="sec-num">总体判定：<b id="rpt.verdict" style="color:var(--calc)">—</b>规定</div>
-    </div>
-    <div class="note">
-      本页汇总各项计算结果，随其余各页填写实时更新。
-      二氧化硫残留量、铝盐/镁盐、鉴别等项无独立计算过程，未设计算器。
-    </div>
-  </section>`;
-}
-
-/** 汇总页数据回填 */
-function fillReport(){
-  const p = PRODUCTS[curProduct];
-  const he = useHE();
-  let allPass = true, anyVal = false;
-
-  const opTxt = o => o === 'le' ? '不得过' : '不得少于';
-
-  CALCS.forEach(c => {
-    const indDp  = calcDp(c, 'ind');
-    const meanDp = calcDp(c, 'mean');
-    const g  = (k, i) => getN(`${c.id}.${k}.${i}`);
-    const gs = k => getN(`${c.id}.${k}`);
-    const r = summarize(c.compute(g, gs).x, indDp, he);
-    const lim = getN(`${c.id}.limval`);
-    const op  = get(`${c.id}.limop`) || (c.id === 'extract' ? 'ge' : 'le');
-
-    const se = document.getElementById(`rpt.std.${c.id}`);
-    if (se) se.textContent = isFinite(lim) ? `${opTxt(op)} ${lim}%` : '—';
-
-    const re = document.getElementById(`rpt.res.${c.id}`);
-    if (re){
-      if (isFinite(r.mean)){
-        const v = roundTo(r.mean, meanDp, he);
-        re.textContent = v.toFixed(meanDp) + '%';
-        anyVal = true;
-        if (isFinite(lim)){
-          const ok = op === 'le' ? v <= lim : v >= lim;
-          re.style.color = ok ? 'var(--ok)' : 'var(--bad)';
-          if (!ok) allPass = false;
-        } else re.style.color = '';
-      } else { re.textContent = '—'; re.style.color = ''; }
-    }
-  });
-
-  p.analytes.forEach(a => {
-    const pre = `assay.${a.key}.`;
-    const indDp  = parseInt(get(pre + 'dp.ind')  || a.indDp,  10);
-    const meanDp = parseInt(get(pre + 'dp.mean') || a.meanDp, 10);
-    const lim = getN(pre + 'limval');
-    const op  = get(pre + 'limop') || 'ge';
-
-    const se = document.getElementById(`rpt.std.assay.${a.key}`);
-    if (se) se.textContent = isFinite(lim)
-      ? `本品按干燥品计算，含${a.name}${a.formulaText ? `（${a.formulaText}）` : ''}${opTxt(op)} ${lim}%`
-      : '—';
-
-    /* 重算该成分（不依赖当前选中的 analyte） */
-    const refA = Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refA.${i}`)).filter(isFinite);
-    const Aref = mean(refA);
-    let Cref = getN(pre + 'Cref');
-    if (get(pre + 'useS') === '1'){
-      const S = getN(pre + 'refPurity');
-      if (isFinite(S)) Cref = Cref * S / 100;
-    }
-    const Q = getN(pre + 'Q');
-    const xs = [1,2].map(s => {
-      const shots = Array.from({length: ASSAY.smpShots}, (_, i) => getN(`${pre}smpA.${s}.${i}`)).filter(isFinite);
-      const Ai = shots.length ? mean(shots) : NaN;
-      const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`);
-      if (![Ai, Cref, f, Aref, Ws, Q].every(isFinite)) return NaN;
-      const den = Aref * Ws * (1 - Q/100) * 1000;
-      return den === 0 ? NaN : (Ai * Cref * f) / den * 100;
-    });
-    const mn = summarize(xs, indDp, he).mean;
-
-    const re = document.getElementById(`rpt.res.assay.${a.key}`);
-    if (re){
-      if (isFinite(mn)){
-        const v = roundTo(mn, meanDp, he);
-        re.textContent = v.toFixed(meanDp) + '%';
-        anyVal = true;
-        if (isFinite(lim)){
-          const ok = op === 'le' ? v <= lim : v >= lim;
-          re.style.color = ok ? 'var(--ok)' : 'var(--bad)';
-          if (!ok) allPass = false;
-        } else re.style.color = '';
-      } else { re.textContent = '—'; re.style.color = ''; }
-    }
-  });
-
-  const v = document.getElementById('rpt.verdict');
-  if (v){
-    v.textContent = anyVal ? (allPass ? '符合' : '不符合') : '—';
-    v.style.color = anyVal ? (allPass ? 'var(--ok)' : 'var(--bad)') : '';
-  }
-}
-
 function showTab(id){
   curTab = id;
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
@@ -926,22 +795,11 @@ function showTab(id){
 
 /* ---------------------------------------------------------------- 事件 */
 
-/** 同一字段在多页出现时（如单位名称），让其余输入框跟着更新 */
-function syncPeers(t, k, v){
-  $$(`[data-k="${CSS.escape(k)}"]`).forEach(el => {
-    if (el !== t && el.value !== v) el.value = v;
-  });
-}
-
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.dataset && t.dataset.k){
-    const v = t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value;
-    set(t.dataset.k, v);
-    if (t.type !== 'checkbox') syncPeers(t, t.dataset.k, v);
-    recompute();
-    fillReport();
-  }
+  if (!t.dataset || !t.dataset.k) return;
+  set(t.dataset.k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
+  recompute();
 });
 
 document.addEventListener('change', e => {
@@ -951,11 +809,10 @@ document.addEventListener('change', e => {
   set(k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
   if (k.endsWith('.tech')){
     // 切换色谱方法要重绘（通则号、理论板数限度随之变化）
-    build(); fillReport(); showTab('assay');
+    build(); showTab('assay');
     return;
   }
   recompute();
-  fillReport();
 });
 
 document.addEventListener('click', e => {
@@ -965,143 +822,12 @@ document.addEventListener('click', e => {
   const an = e.target.closest('[data-analyte]');
   if (an){
     curAnalyte = parseInt(an.dataset.analyte, 10);
-    build(); fillReport(); showTab('assay');
+    build(); showTab('assay');
   }
 });
 
-$('#productSelect').addEventListener('change', e => {
-  curProduct = e.target.value;
-  curAnalyte = 0;
-  applyLimitDefaults(PRODUCTS[curProduct], true);
-  build(); fillReport();
-});
-
-$('#roundHalfEven').addEventListener('change', () => { recompute(); fillReport(); });
-
-$('#btnPrint').addEventListener('click', () => window.print());
-
-$('#btnClear').addEventListener('click', () => {
-  if (!confirm('确定清空当前所有已填数据？此操作不可撤销。')) return;
-  store = {};
-  applyLimitDefaults(PRODUCTS[curProduct], true);
-  build(); fillReport();
-});
-
-$('#btnExport').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ product: curProduct, store }, null, 2)],
-                        { type:'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `检验记录_${get('rpt.name') || PRODUCTS[curProduct].name || '未命名'}_${get('rpt.batch') || ''}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-});
-
-$('#btnImport').addEventListener('click', () => $('#fileImport').click());
-$('#fileImport').addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try{
-      const o = JSON.parse(r.result);
-      store = o.store || {};
-      curProduct = o.product || curProduct;
-      $('#productSelect').value = curProduct;
-      build(); fillReport();
-    }catch(err){ alert('导入失败：文件不是有效的记录 JSON。'); }
-  };
-  r.readAsText(f);
-  e.target.value = '';
-});
-
-/* ---------------------------------------------------------------- 示例数据 */
-
-const DEMO = {
-  baixianpi: {
-    'impurity.M.1':'51.47','impurity.M1.1':'0.67',
-    'impurity.M.2':'50.17','impurity.M1.2':'0.66',
-
-    'moisture.W0a.1':'27.2431','moisture.W0b.1':'27.2429','moisture.Ws.1':'2.6801',
-    'moisture.W1a.1':'29.5597','moisture.W1b.1':'29.5587',
-    'moisture.W0a.2':'27.2462','moisture.W0b.2':'27.2461','moisture.Ws.2':'2.5815',
-    'moisture.W1a.2':'29.4758','moisture.W1b.2':'29.4748',
-
-    'extract.Q':'13.6',
-    'extract.W0a.1':'110.6085','extract.W0b.1':'110.6084','extract.Ws.1':'4.9867',
-    'extract.V.1':'100','extract.Vs.1':'20','extract.W1.1':'110.8147',
-    'extract.W0a.2':'116.0736','extract.W0b.2':'116.0735','extract.Ws.2':'4.8804',
-    'extract.V.2':'100','extract.Vs.2':'20','extract.W1.2':'116.2791',
-
-    'assay.cenketone.refPurity':'99.6','assay.cenketone.Cref':'0.06064',
-    'assay.cenketone.refA.0':'444228','assay.cenketone.refA.1':'442483','assay.cenketone.refA.2':'438787',
-    'assay.cenketone.refA.3':'442183','assay.cenketone.refA.4':'441028',
-    'assay.cenketone.Q':'13.6',
-    'assay.cenketone.Ws.1':'1.0623','assay.cenketone.f.1':'25',
-    'assay.cenketone.smpA.1.0':'598185','assay.cenketone.smpA.1.1':'615092',
-    'assay.cenketone.Ws.2':'1.0785','assay.cenketone.f.2':'25',
-    'assay.cenketone.smpA.2.0':'616565','assay.cenketone.smpA.2.1':'626566',
-    'assay.cenketone.platesLim':'3000','assay.cenketone.rsdLim':'2.0',
-
-    'assay.obakunone.refPurity':'99.7','assay.obakunone.Cref':'0.1017',
-    'assay.obakunone.refA.0':'1335090','assay.obakunone.refA.1':'1326881','assay.obakunone.refA.2':'1285858',
-    'assay.obakunone.refA.3':'1320591','assay.obakunone.refA.4':'1318831',
-    'assay.obakunone.Q':'13.6',
-    'assay.obakunone.Ws.1':'1.0623','assay.obakunone.f.1':'25',
-    'assay.obakunone.smpA.1.0':'1465965','assay.obakunone.smpA.1.1':'1478213',
-    'assay.obakunone.Ws.2':'1.0785','assay.obakunone.f.2':'25',
-    'assay.obakunone.smpA.2.0':'1516477','assay.obakunone.smpA.2.1':'1530228',
-    'assay.obakunone.platesLim':'3000','assay.obakunone.rsdLim':'2.0'
-  },
-  jiaozhizi: {
-    'impurity.M.1':'51.45','impurity.M1.1':'0.57',
-    'impurity.M.2':'50.37','impurity.M1.2':'0.56',
-
-    'moisture.W0a.1':'33.1692','moisture.W0b.1':'33.1691','moisture.Ws.1':'2.1424',
-    'moisture.W1a.1':'35.2887','moisture.W1b.1':'35.2877',
-    'moisture.W0a.2':'27.7042','moisture.W0b.2':'27.7039','moisture.Ws.2':'2.3548',
-    'moisture.W1a.2':'30.0330','moisture.W1b.2':'30.0320',
-
-    'ash.W0a.1':'39.8926','ash.W0b.1':'39.8925','ash.Ws.1':'2.1105',
-    'ash.W1a.1':'40.0032','ash.W1b.1':'40.0031',
-    'ash.W0a.2':'41.5270','ash.W0b.2':'41.5269','ash.Ws.2':'2.9915',
-    'ash.W1a.2':'41.6822','ash.W1b.2':'41.6821',
-
-    'assay.gardenoside.refPurity':'97.1','assay.gardenoside.Cref':'0.03136',
-    'assay.gardenoside.refA.0':'435726','assay.gardenoside.refA.1':'435419','assay.gardenoside.refA.2':'436698',
-    'assay.gardenoside.refA.3':'437133','assay.gardenoside.refA.4':'436985',
-    'assay.gardenoside.Q':'1.1',
-    'assay.gardenoside.Ws.1':'0.1091','assay.gardenoside.f.1':'62.5',
-    'assay.gardenoside.smpA.1.0':'1070511','assay.gardenoside.smpA.1.1':'1062932',
-    'assay.gardenoside.Ws.2':'0.1095','assay.gardenoside.f.2':'62.5',
-    'assay.gardenoside.smpA.2.0':'1065845','assay.gardenoside.smpA.2.1':'1070760',
-    'assay.gardenoside.plates':'6525.4','assay.gardenoside.platesLim':'2000','assay.gardenoside.rsdLim':'2.0'
-  },
-  /* 薄荷 GC：原始记录中对照品部分已完成，供试品的取样量与水分未填写，
-     故示例只预置对照品五针、样品四针峰面积与稀释倍数，W样/Q 需自行录入。 */
-  mint: {
-    'assay.menthol.tech':'gc',
-    'assay.menthol.Cref':'0.215','assay.menthol.refPurity':'',
-    'assay.menthol.refA.0':'799.00','assay.menthol.refA.1':'782.62','assay.menthol.refA.2':'785.28',
-    'assay.menthol.refA.3':'789.51','assay.menthol.refA.4':'783.31',
-    'assay.menthol.f.1':'50','assay.menthol.f.2':'50',
-    'assay.menthol.smpA.1.0':'486.53','assay.menthol.smpA.1.1':'466.19',
-    'assay.menthol.smpA.2.0':'471.25','assay.menthol.smpA.2.1':'463.59',
-    'assay.menthol.plates':'210883.1958','assay.menthol.platesLim':'10000','assay.menthol.rsdLim':'2.0'
-  }
-};
-
-$('#btnDemo').addEventListener('click', () => {
-  const d = DEMO[curProduct];
-  if (!d){ alert('自定义品种没有示例数据。'); return; }
-  Object.assign(store, d);
-  applyLimitDefaults(PRODUCTS[curProduct], true);
-  build(); fillReport();
-});
 
 /* ---------------------------------------------------------------- 启动 */
 
 load();
-$('#productSelect').value = curProduct;
 build();
-fillReport();

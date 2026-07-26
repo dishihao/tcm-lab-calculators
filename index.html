@@ -9,34 +9,14 @@
 </head>
 <body>
 
-<div class="toolbar no-print">
-  <div class="tb-left">
-    <span class="tb-title">化验室检验计算器</span>
-    <select id="productSelect" title="选择品种，自动套用标准限度">
-      <option value="baixianpi">白鲜皮（切制·精选）</option>
-      <option value="jiaozhizi">焦栀子（清炒·选）</option>
-      <option value="mint">薄荷（切制·气相）</option>
-      <option value="custom">自定义品种</option>
-    </select>
-  </div>
-  <div class="tb-right">
-    <label class="tb-chk"><input type="checkbox" id="roundHalfEven" checked> 四舍六入五成双</label>
-    <button id="btnDemo" class="btn">载入示例</button>
-    <button id="btnClear" class="btn">清空</button>
-    <button id="btnExport" class="btn">导出</button>
-    <button id="btnImport" class="btn">导入</button>
-    <button id="btnPrint" class="btn btn-primary">打印本页</button>
-    <input type="file" id="fileImport" accept="application/json" hidden>
-  </div>
-</div>
-
 <nav class="tabs no-print" id="tabs"></nav>
 
 <main id="sheets"></main>
 
 <footer class="site-foot no-print">
   <p>
-    计算公式取自《中国药典》2020 年版四部通则 2301（杂质）、0832 第二法（水分）、2302（总灰分）、2201（浸出物）、0512（高效液相色谱法）。
+    计算公式取自《中国药典》四部通则 2301（杂质）、0832 第二法（水分）、2302（总灰分）、2201（浸出物）、
+    0512（高效液相色谱法）、0521（气相色谱法）。修约按"四舍六入五成双"。
     本工具仅做计算与誊录辅助，结果须经复核后方可录入 GMP 受控记录。
   </p>
 </footer>

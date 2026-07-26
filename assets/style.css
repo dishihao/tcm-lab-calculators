@@ -26,37 +26,12 @@ body{
   -webkit-text-size-adjust:100%;
 }
 
-/* ---------- 顶部工具条 ---------- */
-.toolbar{
-  position:sticky; top:0; z-index:50;
-  display:flex; flex-wrap:wrap; gap:10px;
-  align-items:center; justify-content:space-between;
-  padding:10px 16px;
-  background:#2f3640; color:#fff;
-  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
-  box-shadow:0 2px 8px rgba(0,0,0,.25);
-}
-.tb-left{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
-.tb-right{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
-.tb-title{font-size:16px; font-weight:700; letter-spacing:1px}
-.tb-chk{font-size:13px; display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none}
-.toolbar select{
-  font-family:inherit; font-size:14px; padding:5px 8px;
-  border-radius:4px; border:1px solid #555; background:#fff; color:#111;
-}
-.btn{
-  font-family:inherit; font-size:13px; padding:6px 12px;
-  border:1px solid #5a626d; border-radius:4px;
-  background:#414a56; color:#fff; cursor:pointer;
-}
-.btn:hover{background:#525c69}
-.btn-primary{background:var(--accent); border-color:var(--accent)}
-.btn-primary:hover{background:#2d72d9}
+.tb-chk{font-size:13px; display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none}
 
 /* ---------- 选项卡 ---------- */
 .tabs{
   display:flex; flex-wrap:wrap; gap:6px;
-  padding:12px 16px 0;
+  padding:18px 16px 0;
   max-width:1000px; margin:0 auto;
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
 }
