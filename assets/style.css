@@ -1,0 +1,296 @@
+/* ===== 中药饮片化验室检验计算器 — 复刻纸质原始记录样式 ===== */
+
+:root{
+  --ink:#111;              /* 印刷体黑 */
+  --pen:#12369e;           /* 手写蓝（用户输入） */
+  --calc:#b3271e;          /* 计算结果红 */
+  --line:#000;             /* 表格线 */
+  --paper:#fff;
+  --desk:#e9e7e2;
+  --muted:#6b6b6b;
+  --ok:#127a3c;
+  --bad:#c02626;
+  --accent:#1f5fbf;
+}
+
+*{box-sizing:border-box}
+
+html,body{margin:0;padding:0}
+
+body{
+  background:var(--desk);
+  color:var(--ink);
+  font-family:"SimSun","宋体","Songti SC",serif;
+  font-size:15px;
+  line-height:1.6;
+  -webkit-text-size-adjust:100%;
+}
+
+/* ---------- 顶部工具条 ---------- */
+.toolbar{
+  position:sticky; top:0; z-index:50;
+  display:flex; flex-wrap:wrap; gap:10px;
+  align-items:center; justify-content:space-between;
+  padding:10px 16px;
+  background:#2f3640; color:#fff;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+.tb-left{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.tb-right{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.tb-title{font-size:16px; font-weight:700; letter-spacing:1px}
+.tb-chk{font-size:13px; display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none}
+.toolbar select{
+  font-family:inherit; font-size:14px; padding:5px 8px;
+  border-radius:4px; border:1px solid #555; background:#fff; color:#111;
+}
+.btn{
+  font-family:inherit; font-size:13px; padding:6px 12px;
+  border:1px solid #5a626d; border-radius:4px;
+  background:#414a56; color:#fff; cursor:pointer;
+}
+.btn:hover{background:#525c69}
+.btn-primary{background:var(--accent); border-color:var(--accent)}
+.btn-primary:hover{background:#2d72d9}
+
+/* ---------- 选项卡 ---------- */
+.tabs{
+  display:flex; flex-wrap:wrap; gap:6px;
+  padding:12px 16px 0;
+  max-width:1000px; margin:0 auto;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+}
+.tab{
+  padding:8px 16px; font-size:14px; cursor:pointer;
+  background:#cfcbc3; color:#333;
+  border:1px solid #b3aea4; border-bottom:none;
+  border-radius:6px 6px 0 0;
+}
+.tab:hover{background:#dcd8d1}
+.tab.active{background:var(--paper); color:#000; font-weight:700; box-shadow:0 -2px 6px rgba(0,0,0,.08)}
+
+/* ---------- 纸张 ---------- */
+.sheet{
+  display:none;
+  position:relative;
+  max-width:1000px;
+  margin:0 auto 30px;
+  padding:38px 46px 30px;
+  background:var(--paper);
+  box-shadow:0 4px 18px rgba(0,0,0,.18);
+}
+.sheet.active{display:block}
+
+.stamp{
+  position:absolute; top:22px; right:38px;
+  border:2px solid #d02020; color:#d02020;
+  font-family:"SimHei","黑体",sans-serif; font-size:15px; font-weight:700;
+  letter-spacing:3px; padding:3px 9px;
+  transform:rotate(-4deg); opacity:.85;
+  pointer-events:none;
+}
+
+.doc-no{
+  font-size:12px; color:var(--muted);
+  border-bottom:1px solid #999; display:inline-block;
+  padding:0 10px 2px 0; margin-bottom:6px;
+}
+
+h1.sheet-title{
+  font-family:"SimHei","黑体",sans-serif;
+  font-size:23px; font-weight:700; letter-spacing:6px;
+  text-align:center; margin:6px 0 20px;
+}
+h2.sec{
+  font-family:"SimHei","黑体",sans-serif;
+  font-size:16px; margin:24px 0 10px; letter-spacing:1px;
+}
+.sec-num{font-family:"SimSun","宋体",serif; font-weight:400; font-size:15px; margin:16px 0 8px}
+
+/* ---------- 表头信息表 ---------- */
+table.hdr,table.form{
+  width:100%; border-collapse:collapse; margin-bottom:8px;
+  table-layout:fixed;
+}
+table.hdr th,table.hdr td,
+table.form th,table.form td{
+  border:1px solid var(--line);
+  padding:7px 8px;
+  vertical-align:middle;
+  word-break:break-all;
+}
+table.hdr th,table.form th{
+  font-weight:400; text-align:center; background:#fbfbfb;
+}
+table.form th.rowlab{text-align:center}
+table.form td{text-align:center}
+
+.hdr th{width:15%}
+.hdr td{width:35%}
+
+/* ---------- 输入 / 结果 ---------- */
+input.cell,input.inline{
+  font-family:"KaiTi","楷体","Kaiti SC","SimSun",serif;
+  color:var(--pen);
+  font-size:16px;
+  background:transparent;
+  border:none;
+  outline:none;
+  text-align:center;
+  width:100%;
+  padding:2px 0;
+}
+input.cell:focus,input.inline:focus{background:#eef4ff; border-radius:3px}
+input.cell::placeholder{color:#b9c2d6; font-size:13px}
+
+input.inline{
+  display:inline-block; width:66px; text-align:center;
+  border-bottom:1px solid #666; padding:0 2px;
+}
+input.inline.w40{width:44px}
+input.inline.w120{width:120px}
+input.inline.w180{width:180px}
+
+.out{
+  font-family:"KaiTi","楷体","Kaiti SC",serif;
+  color:var(--calc);
+  font-size:17px; font-weight:700;
+  min-height:24px;
+}
+.out.empty{color:#c8c8c8; font-weight:400}
+.out .unit{font-size:13px; font-weight:400}
+
+td.spanall{background:#fdfdfd}
+
+/* 恒重提示 */
+.hz{display:block; font-size:11px; color:var(--muted); font-family:"Microsoft YaHei",sans-serif; margin-top:2px}
+.hz.warn{color:#c47f00}
+.hz.good{color:var(--ok)}
+
+/* ---------- 仪器条 ---------- */
+.instr{margin:10px 0 4px; line-height:2.1}
+.instr .lab{margin-right:2px}
+.instr .grp{display:inline-block; margin-right:26px; white-space:nowrap}
+
+/* ---------- 公式 ---------- */
+.formula-wrap{
+  margin:18px 0; padding:14px 10px;
+  text-align:center;
+  background:#fcfcfa; border:1px dashed #c9c4b8;
+}
+.formula{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:"Times New Roman",serif; font-size:19px;
+}
+.frac{display:inline-flex; flex-direction:column; text-align:center; vertical-align:middle}
+.frac .num{border-bottom:1.5px solid #000; padding:2px 10px}
+.frac .den{padding:2px 10px}
+.formula sub{font-size:.7em}
+
+.subst{
+  margin-top:14px; font-family:"KaiTi","楷体",serif;
+  color:#333; font-size:14px; line-height:2.2;
+  overflow-x:auto;
+}
+.subst .sx{color:var(--calc); font-weight:700}
+
+/* ---------- 结论区 ---------- */
+.verdict{margin-top:20px; line-height:2.2}
+.verdict .std{font-weight:700}
+.limit-edit{display:inline-flex; align-items:center; gap:4px}
+.judge{
+  display:inline-block; margin-left:14px; padding:2px 14px;
+  border:1.5px solid currentColor; border-radius:3px;
+  font-family:"SimHei","黑体",sans-serif; font-weight:700;
+}
+.judge.pass{color:var(--ok)}
+.judge.fail{color:var(--bad)}
+.judge.none{color:#bbb; border-style:dashed; font-weight:400}
+
+.signrow{
+  display:flex; flex-wrap:wrap; gap:26px 46px;
+  margin-top:14px; padding-top:6px;
+}
+.signrow .f{white-space:nowrap}
+
+.paper-foot{
+  display:flex; justify-content:space-between; align-items:flex-end;
+  margin-top:22px; padding-top:6px;
+  border-top:1px solid #000;
+  font-size:13px;
+}
+
+.note{
+  margin-top:14px; padding:10px 12px;
+  background:#fbf8ee; border-left:3px solid #c9a227;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+  font-size:12.5px; color:#5b5b5b; line-height:1.8;
+}
+
+/* ---------- 含量测定：多针进样 ---------- */
+.peaks{display:flex; flex-wrap:wrap; gap:4px; justify-content:center}
+.peaks input{
+  font-family:"KaiTi","楷体",serif; color:var(--pen); font-size:15px;
+  width:88px; text-align:center;
+  border:none; border-bottom:1px solid #bbb; background:transparent; outline:none;
+}
+.peaks input:focus{background:#eef4ff}
+
+.analyte-bar{
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  margin:6px 0 14px;
+  font-family:"Microsoft YaHei",sans-serif; font-size:13px;
+}
+.analyte-bar button{
+  padding:5px 14px; font-size:13px; cursor:pointer;
+  border:1px solid #b3aea4; border-radius:14px;
+  background:#f0eeea; color:#333; font-family:inherit;
+}
+.analyte-bar button.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+
+/* ---------- 站脚 ---------- */
+.site-foot{
+  max-width:1000px; margin:0 auto; padding:0 16px 40px;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+  font-size:12px; color:#7a736a; line-height:1.9;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:820px){
+  .sheet{padding:22px 14px; margin-bottom:16px}
+  h1.sheet-title{font-size:19px; letter-spacing:3px}
+  .stamp{top:12px; right:12px; font-size:12px; padding:2px 6px}
+  .tabs{padding:10px 8px 0}
+  .tab{padding:7px 11px; font-size:13px}
+  table.hdr,table.form{font-size:13px}
+  table.hdr th,table.hdr td,table.form th,table.form td{padding:5px 4px}
+  .formula{font-size:16px}
+  .subst{font-size:12px}
+  input.cell{font-size:15px}
+  .instr .grp{display:block; margin-right:0}
+}
+
+/* 窄屏时表格可横向滚动 */
+.tscroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+.tscroll table{min-width:520px}
+
+/* ---------- 打印 ---------- */
+@media print{
+  @page{size:A4 portrait; margin:14mm 12mm}
+  body{background:#fff; font-size:12pt}
+  .no-print{display:none !important}
+  .sheet{
+    display:none;
+    box-shadow:none; margin:0; padding:0; max-width:none;
+  }
+  .sheet.active{display:block}
+  .tscroll{overflow:visible}
+  .tscroll table{min-width:0}
+  input.cell,input.inline{color:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .out{color:#000}
+  .stamp{color:#d02020; border-color:#d02020; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .formula-wrap{background:none; border:none}
+  .note{background:none; border-left:2px solid #999}
+  table.hdr th,table.form th{background:none}
+  .judge{border:1px solid #000; color:#000}
+}
