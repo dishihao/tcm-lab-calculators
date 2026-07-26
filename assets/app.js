@@ -59,6 +59,17 @@ function mean(arr){
   return a.reduce((s, x) => s + x, 0) / a.length;
 }
 
+/**
+ * 峰面积均值的显示精度。
+ * 液相峰面积动辄十万量级，1 位小数足够；气相 FID 峰面积只有几百，
+ * 固定 1 位会把有效数字抹掉（787.944 → 787.9），故小值保留 3 位再去尾零。
+ */
+function fmtArea(v){
+  if (!isFinite(v)) return '';
+  if (Math.abs(v) >= 10000) return v.toFixed(1);
+  return v.toFixed(3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
 /** 相对偏差 = |X1-X2| / (X1+X2) × 100%  （中药检验惯用式） */
 function relDev(x1, x2){
   if (!isFinite(x1) || !isFinite(x2)) return NaN;
@@ -81,6 +92,14 @@ function summarize(xRaw, indDp, he){
   return { x, mean: mean(x), rd: relDev(x[0], x[1]) };
 }
 
+/* ---------------------------------------------------------------- 色谱方法 */
+
+/** 含量测定的色谱方法：公式一致，差别在通则号与理论板数限度 */
+const TECH = {
+  hplc: { label:'高效液相色谱法', gz:'0512', plates:'3000' },
+  gc:   { label:'气相色谱法',     gz:'0521', plates:'10000' }
+};
+
 /* ---------------------------------------------------------------- 品种预设 */
 
 const PRODUCTS = {
@@ -99,8 +118,8 @@ const PRODUCTS = {
     },
     hplc: { column:'C18', colTemp:'30', wavelength:'236', mobile:'甲醇-水（60:40）', flow:'1.0' },
     analytes: [
-      { key:'cenketone',  name:'梣酮',   formulaText:'C₁₄H₁₆O₃',  op:'≥', val:0.050, text:'不得少于 0.050%', indDp:4, meanDp:3 },
-      { key:'obakunone',  name:'黄柏酮', formulaText:'C₂₆H₃₄O₇', op:'≥', val:0.15,  text:'不得少于 0.15%',  indDp:3, meanDp:2 }
+      { key:'cenketone',  name:'梣酮',   formulaText:'C₁₄H₁₆O₃',  op:'≥', val:0.050, indDp:4, meanDp:3, tech:'hplc', plates:'3000' },
+      { key:'obakunone',  name:'黄柏酮', formulaText:'C₂₆H₃₄O₇', op:'≥', val:0.15,  indDp:3, meanDp:2, tech:'hplc', plates:'3000' }
     ]
   },
   jiaozhizi: {
@@ -118,7 +137,21 @@ const PRODUCTS = {
     },
     hplc: { column:'C18', colTemp:'30', wavelength:'238', mobile:'乙腈-水（15:85）', flow:'1.0' },
     analytes: [
-      { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:1.0, text:'不得少于 1.0%', indDp:2, meanDp:1 }
+      { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:1.0, indDp:2, meanDp:1, tech:'hplc', plates:'2000' }
+    ]
+  },
+  /* 薄荷：含量测定为气相色谱法（通则 0521），薄荷脑外标法 */
+  mint: {
+    name: '薄荷',
+    spec: '切制',
+    grade: '',
+    origin: '',
+    basis: '《中国药典》2025年版一部及四部',
+    docBase: 'TS-45-XXXXX-a',
+    limits: { impurity:null, moisture:null, ash:null, extract:null },
+    hplc: { column:'聚乙二醇毛细管柱 30m×0.32mm×0.25μm', colTemp:'程序升温', wavelength:'', mobile:'', flow:'' },
+    analytes: [
+      { key:'menthol', name:'薄荷脑', formulaText:'C₁₀H₂₀O', op:'≥', val:0.13, indDp:3, meanDp:2, tech:'gc', plates:'10000' }
     ]
   },
   custom: {
@@ -126,7 +159,7 @@ const PRODUCTS = {
     docBase: 'TS-45-XXXXX-a',
     limits: { impurity:null, moisture:null, ash:null, extract:null },
     hplc: { column:'C18', colTemp:'30', wavelength:'', mobile:'', flow:'1.0' },
-    analytes: [ { key:'a1', name:'待测成分', formulaText:'', op:'≥', val:NaN, text:'', indDp:3, meanDp:2 } ]
+    analytes: [ { key:'a1', name:'待测成分', formulaText:'', op:'≥', val:NaN, indDp:3, meanDp:2, tech:'hplc' } ]
   }
 };
 
@@ -461,12 +494,24 @@ function renderAssaySheet(p){
     return `<select class="dpsel" data-k="${pre}dp.${k}">${o}</select>`;
   };
 
+  const tech = get(pre + 'tech') || a.tech || 'hplc';
+  const T = TECH[tech] || TECH.hplc;
+  // analyte 自带的板数限度只在其本身的方法下成立；换了方法就回落到该方法的通用限度
+  const platesDef = (tech === (a.tech || 'hplc')) ? (a.plates || T.plates) : T.plates;
+  const techSel = `<select class="dpsel" data-k="${pre}tech">` +
+    Object.keys(TECH).map(k =>
+      `<option value="${k}"${k === tech ? ' selected' : ''}>${TECH[k].label}（通则 ${TECH[k].gz}）</option>`
+    ).join('') + `</select>`;
+
   return `
   <section class="sheet" data-sheet="assay">
     <h2 class="sec">【含量测定】</h2>
-    <div class="method">照高效液相色谱法（通则 0512）测定，外标法。</div>
+    <div class="method">照${T.label}（通则 ${T.gz}）测定，外标法。</div>
 
-    <div class="analyte-bar no-print"><span>待测成分：</span>${bar}</div>
+    <div class="analyte-bar no-print">
+      <span>待测成分：</span>${bar}
+      <span style="margin-left:12px">方法：</span>${techSel}
+    </div>
 
     <div class="subhead">对照品：${esc(a.name)}</div>
     <div class="tscroll"><table class="form">
@@ -479,7 +524,7 @@ function renderAssaySheet(p){
       <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', '2.0', 'w40')}%</span></th>
           <td colspan="2">${outCell('assay.out.RSD')}
               <span class="judge none" id="assay.rsdJudge">—</span></td></tr>
-      <tr><th class="rowlab">理论板数<span class="lim">应不低于 ${ii('platesLim', '3000', 'w120')}</span></th>
+      <tr><th class="rowlab">理论板数<span class="lim">应不低于 ${ii('platesLim', platesDef, 'w120')}</span></th>
           <td colspan="2">${ic('plates')}
               <span class="judge none" id="assay.platesJudge">—</span></td></tr>
     </table></div>
@@ -533,6 +578,10 @@ function renderAssaySheet(p){
       Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。
       C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
+      气相（0521）与液相（0512）外标法公式一致，切换方法只改变通则号与理论板数限度。
+      ${curProduct === 'mint' ? '<br><b>薄荷示例说明：</b>原始记录中对照品五针与样品四针峰面积均已录入，' +
+        '但<b>取样量 W<sub>样</sub> 与水分 Q 在该份记录上为空白</b>，需按实际填写后才会算出含量。' +
+        '稀释倍数按供试品制备（约 2g 加无水乙醇 50ml，不再稀释）预置为 50。' : ''}
     </div>
   </section>`;
 }
@@ -618,7 +667,7 @@ function computeAssay(p){
   const refA = Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refA.${i}`)).filter(isFinite);
   const Aref = mean(refA);
   const rsd  = refA.length >= 2 ? sd(refA) / Aref * 100 : NaN;
-  setOut('assay.out.Aref', isFinite(Aref) ? Aref.toFixed(1) : '');
+  setOut('assay.out.Aref', fmtArea(Aref));
   setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
   judge('assay.rsdJudge', isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', getN(pre + 'rsdLim'));
@@ -636,7 +685,7 @@ function computeAssay(p){
     const shots = Array.from({length: ASSAY.smpShots}, (_, i) => getN(`${pre}smpA.${s}.${i}`)).filter(isFinite);
     return shots.length ? mean(shots) : NaN;
   });
-  [1,2].forEach(s => setOut(`assay.out.A.${s}`, isFinite(A[s-1]) ? A[s-1].toFixed(1) : ''));
+  [1,2].forEach(s => setOut(`assay.out.A.${s}`, fmtArea(A[s-1])));
 
   const xRaw = [1,2].map(s => {
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
@@ -655,8 +704,8 @@ function computeAssay(p){
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
     if (![Ai, Cref, f, Aref, Ws, Q].every(isFinite)) return '';
     return `X<sub>${s}</sub> = ${frac(
-        `${Ai.toFixed(1)} × ${Cref} × ${f}`,
-        `${Aref.toFixed(1)} × ${Ws} × (1 − ${Q}%) × 1000`)} × 100% = `
+        `${fmtArea(Ai)} × ${Cref} × ${f}`,
+        `${fmtArea(Aref)} × ${Ws} × (1 − ${Q}%) × 1000`)} × 100% = `
       + `<span class="sx">${x[s-1].toFixed(indDp)}%</span>`;
   }).filter(Boolean);
 
@@ -704,7 +753,7 @@ function build(){
   applyLimitDefaults(p, false);
 
   /* 选项卡 */
-  const tabs = [{ id:'header', tab:'检验报告书' }]
+  const tabs = [{ id:'header', tab:'结果汇总' }]
     .concat(CALCS.map(c => ({ id:c.id, tab:c.tab })))
     .concat([{ id:'assay', tab:ASSAY.tab }]);
   $('#tabs').innerHTML = tabs.map(t =>
@@ -877,11 +926,16 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset && t.dataset.k){
-    set(t.dataset.k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
-    recompute();
-    fillReport();
+  if (!t.dataset || !t.dataset.k) return;
+  const k = t.dataset.k;
+  set(k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
+  if (k.endsWith('.tech')){
+    // 切换色谱方法要重绘（通则号、理论板数限度随之变化）
+    build(); fillReport(); showTab('assay');
+    return;
   }
+  recompute();
+  fillReport();
 });
 
 document.addEventListener('click', e => {
@@ -1002,6 +1056,18 @@ const DEMO = {
     'assay.gardenoside.Ws.2':'0.1095','assay.gardenoside.f.2':'62.5',
     'assay.gardenoside.smpA.2.0':'1065845','assay.gardenoside.smpA.2.1':'1070760',
     'assay.gardenoside.plates':'6525.4','assay.gardenoside.platesLim':'2000','assay.gardenoside.rsdLim':'2.0'
+  },
+  /* 薄荷 GC：原始记录中对照品部分已完成，供试品的取样量与水分未填写，
+     故示例只预置对照品五针、样品四针峰面积与稀释倍数，W样/Q 需自行录入。 */
+  mint: {
+    'assay.menthol.tech':'gc',
+    'assay.menthol.Cref':'0.215','assay.menthol.refPurity':'',
+    'assay.menthol.refA.0':'799.00','assay.menthol.refA.1':'782.62','assay.menthol.refA.2':'785.28',
+    'assay.menthol.refA.3':'789.51','assay.menthol.refA.4':'783.31',
+    'assay.menthol.f.1':'50','assay.menthol.f.2':'50',
+    'assay.menthol.smpA.1.0':'486.53','assay.menthol.smpA.1.1':'466.19',
+    'assay.menthol.smpA.2.0':'471.25','assay.menthol.smpA.2.1':'463.59',
+    'assay.menthol.plates':'210883.1958','assay.menthol.platesLim':'10000','assay.menthol.rsdLim':'2.0'
   }
 };
 
