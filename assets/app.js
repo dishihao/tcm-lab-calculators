@@ -125,11 +125,11 @@ function platesDefault(a){
  * 而平均值的修约位数正是由限度的位数决定的（见 calcDp）。
  */
 const ANALYTES = [
-  { key:'cenketone',   name:'梣酮',   formulaText:'C₁₄H₁₆O₃',   op:'≥', val:'0.050', indDp:4, tech:'hplc', plates:'3000'  },
-  { key:'obakunone',   name:'黄柏酮', formulaText:'C₂₆H₃₄O₇',  op:'≥', val:'0.15',  indDp:3, tech:'hplc', plates:'3000'  },
-  { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:'1.0',   indDp:2, tech:'hplc', plates:'2000'  },
-  { key:'menthol',     name:'薄荷脑', formulaText:'C₁₀H₂₀O',   op:'≥', val:'0.13',  indDp:3, tech:'gc',   plates:'10000' },
-  { key:'other',       name:'其他',   formulaText:'',           op:'≥', val:'',      indDp:3, tech:'hplc' }
+  { key:'cenketone',   name:'梣酮',   formulaText:'C₁₄H₁₆O₃',   op:'≥', val:'0.050', tech:'hplc', plates:'3000'  },
+  { key:'obakunone',   name:'黄柏酮', formulaText:'C₂₆H₃₄O₇',  op:'≥', val:'0.15',  tech:'hplc', plates:'3000'  },
+  { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:'1.0',   tech:'hplc', plates:'2000'  },
+  { key:'menthol',     name:'薄荷脑', formulaText:'C₁₀H₂₀O',   op:'≥', val:'0.13',  tech:'gc',   plates:'10000' },
+  { key:'other',       name:'其他',   formulaText:'',           op:'≥', val:'',      tech:'hplc' }
 ];
 
 /* ---------------------------------------------------------------- 计算器定义 */
@@ -360,17 +360,31 @@ function calcDp(c, which){
   return c.dp[which];
 }
 
-/** 含量测定的修约位数，同上，限度取自该成分 */
+/**
+ * 含量测定的修约位数，三者都挂在标准规定的位数上：
+ *   平均含量 = 标准规定位数      （如限度 0.15% → 0.31%）
+ *   含量 X   = 标准规定位数 + 1  （如限度 0.15% → 0.310%）
+ *   相对偏差 = 标准规定位数 − 1  （如限度 0.15% → 1.0%），不小于 0
+ * which: 'mean' | 'ind' | 'rd'
+ */
 function assayDp(a, which){
   const pre = `assay.${a.key}.`;
-  const k = store[pre + 'dp.' + which];
-  if (k !== undefined && k !== '') return parseInt(k, 10);
-  if (which === 'mean'){
+  const own = store[pre + 'dp.' + which];
+  if (own !== undefined && own !== '') return parseInt(own, 10);
+
+  // 平均值位数：用户手改过就用手改的，否则取标准规定的小数位
+  const mOwn = store[pre + 'dp.mean'];
+  let meanDp;
+  if (mOwn !== undefined && mOwn !== ''){
+    meanDp = parseInt(mOwn, 10);
+  } else {
     const lim = store[pre + 'limval'];
-    if (lim !== undefined && String(lim).trim() !== '') return decimalsOf(lim);
-    return decimalsOf(a.val);
+    meanDp = (lim !== undefined && String(lim).trim() !== '') ? decimalsOf(lim) : decimalsOf(a.val);
   }
-  return a.indDp;
+
+  if (which === 'mean') return meanDp;
+  if (which === 'ind')  return meanDp + 1;
+  return Math.max(0, meanDp - 1);          // rd
 }
 
 /* ---------------------------------------------------------------- 渲染片段 */
@@ -550,7 +564,7 @@ function renderAssaySheet(){
     </table></div>
 
     <div class="analyte-bar">
-      <span>修约位数：单值 ${dpSel('ind')} 位小数，平均值 ${dpSel('mean')} 位小数</span>
+      <span>修约位数：含量 X ${dpSel('ind')} 位，平均含量 ${dpSel('mean')} 位，相对偏差 ${dpSel('rd')} 位</span>
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}useS" ${get(pre + 'useS') === '1' ? 'checked' : ''}>
         按纯度 S 折算 C<sub>对</sub>
@@ -581,7 +595,8 @@ function renderAssaySheet(){
       C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
       气相（0521）与液相（0512）外标法公式一致，切换方法只改变通则号与理论板数限度。
-      平均含量的修约位数默认跟随上方标准规定的位数（填 0.050 修约到 3 位，填 1.0 修约到 1 位），也可手动改。
+      <br>三个修约位数默认都跟着下方标准规定走：<b>平均含量</b>与标准规定同位，
+      <b>含量 X</b> 多一位，<b>相对偏差</b> 少一位。任一项手动改过后即固定，不再跟随。
     </div>
   </section>`;
 }
@@ -662,6 +677,7 @@ function computeAssay(){
   const he = useHE();
   const indDp  = assayDp(a, 'ind');
   const meanDp = assayDp(a, 'mean');
+  const rdDp   = assayDp(a, 'rd');
 
   /* 对照品 */
   const refA = Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refA.${i}`)).filter(isFinite);
@@ -699,7 +715,7 @@ function computeAssay(){
   const { x, mean: mn, rd } = summarize(xRaw, indDp, he);
 
   [1,2].forEach(s => setOut(`assay.out.X.${s}`, isFinite(x[s-1]) ? x[s-1].toFixed(indDp) : ''));
-  setOut('assay.out.RD',   isFinite(rd) ? fmt(rd, 1, he)      : '');
+  setOut('assay.out.RD',   isFinite(rd) ? fmt(rd, rdDp, he)   : '');
   setOut('assay.out.MEAN', isFinite(mn) ? fmt(mn, meanDp, he) : '');
 
   /* 代入过程 */
@@ -716,7 +732,7 @@ function computeAssay(){
   if (se){
     se.innerHTML = lines.join('<br>') + (isFinite(mn)
       ? `<br><span style="text-decoration:overline">X</span> = <span class="sx">${fmt(mn, meanDp, he)}%</span>
-         　　　相对偏差 = <span class="sx">${isFinite(rd) ? fmt(rd, 1, he) : '—'}%</span>` : '');
+         　　　相对偏差 = <span class="sx">${isFinite(rd) ? fmt(rd, rdDp, he) : '—'}%</span>` : '');
   }
 
   judge('assay.judge', isFinite(mn) ? roundTo(mn, meanDp, he) : NaN,
@@ -734,8 +750,9 @@ function syncDpSelects(){
     if (s) s.value = String(val);
   };
   CALCS.forEach(c => put(`${c.id}.dp.mean`, calcDp(c, 'mean')));
+  // 含量测定的三个位数都跟着标准规定走，改限度时三个下拉一起更新
   const a = ANALYTES[curAnalyte] || ANALYTES[0];
-  put(`assay.${a.key}.dp.mean`, assayDp(a, 'mean'));
+  ['ind', 'mean', 'rd'].forEach(w => put(`assay.${a.key}.dp.${w}`, assayDp(a, w)));
 }
 
 function recompute(){
