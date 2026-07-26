@@ -103,34 +103,22 @@ const TECH = {
 const RSD_LIM_DEFAULT = '2.0';
 
 /** 当前选用的色谱方法 */
-function techOf(a){ return get(`assay.${a.key}.tech`) || a.tech || 'hplc'; }
+function techOf(){ return get('assay.tech') || 'hplc'; }
 
 /**
- * 理论板数的默认限度。成分自带的限度只在其本身的方法下成立，
- * 换了方法就回落到该方法的通用限度。
+ * 理论板数的默认限度，随色谱方法走（液相 3000 / 气相 10000）。
  * 渲染与判定共用此函数 —— 默认值不写进 store，store 里只放用户真正填过的值，
  * 否则换方法时旧默认值会被当成"用户已填"而不再跟随。
  */
-function platesDefault(a){
-  const t = techOf(a);
-  const T = TECH[t] || TECH.hplc;
-  return (t === (a.tech || 'hplc')) ? (a.plates || T.plates) : T.plates;
+function platesDefault(){
+  return (TECH[techOf()] || TECH.hplc).plates;
 }
 
-/* ---------------------------------------------------------------- 待测成分 */
+/* 含量测定：成分名称与限度全部手填，故只有一套字段，前缀固定为 assay. */
+const AP = 'assay.';
 
-/**
- * 含量测定的已知待测成分。限度值用字符串保存以保留末位零 ——
- * "0.050" 与 "0.05" 在药典里精度不同，按数字存会退化成同一个值，
- * 而平均值的修约位数正是由限度的位数决定的（见 calcDp）。
- */
-const ANALYTES = [
-  { key:'cenketone',   name:'梣酮',   formulaText:'C₁₄H₁₆O₃',   op:'≥', val:'0.050', tech:'hplc', plates:'3000'  },
-  { key:'obakunone',   name:'黄柏酮', formulaText:'C₂₆H₃₄O₇',  op:'≥', val:'0.15',  tech:'hplc', plates:'3000'  },
-  { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:'1.0',   tech:'hplc', plates:'2000'  },
-  { key:'menthol',     name:'薄荷脑', formulaText:'C₁₀H₂₀O',   op:'≥', val:'0.13',  tech:'gc',   plates:'10000' },
-  { key:'other',       name:'其他',   formulaText:'',           op:'≥', val:'',      tech:'hplc' }
-];
+/** 标准规定留空时平均含量的兜底位数（填了限度就按限度的位数走） */
+const ASSAY_FALLBACK_MEAN_DP = 2;
 
 /* ---------------------------------------------------------------- 计算器定义 */
 
@@ -314,7 +302,6 @@ const ASSAY = {
 const LS_KEY = 'tcm-lab-calc-v2';
 let store = {};
 let curTab = 'impurity';
-let curAnalyte = 0;
 
 function load(){
   try{
@@ -367,19 +354,19 @@ function calcDp(c, which){
  *   相对偏差 = 标准规定位数 − 1  （如限度 0.15% → 1.0%），不小于 0
  * which: 'mean' | 'ind' | 'rd'
  */
-function assayDp(a, which){
-  const pre = `assay.${a.key}.`;
-  const own = store[pre + 'dp.' + which];
+function assayDp(which){
+  const own = store[AP + 'dp.' + which];
   if (own !== undefined && own !== '') return parseInt(own, 10);
 
   // 平均值位数：用户手改过就用手改的，否则取标准规定的小数位
-  const mOwn = store[pre + 'dp.mean'];
+  const mOwn = store[AP + 'dp.mean'];
   let meanDp;
   if (mOwn !== undefined && mOwn !== ''){
     meanDp = parseInt(mOwn, 10);
   } else {
-    const lim = store[pre + 'limval'];
-    meanDp = (lim !== undefined && String(lim).trim() !== '') ? decimalsOf(lim) : decimalsOf(a.val);
+    const lim = store[AP + 'limval'];
+    meanDp = (lim !== undefined && String(lim).trim() !== '')
+      ? decimalsOf(lim) : ASSAY_FALLBACK_MEAN_DP;
   }
 
   if (which === 'mean') return meanDp;
@@ -486,11 +473,7 @@ function renderSheet(c){
 
 /** 含量测定页 */
 function renderAssaySheet(){
-  const a = ANALYTES[curAnalyte] || ANALYTES[0];
-  const pre = `assay.${a.key}.`;
-  const bar = ANALYTES.map((x, i) =>
-    `<button data-analyte="${i}" class="${i === curAnalyte ? 'on' : ''}">${esc(x.name)}</button>`
-  ).join('');
+  const pre = AP;
 
   const refPeaks = Array.from({length: ASSAY.refShots}, (_, i) =>
     `<input type="text" inputmode="decimal" autocomplete="off" data-k="${pre}refA.${i}"
@@ -505,15 +488,15 @@ function renderAssaySheet(){
                       data-k="${esc(pre + k)}" value="${esc(get(pre + k))}">`;
 
   const dpSel = k => {
-    const v = assayDp(a, k);
+    const v = assayDp(k);
     let o = '';
     for (let i = 0; i <= 5; i++) o += `<option value="${i}"${v === i ? ' selected' : ''}>${i}</option>`;
     return `<select class="dpsel" data-k="${pre}dp.${k}">${o}</select>`;
   };
 
-  const tech = techOf(a);
+  const tech = techOf();
   const T = TECH[tech] || TECH.hplc;
-  const platesDef = platesDefault(a);
+  const platesDef = platesDefault();
   const techSel = `<select class="dpsel" data-k="${pre}tech">` +
     Object.keys(TECH).map(k =>
       `<option value="${k}"${k === tech ? ' selected' : ''}>${TECH[k].label}（通则 ${TECH[k].gz}）</option>`
@@ -525,11 +508,11 @@ function renderAssaySheet(){
     <div class="method">照${T.label}（通则 ${T.gz}）测定，外标法。</div>
 
     <div class="analyte-bar no-print">
-      ${bar}
-      <span style="margin-left:12px">方法：</span>${techSel}
+      <span>方法：</span>${techSel}
     </div>
 
-    <div class="subhead">对照品：${esc(a.name)}</div>
+    <div class="subhead">对照品：<input class="inline w180" type="text" autocomplete="off"
+        data-k="${pre}name" value="${esc(get(pre + 'name'))}" placeholder="成分名称"></div>
     <div class="tscroll"><table class="form">
       <tr><th class="rowlab" style="width:38%">对照品浓度 C<sub>对</sub>（mg/ml）</th>
           <td colspan="2">${ic('Cref')}</td></tr>
@@ -577,14 +560,13 @@ function renderAssaySheet(){
     </div>
 
     <div class="verdict">
-      <div class="sec-num">标准规定：按干燥品计算，含 ${esc(a.name)}
-        ${a.formulaText ? `（${esc(a.formulaText)}）` : ''}
+      <div class="sec-num">标准规定：本品按干燥品计算，含 <b id="assay.nameEcho"></b>
         <span class="limit-edit">
           <select data-k="${pre}limop" class="dpsel">
             <option value="ge">不得少于</option>
             <option value="le">不得过</option>
           </select>
-          ${ii('limval', a.val || '', 'w120')} %
+          ${ii('limval', '', 'w120')} %
         </span>
         <span class="judge none" id="assay.judge">待计算</span>
       </div>
@@ -672,12 +654,15 @@ function computeCalc(c){
 }
 
 function computeAssay(){
-  const a = ANALYTES[curAnalyte] || ANALYTES[0];
-  const pre = `assay.${a.key}.`;
+  const pre = AP;
   const he = useHE();
-  const indDp  = assayDp(a, 'ind');
-  const meanDp = assayDp(a, 'mean');
-  const rdDp   = assayDp(a, 'rd');
+  const indDp  = assayDp('ind');
+  const meanDp = assayDp('mean');
+  const rdDp   = assayDp('rd');
+
+  // 标准规定那一行里的成分名，跟着上方"对照品"输入框走
+  const echo = document.getElementById('assay.nameEcho');
+  if (echo) echo.textContent = get(pre + 'name') || '待测成分';
 
   /* 对照品 */
   const refA = Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refA.${i}`)).filter(isFinite);
@@ -688,7 +673,7 @@ function computeAssay(){
 
   // 限度栏留空时按默认限度判定（默认值只渲染在输入框里，不写入 store）
   const rsdLim    = isFinite(getN(pre + 'rsdLim'))    ? getN(pre + 'rsdLim')    : num(RSD_LIM_DEFAULT);
-  const platesLim = isFinite(getN(pre + 'platesLim')) ? getN(pre + 'platesLim') : num(platesDefault(a));
+  const platesLim = isFinite(getN(pre + 'platesLim')) ? getN(pre + 'platesLim') : num(platesDefault());
   judge('assay.rsdJudge', isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', rsdLim);
   judge('assay.platesJudge', getN(pre + 'plates'), 'ge', platesLim);
 
@@ -751,8 +736,7 @@ function syncDpSelects(){
   };
   CALCS.forEach(c => put(`${c.id}.dp.mean`, calcDp(c, 'mean')));
   // 含量测定的三个位数都跟着标准规定走，改限度时三个下拉一起更新
-  const a = ANALYTES[curAnalyte] || ANALYTES[0];
-  ['ind', 'mean', 'rd'].forEach(w => put(`assay.${a.key}.dp.${w}`, assayDp(a, w)));
+  ['ind', 'mean', 'rd'].forEach(w => put(AP + 'dp.' + w, assayDp(w)));
 }
 
 function recompute(){
@@ -764,21 +748,16 @@ function recompute(){
 
 /* ---------------------------------------------------------------- 挂载 */
 
-/** 各检查项的判定方向：浸出物是"不得少于"，其余是"不得过" */
+/** 判定方向：浸出物与含量测定是"不得少于"，其余是"不得过" */
 function seedDefaults(){
   CALCS.forEach(c => {
     const ko = `${c.id}.limop`;
     if (store[ko] === undefined) store[ko] = (c.id === 'extract' ? 'ge' : 'le');
   });
-  ANALYTES.forEach(a => {
-    const kv = `assay.${a.key}.limval`, ko = `assay.${a.key}.limop`;
-    if (store[kv] === undefined) store[kv] = a.val || '';
-    if (store[ko] === undefined) store[ko] = (a.op === '≥' ? 'ge' : 'le');
-  });
+  if (store[AP + 'limop'] === undefined) store[AP + 'limop'] = 'ge';
 }
 
 function build(){
-  if (curAnalyte >= ANALYTES.length) curAnalyte = 0;
   seedDefaults();
 
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
@@ -834,13 +813,7 @@ document.addEventListener('change', e => {
 
 document.addEventListener('click', e => {
   const tab = e.target.closest('.tab');
-  if (tab){ showTab(tab.dataset.tab); return; }
-
-  const an = e.target.closest('[data-analyte]');
-  if (an){
-    curAnalyte = parseInt(an.dataset.analyte, 10);
-    build(); showTab('assay');
-  }
+  if (tab) showTab(tab.dataset.tab);
 });
 
 
