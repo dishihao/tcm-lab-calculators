@@ -110,16 +110,18 @@ const PRODUCTS = {
     origin: '黑龙江黑河',
     basis: '《中国药典》2020年版一部及四部、《国家中药饮片炮制规范》、药品检验补充检验方法和检验项目批准件2010002',
     docBase: 'TS-45-XXXXX-a',
+    /* val 用字符串保留末位零（"3" 与 "3.0" 在药典里精度不同）；
+       dp 为该品种该项目的修约位数，缺省时回落到 CALCS 里的通用值 */
     limits: {
-      impurity: { op: '≤', val: 3,    text: '不得过 3%'    },
-      moisture: { op: '≤', val: 14.0, text: '不得过 14.0%' },
+      impurity: { op:'≤', val:'3',    dp:{ ind:1, mean:0 } },
+      moisture: { op:'≤', val:'14.0', dp:{ ind:2, mean:1 } },
       ash:      null,
-      extract:  { op: '≥', val: 20.0, text: '不得少于 20.0%' }
+      extract:  { op:'≥', val:'20.0', dp:{ ind:2, mean:1 } }
     },
     hplc: { column:'C18', colTemp:'30', wavelength:'236', mobile:'甲醇-水（60:40）', flow:'1.0' },
     analytes: [
-      { key:'cenketone',  name:'梣酮',   formulaText:'C₁₄H₁₆O₃',  op:'≥', val:0.050, indDp:4, meanDp:3, tech:'hplc', plates:'3000' },
-      { key:'obakunone',  name:'黄柏酮', formulaText:'C₂₆H₃₄O₇', op:'≥', val:0.15,  indDp:3, meanDp:2, tech:'hplc', plates:'3000' }
+      { key:'cenketone',  name:'梣酮',   formulaText:'C₁₄H₁₆O₃',  op:'≥', val:'0.050', indDp:4, meanDp:3, tech:'hplc', plates:'3000' },
+      { key:'obakunone',  name:'黄柏酮', formulaText:'C₂₆H₃₄O₇', op:'≥', val:'0.15',  indDp:3, meanDp:2, tech:'hplc', plates:'3000' }
     ]
   },
   jiaozhizi: {
@@ -130,14 +132,14 @@ const PRODUCTS = {
     basis: '《中国药典》2020年版一部及四部',
     docBase: 'TS-45-XXXXX-a',
     limits: {
-      impurity: { op:'≤', val:3.0, text:'不得过 3.0%' },
-      moisture: { op:'≤', val:8.5, text:'不得过 8.5%' },
-      ash:      { op:'≤', val:6.0, text:'不得过 6.0%' },
+      impurity: { op:'≤', val:'3.0', dp:{ ind:1, mean:1 } },
+      moisture: { op:'≤', val:'8.5', dp:{ ind:2, mean:1 } },
+      ash:      { op:'≤', val:'6.0', dp:{ ind:2, mean:1 } },
       extract:  null
     },
     hplc: { column:'C18', colTemp:'30', wavelength:'238', mobile:'乙腈-水（15:85）', flow:'1.0' },
     analytes: [
-      { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:1.0, indDp:2, meanDp:1, tech:'hplc', plates:'2000' }
+      { key:'gardenoside', name:'栀子苷', formulaText:'C₁₇H₂₄O₁₀', op:'≥', val:'1.0', indDp:2, meanDp:1, tech:'hplc', plates:'2000' }
     ]
   },
   /* 薄荷：含量测定为气相色谱法（通则 0521），薄荷脑外标法 */
@@ -151,7 +153,7 @@ const PRODUCTS = {
     limits: { impurity:null, moisture:null, ash:null, extract:null },
     hplc: { column:'聚乙二醇毛细管柱 30m×0.32mm×0.25μm', colTemp:'程序升温', wavelength:'', mobile:'', flow:'' },
     analytes: [
-      { key:'menthol', name:'薄荷脑', formulaText:'C₁₀H₂₀O', op:'≥', val:0.13, indDp:3, meanDp:2, tech:'gc', plates:'10000' }
+      { key:'menthol', name:'薄荷脑', formulaText:'C₁₀H₂₀O', op:'≥', val:'0.13', indDp:3, meanDp:2, tech:'gc', plates:'10000' }
     ]
   },
   custom: {
@@ -159,7 +161,7 @@ const PRODUCTS = {
     docBase: 'TS-45-XXXXX-a',
     limits: { impurity:null, moisture:null, ash:null, extract:null },
     hplc: { column:'C18', colTemp:'30', wavelength:'', mobile:'', flow:'1.0' },
-    analytes: [ { key:'a1', name:'待测成分', formulaText:'', op:'≥', val:NaN, indDp:3, meanDp:2, tech:'hplc' } ]
+    analytes: [ { key:'a1', name:'待测成分', formulaText:'', op:'≥', val:'', indDp:3, meanDp:2, tech:'hplc' } ]
   }
 };
 
@@ -370,6 +372,19 @@ const set  = (k, v) => { store[k] = v; };
 
 function useHE(){ const el = $('#roundHalfEven'); return el ? el.checked : true; }
 
+/**
+ * 解析某项目的修约位数：用户手改 > 品种预设 > 项目通用默认。
+ * 品种预设是必要的 —— 同一个"杂质"项，白鲜皮限度写"不得过3%"（整数位），
+ * 焦栀子写"不得过3.0%"（一位小数），报告值也就分别修约到 1% 与 1.1%。
+ */
+function calcDp(c, which){
+  const k = store[`${c.id}.dp.${which}`];
+  if (k !== undefined && k !== '') return parseInt(k, 10);
+  const L = PRODUCTS[curProduct].limits[c.id];
+  if (L && L.dp && L.dp[which] !== undefined) return L.dp[which];
+  return c.dp[which];
+}
+
 /* ---------------------------------------------------------------- 渲染片段 */
 
 function inputCell(name, ph){
@@ -421,14 +436,14 @@ function renderTable(c){
 
 /** 修约位数选择器 */
 function renderDp(c){
-  const sel = (k, def) => {
-    const v = store[c.id + '.dp.' + k] !== undefined ? store[c.id + '.dp.' + k] : def;
+  const sel = k => {
+    const v = calcDp(c, k);
     let o = '';
-    for (let i = 0; i <= 4; i++) o += `<option value="${i}"${String(v) === String(i) ? ' selected' : ''}>${i}</option>`;
+    for (let i = 0; i <= 4; i++) o += `<option value="${i}"${v === i ? ' selected' : ''}>${i}</option>`;
     return `<select class="dpsel" data-k="${c.id}.dp.${k}">${o}</select>`;
   };
   return `<div class="analyte-bar">
-    <span>修约位数：单值 ${sel('ind', c.dp.ind)} 位小数，平均值 ${sel('mean', c.dp.mean)} 位小数</span>
+    <span>修约位数：单值 ${sel('ind')} 位小数，平均值 ${sel('mean')} 位小数</span>
   </div>`;
 }
 
@@ -568,7 +583,7 @@ function renderAssaySheet(p){
             <option value="ge">不得少于</option>
             <option value="le">不得过</option>
           </select>
-          ${ii('limval', isFinite(a.val) ? String(a.val) : '', 'w120')} %
+          ${ii('limval', a.val || '', 'w120')} %
         </span>
         <span class="judge none" id="assay.judge">待计算</span>
       </div>
@@ -631,8 +646,8 @@ function computeCalc(c){
   const g  = (k, i) => getN(`${c.id}.${k}.${i}`);
   const gs = k => getN(`${c.id}.${k}`);
   const he = useHE();
-  const indDp  = parseInt(get(`${c.id}.dp.ind`)  || c.dp.ind, 10);
-  const meanDp = parseInt(get(`${c.id}.dp.mean`) || c.dp.mean, 10);
+  const indDp  = calcDp(c, 'ind');
+  const meanDp = calcDp(c, 'mean');
 
   const r = summarize(c.compute(g, gs).x, indDp, he);
 
@@ -737,11 +752,16 @@ function applyLimitDefaults(p, force){
       store[kv] = L ? String(L.val) : '';
       store[ko] = L ? (L.op === '≤' ? 'le' : 'ge') : (c.id === 'extract' ? 'ge' : 'le');
     }
+    if (force){
+      // 换品种时修约位数必须回到新品种的默认，否则会把上一个品种的位数带过来
+      delete store[`${c.id}.dp.ind`];
+      delete store[`${c.id}.dp.mean`];
+    }
   });
   p.analytes.forEach(a => {
     const kv = `assay.${a.key}.limval`;
     if (force || store[kv] === undefined || store[kv] === ''){
-      store[kv] = isFinite(a.val) ? String(a.val) : '';
+      store[kv] = a.val ? String(a.val) : '';
       store[`assay.${a.key}.limop`] = a.op === '≥' ? 'ge' : 'le';
     }
   });
@@ -818,8 +838,8 @@ function fillReport(){
   const opTxt = o => o === 'le' ? '不得过' : '不得少于';
 
   CALCS.forEach(c => {
-    const indDp  = parseInt(get(`${c.id}.dp.ind`)  || c.dp.ind,  10);
-    const meanDp = parseInt(get(`${c.id}.dp.mean`) || c.dp.mean, 10);
+    const indDp  = calcDp(c, 'ind');
+    const meanDp = calcDp(c, 'mean');
     const g  = (k, i) => getN(`${c.id}.${k}.${i}`);
     const gs = k => getN(`${c.id}.${k}`);
     const r = summarize(c.compute(g, gs).x, indDp, he);
