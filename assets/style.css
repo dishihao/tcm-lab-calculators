@@ -81,52 +81,42 @@ body{
 }
 .sheet.active{display:block}
 
-.stamp{
-  position:absolute; top:22px; right:38px;
-  border:2px solid #d02020; color:#d02020;
-  font-family:"SimHei","黑体",sans-serif; font-size:15px; font-weight:700;
-  letter-spacing:3px; padding:3px 9px;
-  transform:rotate(-4deg); opacity:.85;
-  pointer-events:none;
-}
-
-.doc-no{
-  font-size:12px; color:var(--muted);
-  border-bottom:1px solid #999; display:inline-block;
-  padding:0 10px 2px 0; margin-bottom:6px;
-}
-
-h1.sheet-title{
-  font-family:"SimHei","黑体",sans-serif;
-  font-size:23px; font-weight:700; letter-spacing:6px;
-  text-align:center; margin:6px 0 20px;
-}
 h2.sec{
   font-family:"SimHei","黑体",sans-serif;
-  font-size:16px; margin:24px 0 10px; letter-spacing:1px;
+  font-size:18px; margin:0 0 4px; letter-spacing:1px;
+}
+.method{
+  font-size:14px; color:#555; margin-bottom:16px;
+  padding-bottom:8px; border-bottom:1px solid #e2ded6;
+}
+.subhead{
+  font-family:"SimHei","黑体",sans-serif;
+  font-size:15px; margin:20px 0 8px;
 }
 .sec-num{font-family:"SimSun","宋体",serif; font-weight:400; font-size:15px; margin:16px 0 8px}
 
-/* ---------- 表头信息表 ---------- */
-table.hdr,table.form{
+/* ---------- 计算表 ---------- */
+table.form{
   width:100%; border-collapse:collapse; margin-bottom:8px;
   table-layout:fixed;
 }
-table.hdr th,table.hdr td,
 table.form th,table.form td{
   border:1px solid var(--line);
   padding:7px 8px;
   vertical-align:middle;
   word-break:break-all;
 }
-table.hdr th,table.form th{
+table.form th{
   font-weight:400; text-align:center; background:#fbfbfb;
 }
 table.form th.rowlab{text-align:center}
 table.form td{text-align:center}
 
-.hdr th{width:15%}
-.hdr td{width:35%}
+/* 行标签里的限度提示 */
+.lim{
+  display:block; font-size:11.5px; color:#777;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif; margin-top:2px;
+}
 
 /* ---------- 输入 / 结果 ---------- */
 input.cell,input.inline{
@@ -167,11 +157,6 @@ td.spanall{background:#fdfdfd}
 .hz.warn{color:#c47f00}
 .hz.good{color:var(--ok)}
 
-/* ---------- 仪器条 ---------- */
-.instr{margin:10px 0 4px; line-height:2.1}
-.instr .lab{margin-right:2px}
-.instr .grp{display:inline-block; margin-right:26px; white-space:nowrap}
-
 /* ---------- 公式 ---------- */
 .formula-wrap{
   margin:18px 0; padding:14px 10px;
@@ -195,30 +180,21 @@ td.spanall{background:#fdfdfd}
 .subst .sx{color:var(--calc); font-weight:700}
 
 /* ---------- 结论区 ---------- */
-.verdict{margin-top:20px; line-height:2.2}
-.verdict .std{font-weight:700}
+.verdict{
+  margin-top:18px; padding-top:12px;
+  border-top:1px solid #e2ded6;
+  line-height:2.2;
+}
+.verdict .sec-num{margin:0}
 .limit-edit{display:inline-flex; align-items:center; gap:4px}
 .judge{
   display:inline-block; margin-left:14px; padding:2px 14px;
   border:1.5px solid currentColor; border-radius:3px;
-  font-family:"SimHei","黑体",sans-serif; font-weight:700;
+  font-family:"SimHei","黑体",sans-serif; font-weight:700; font-size:14px;
 }
 .judge.pass{color:var(--ok)}
 .judge.fail{color:var(--bad)}
 .judge.none{color:#bbb; border-style:dashed; font-weight:400}
-
-.signrow{
-  display:flex; flex-wrap:wrap; gap:26px 46px;
-  margin-top:14px; padding-top:6px;
-}
-.signrow .f{white-space:nowrap}
-
-.paper-foot{
-  display:flex; justify-content:space-between; align-items:flex-end;
-  margin-top:22px; padding-top:6px;
-  border-top:1px solid #000;
-  font-size:13px;
-}
 
 .note{
   margin-top:14px; padding:10px 12px;
@@ -257,17 +233,16 @@ td.spanall{background:#fdfdfd}
 
 /* ---------- 响应式 ---------- */
 @media (max-width:820px){
-  .sheet{padding:22px 14px; margin-bottom:16px}
-  h1.sheet-title{font-size:19px; letter-spacing:3px}
-  .stamp{top:12px; right:12px; font-size:12px; padding:2px 6px}
+  .sheet{padding:20px 14px; margin-bottom:16px}
+  h2.sec{font-size:16px}
   .tabs{padding:10px 8px 0}
   .tab{padding:7px 11px; font-size:13px}
-  table.hdr,table.form{font-size:13px}
-  table.hdr th,table.hdr td,table.form th,table.form td{padding:5px 4px}
+  table.form{font-size:13px}
+  table.form th,table.form td{padding:5px 4px}
   .formula{font-size:16px}
   .subst{font-size:12px}
   input.cell{font-size:15px}
-  .instr .grp{display:block; margin-right:0}
+  .judge{margin-left:0; margin-top:6px}
 }
 
 /* 窄屏时表格可横向滚动 */
@@ -288,9 +263,8 @@ td.spanall{background:#fdfdfd}
   .tscroll table{min-width:0}
   input.cell,input.inline{color:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   .out{color:#000}
-  .stamp{color:#d02020; border-color:#d02020; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   .formula-wrap{background:none; border:none}
   .note{background:none; border-left:2px solid #999}
-  table.hdr th,table.form th{background:none}
+  table.form th{background:none}
   .judge{border:1px solid #000; color:#000}
 }

@@ -139,10 +139,6 @@ const CALCS = [
     tab: '杂质',
     section: '【检查】杂质',
     method: '照杂质测定法（通则 2301）测定。',
-    instr: [
-      { k:'bal',   lab:'电子天平型号', w:'w180' },
-      { k:'balNo', lab:'编号',        w:'w120' }
-    ],
     dp: { ind:1, mean:1 },
     rows: [
       { t:'in',      k:'M',    lab:'样品重量 M<sub>总</sub>（g）' },
@@ -174,12 +170,6 @@ const CALCS = [
     tab: '水分',
     section: '【检查】水分',
     method: '照水分测定法（通则 0832 第二法）测定。',
-    instr: [
-      { k:'bal',   lab:'电子天平型号',       w:'w180' },
-      { k:'balNo', lab:'编号',              w:'w120' },
-      { k:'oven',  lab:'电热鼓风干燥箱型号', w:'w180' },
-      { k:'ovenNo',lab:'编号',              w:'w120' }
-    ],
     dp: { ind:2, mean:1 },
     rows: [
       { t:'in', k:'W0a', lab:'瓶重 W<sub>0</sub>(g)', params:[
@@ -221,12 +211,6 @@ const CALCS = [
     tab: '总灰分',
     section: '【检查】总灰分',
     method: '照总灰分测定法（通则 2302）测定。',
-    instr: [
-      { k:'bal',    lab:'电子天平型号', w:'w180' },
-      { k:'balNo',  lab:'编号',        w:'w120' },
-      { k:'furn',   lab:'箱式电炉型号', w:'w180' },
-      { k:'furnNo', lab:'编号',        w:'w120' }
-    ],
     dp: { ind:2, mean:1 },
     rows: [
       { t:'in', k:'W0a', lab:'坩埚重 W<sub>0</sub>(g)', params:[
@@ -268,12 +252,6 @@ const CALCS = [
     tab: '浸出物',
     section: '【浸出物】',
     method: '照水溶性浸出物测定法（通则 2201）项下的冷浸法测定。',
-    instr: [
-      { k:'bal',   lab:'电子天平型号',       w:'w180' },
-      { k:'balNo', lab:'编号',              w:'w120' },
-      { k:'oven',  lab:'电热鼓风干燥箱型号', w:'w180' },
-      { k:'ovenNo',lab:'编号',              w:'w120' }
-    ],
     dp: { ind:2, mean:1 },
     rows: [
       { t:'spanIn', k:'Q',   lab:'水分（由水分项目得）（%）' },
@@ -374,38 +352,6 @@ function outCell(id){
   return `<div class="out empty" id="${esc(id)}">—</div>`;
 }
 
-/** 单位名称：全站共用一个字段，任一处修改即时同步到所有页 */
-function orgInput(cls){
-  return `<input class="inline ${cls || 'w180'}" type="text" autocomplete="off"
-            data-k="org.name" value="${esc(get('org.name'))}" placeholder="（单位名称）">`;
-}
-
-/** 表头信息表（每张纸都带） */
-function renderHeader(p){
-  const f = (k, ph) => `<input class="cell" type="text" autocomplete="off" data-k="hdr.${k}"
-                          value="${esc(get('hdr.' + k))}" placeholder="${ph ? esc(ph) : ''}">`;
-  return `
-  <table class="hdr">
-    <tr><th>品　　名</th><td>${f('name', p.name)}</td>
-        <th>检验单号</th><td>${f('no')}</td></tr>
-    <tr><th>产品批号</th><td>${f('batch')}</td>
-        <th>规　　格</th><td>${f('spec', p.spec)}</td></tr>
-    <tr><th>检验日期</th><td>${f('dateTest')}</td>
-        <th>报告日期</th><td>${f('dateRpt')}</td></tr>
-    <tr><th>请验部门</th><td>${f('dept', '普通饮片车间包装岗位')}</td>
-        <th>检验项目</th><td>${f('item', '全检')}</td></tr>
-    <tr><th>检验依据</th><td colspan="3" style="text-align:left">${f('basis', p.basis)}</td></tr>
-  </table>`;
-}
-
-/** 仪器与测定条件行 */
-function renderInstr(c){
-  const parts = c.instr.map(x =>
-    `<span class="grp"><span class="lab">${x.lab}：</span>${inlineInput(c.id + '.' + x.k, '', x.w)}</span>`
-  ).join('');
-  return `<div class="sec-num">1. 仪器与测定条件：</div><div class="instr">${parts}</div>`;
-}
-
 /** 结果与计算表 */
 function renderTable(c){
   const rows = c.rows.map(r => {
@@ -434,8 +380,7 @@ function renderTable(c){
       <td class="spanall" colspan="2">${outCell(c.id + '.out.' + r.k)}</td></tr>`;
   }).join('');
 
-  return `<div class="sec-num">3. 结果与计算：</div>
-  <div class="tscroll"><table class="form">
+  return `<div class="tscroll"><table class="form">
     <tr><th class="rowlab" style="width:38%">样品编号</th><th style="width:31%">1</th><th style="width:31%">2</th></tr>
     ${rows}
   </table></div>`;
@@ -454,11 +399,11 @@ function renderDp(c){
   </div>`;
 }
 
-/** 标准规定 + 判定 + 签名 */
+/** 标准规定 + 符合性判定 */
 function renderVerdict(c){
   return `
   <div class="verdict">
-    <div class="sec-num" style="margin-top:20px">4. 标准规定：
+    <div class="sec-num">标准规定：
       <span class="limit-edit">
         <select data-k="${c.id}.limop" class="dpsel">
           <option value="le">不得过</option>
@@ -468,46 +413,24 @@ function renderVerdict(c){
       </span>
       <span class="judge none" id="${c.id}.judge">待计算</span>
     </div>
-    <div>结果：符合规定（<span id="${c.id}.mk1">　</span>）　　不符合规定（<span id="${c.id}.mk2">　</span>）</div>
-    <div class="signrow">
-      <span class="f">室温：${inlineInput(c.id + '.temp', '', 'w40')} ℃</span>
-      <span class="f">相对湿度：${inlineInput(c.id + '.rh', '', 'w40')} %</span>
-      <span class="f">检验人/日期：${inlineInput(c.id + '.op', '', 'w120')} ${inlineInput(c.id + '.opd', '', 'w120')}</span>
-      <span class="f">复核人/日期：${inlineInput(c.id + '.ck', '', 'w120')} ${inlineInput(c.id + '.ckd', '', 'w120')}</span>
-    </div>
-  </div>`;
-}
-
-function paperFoot(page, total){
-  return `<div class="paper-foot">
-    <span>${orgInput('w180')} GMP 受控文件</span>
-    <span>第 <input class="inline w40" type="text" data-k="foot.p${page}" value="${esc(get('foot.p' + page) || page)}"> 页　共
-          <input class="inline w40" type="text" data-k="foot.total" value="${esc(get('foot.total') || total)}"> 页</span>
   </div>`;
 }
 
 /* ---------------------------------------------------------------- 渲染整页 */
 
-function renderSheet(c, p, idx){
+function renderSheet(c){
   return `
   <section class="sheet" data-sheet="${c.id}">
-    <div class="stamp">文件受控</div>
-    <div class="doc-no">编号：${inlineInput('docno.' + c.id, p.docBase, 'w180')}　版本：${inlineInput('ver.' + c.id, '02', 'w40')}</div>
-    <h1 class="sheet-title">成品检验原始记录</h1>
-    ${renderHeader(p)}
     <h2 class="sec">${c.section}</h2>
-    ${renderInstr(c)}
-    <div class="sec-num">2. 测定法：${c.method}</div>
+    <div class="method">${c.method}</div>
     ${renderTable(c)}
     ${renderDp(c)}
-    <div class="sec-num">计算公式：</div>
     <div class="formula-wrap">
       <div class="formula">${c.formula()}</div>
       <div class="subst" id="${c.id}.subst"></div>
     </div>
-    ${c.note ? `<div class="note">${c.note}</div>` : ''}
     ${renderVerdict(c)}
-    ${paperFoot(idx + 1, CALCS.length + 1)}
+    ${c.note ? `<div class="note">${c.note}</div>` : ''}
   </section>`;
 }
 
@@ -530,8 +453,6 @@ function renderAssaySheet(p){
   const ii = (k, def, cls) => inlineInput(pre + k, def, cls);
   const ic = k => `<input class="cell" type="text" inputmode="decimal" autocomplete="off"
                       data-k="${esc(pre + k)}" value="${esc(get(pre + k))}">`;
-  const it = k => `<input class="cell" type="text" autocomplete="off"
-                      data-k="${esc(pre + k)}" value="${esc(get(pre + k))}">`;
 
   const dpSel = (k, def) => {
     const v = store[pre + 'dp.' + k] !== undefined ? store[pre + 'dp.' + k] : def;
@@ -542,63 +463,33 @@ function renderAssaySheet(p){
 
   return `
   <section class="sheet" data-sheet="assay">
-    <div class="stamp">文件受控</div>
-    <div class="doc-no">编号：${inlineInput('docno.assay', p.docBase, 'w180')}　版本：${inlineInput('ver.assay', '01', 'w40')}</div>
-    <h1 class="sheet-title">成品检验原始记录</h1>
-    ${renderHeader(p)}
-    <h2 class="sec">【含量测定】照高效液相色谱法（通则 0512）测定。</h2>
+    <h2 class="sec">【含量测定】</h2>
+    <div class="method">照高效液相色谱法（通则 0512）测定，外标法。</div>
 
     <div class="analyte-bar no-print"><span>待测成分：</span>${bar}</div>
 
-    <div class="sec-num">1. 仪器与测定条件：</div>
-    <div class="instr">
-      <span class="grp">电子天平型号：${ii('bal', '', 'w180')}</span>
-      <span class="grp">编号：${ii('balNo', '', 'w120')}</span><br>
-      <span class="grp">高效液相色谱仪型号：${ii('hplc', '', 'w180')}</span>
-      <span class="grp">编号：${ii('hplcNo', '', 'w120')}</span><br>
-      <span class="grp">色谱柱：${ii('column', p.hplc.column, 'w120')}</span>
-      <span class="grp">编号：${ii('columnNo', '', 'w120')}</span>
-      <span class="grp">柱温：${ii('colTemp', p.hplc.colTemp, 'w40')} ℃</span><br>
-      <span class="grp">检测器：${ii('detector', '', 'w120')}</span>
-      <span class="grp">检测波长：${ii('wavelength', p.hplc.wavelength, 'w40')} nm</span><br>
-      <span class="grp">流动相：${ii('mobile', p.hplc.mobile, 'w180')}</span>
-      <span class="grp">流速：${ii('flow', p.hplc.flow, 'w40')} ml/min</span>
-    </div>
-
-    <div class="sec-num">2. 系统适用性试验：</div>
-    <div class="instr">
-      <span class="grp">对照品连续进样 ${ii('shots', String(ASSAY.refShots), 'w40')} 针，主峰面积 RSD =
-        <b id="assay.rsd" style="color:var(--calc)">—</b> %
-        <span style="font-size:12px;color:#777">（应不大于 ${ii('rsdLim', '2.0', 'w40')}%）</span>
-        <span class="judge none" id="assay.rsdJudge" style="margin-left:6px">—</span>
-      </span><br>
-      <span class="grp">理论板数：${ii('plates', '', 'w120')}
-        <span style="font-size:12px;color:#777">（应不低于 ${ii('platesLim', '3000', 'w120')}）</span>
-        <span class="judge none" id="assay.platesJudge" style="margin-left:6px">—</span>
-      </span>
-    </div>
-
-    <div class="sec-num">3. 对照品：${esc(a.name)}</div>
+    <div class="subhead">对照品：${esc(a.name)}</div>
     <div class="tscroll"><table class="form">
-      <tr><th class="rowlab" style="width:26%">对照品批号</th><td style="width:24%">${it('refLot')}</td>
-          <th class="rowlab" style="width:26%">纯度 S（%）</th><td style="width:24%">${ic('refPurity')}</td></tr>
-      <tr><th class="rowlab">对照品来源</th><td>${it('refSrc')}</td>
-          <th class="rowlab">干燥条件</th><td>${it('refDry')}</td></tr>
-      <tr><th class="rowlab">对照品浓度 C<sub>对</sub>（mg/ml）</th><td>${ic('Cref')}</td>
-          <th class="rowlab">对照品进样量 V<sub>对</sub>（μl）</th><td>${ic('Vref')}</td></tr>
-      <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th><td colspan="3"><div class="peaks">${refPeaks}</div></td></tr>
+      <tr><th class="rowlab" style="width:38%">对照品浓度 C<sub>对</sub>（mg/ml）</th>
+          <td colspan="2">${ic('Cref')}</td></tr>
+      <tr><th class="rowlab">纯度 S（%）</th><td colspan="2">${ic('refPurity')}</td></tr>
+      <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th><td colspan="2"><div class="peaks">${refPeaks}</div></td></tr>
       <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
-          <td colspan="3">${outCell('assay.out.Aref')}</td></tr>
-      <tr><th class="rowlab">RSD（%）</th><td colspan="3">${outCell('assay.out.RSD')}</td></tr>
+          <td colspan="2">${outCell('assay.out.Aref')}</td></tr>
+      <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', '2.0', 'w40')}%</span></th>
+          <td colspan="2">${outCell('assay.out.RSD')}
+              <span class="judge none" id="assay.rsdJudge">—</span></td></tr>
+      <tr><th class="rowlab">理论板数<span class="lim">应不低于 ${ii('platesLim', '3000', 'w120')}</span></th>
+          <td colspan="2">${ic('plates')}
+              <span class="judge none" id="assay.platesJudge">—</span></td></tr>
     </table></div>
 
-    <div class="sec-num">4. 供试品测量：</div>
+    <div class="subhead">供试品测量</div>
     <div class="tscroll"><table class="form">
       <tr><th class="rowlab" style="width:38%">样品编号</th><th style="width:31%">1</th><th style="width:31%">2</th></tr>
       <tr><th class="rowlab">水分 Q（%）</th><td class="spanall" colspan="2">${ic('Q')}</td></tr>
       <tr><th class="rowlab">取样量 W<sub>样</sub>（g）</th><td>${ic('Ws.1')}</td><td>${ic('Ws.2')}</td></tr>
       <tr><th class="rowlab">样品稀释倍数 f<sub>样</sub></th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
-      <tr><th class="rowlab">进样量 V<sub>样</sub>（μl）</th><td>${ic('Vs.1')}</td><td>${ic('Vs.2')}</td></tr>
       <tr><th class="rowlab">样品峰面积 A<sub>样</sub></th>
           <td><div class="peaks">${smpPeaks(1)}</div></td>
           <td><div class="peaks">${smpPeaks(2)}</div></td></tr>
@@ -615,24 +506,17 @@ function renderAssaySheet(p){
       <span>修约位数：单值 ${dpSel('ind', a.indDp)} 位小数，平均值 ${dpSel('mean', a.meanDp)} 位小数</span>
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}useS" ${get(pre + 'useS') === '1' ? 'checked' : ''}>
-        按纯度 S 折算 C<sub>对</sub>（默认关闭，与纸质表一致）
+        按纯度 S 折算 C<sub>对</sub>
       </label>
     </div>
 
-    <div class="sec-num">计算公式：</div>
     <div class="formula-wrap">
       <div class="formula">${ASSAY.formula()}</div>
       <div class="subst" id="assay.subst"></div>
     </div>
 
-    <div class="note">
-      Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。
-      C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
-      纸质表所印公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
-    </div>
-
     <div class="verdict">
-      <div class="sec-num" style="margin-top:20px">5. 标准规定：本品按干燥品计算，含 ${esc(a.name)}
+      <div class="sec-num">标准规定：按干燥品计算，含 ${esc(a.name)}
         ${a.formulaText ? `（${esc(a.formulaText)}）` : ''}
         <span class="limit-edit">
           <select data-k="${pre}limop" class="dpsel">
@@ -643,36 +527,28 @@ function renderAssaySheet(p){
         </span>
         <span class="judge none" id="assay.judge">待计算</span>
       </div>
-      <div>结果：符合规定（<span id="assay.mk1">　</span>）　　不符合规定（<span id="assay.mk2">　</span>）</div>
-      <div class="signrow">
-        <span class="f">室温：${ii('temp', '', 'w40')} ℃</span>
-        <span class="f">相对湿度：${ii('rh', '', 'w40')} %</span>
-        <span class="f">检验人/日期：${ii('op', '', 'w120')} ${ii('opd', '', 'w120')}</span>
-        <span class="f">复核人/日期：${ii('ck', '', 'w120')} ${ii('ckd', '', 'w120')}</span>
-      </div>
     </div>
-    ${paperFoot(CALCS.length + 1, CALCS.length + 1)}
+
+    <div class="note">
+      Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。
+      C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
+      药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
+    </div>
   </section>`;
 }
 
 /* ---------------------------------------------------------------- 计算 */
 
-function judge(el, mk1, mk2, val, op, lim){
+function judge(el, val, op, lim){
   const j = document.getElementById(el);
-  const m1 = document.getElementById(mk1);
-  const m2 = document.getElementById(mk2);
   if (!j) return;
   if (!isFinite(val) || !isFinite(lim)){
     j.className = 'judge none'; j.textContent = '待计算';
-    if (m1) m1.textContent = '　';
-    if (m2) m2.textContent = '　';
     return;
   }
   const pass = op === 'le' ? (val <= lim) : (val >= lim);
   j.className = 'judge ' + (pass ? 'pass' : 'fail');
   j.textContent = pass ? '符合规定' : '不符合规定';
-  if (m1) m1.textContent = pass ? '√' : '　';
-  if (m2) m2.textContent = pass ? '　' : '√';
 }
 
 function setOut(id, txt){
@@ -728,8 +604,7 @@ function computeCalc(c){
 
   const op  = get(`${c.id}.limop`) || (c.id === 'extract' ? 'ge' : 'le');
   const lim = getN(`${c.id}.limval`);
-  judge(`${c.id}.judge`, `${c.id}.mk1`, `${c.id}.mk2`,
-        isFinite(r.mean) ? roundTo(r.mean, meanDp, he) : NaN, op, lim);
+  judge(`${c.id}.judge`, isFinite(r.mean) ? roundTo(r.mean, meanDp, he) : NaN, op, lim);
 }
 
 function computeAssay(p){
@@ -746,11 +621,8 @@ function computeAssay(p){
   setOut('assay.out.Aref', isFinite(Aref) ? Aref.toFixed(1) : '');
   setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
-  const rsdEl = document.getElementById('assay.rsd');
-  if (rsdEl) rsdEl.textContent = isFinite(rsd) ? fmt(rsd, 1, he) : '—';
-  judge('assay.rsdJudge', null, null, isFinite(rsd) ? roundTo(rsd, 1, he) : NaN,
-        'le', getN(pre + 'rsdLim'));
-  judge('assay.platesJudge', null, null, getN(pre + 'plates'), 'ge', getN(pre + 'platesLim'));
+  judge('assay.rsdJudge', isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', getN(pre + 'rsdLim'));
+  judge('assay.platesJudge', getN(pre + 'plates'), 'ge', getN(pre + 'platesLim'));
 
   /* 供试品 */
   let Cref = getN(pre + 'Cref');
@@ -795,8 +667,7 @@ function computeAssay(p){
          　　　相对偏差 = <span class="sx">${isFinite(rd) ? fmt(rd, 1, he) : '—'}%</span>` : '');
   }
 
-  judge('assay.judge', 'assay.mk1', 'assay.mk2',
-        isFinite(mn) ? roundTo(mn, meanDp, he) : NaN,
+  judge('assay.judge', isFinite(mn) ? roundTo(mn, meanDp, he) : NaN,
         get(pre + 'limop') || 'ge', getN(pre + 'limval'));
 }
 
@@ -843,7 +714,7 @@ function build(){
   /* 纸张 */
   $('#sheets').innerHTML =
       renderReport(p)
-    + CALCS.map((c, i) => renderSheet(c, p, i)).join('')
+    + CALCS.map(c => renderSheet(c)).join('')
     + renderAssaySheet(p);
 
   /* 恢复 select 值 */
@@ -856,10 +727,8 @@ function build(){
   recompute();
 }
 
-/** 检验报告书汇总页 */
+/** 结果汇总页 */
 function renderReport(p){
-  const f = (k, ph) => `<input class="cell" type="text" autocomplete="off" data-k="rpt.${k}"
-                          value="${esc(get('rpt.' + k))}" placeholder="${ph ? esc(ph) : ''}">`;
   const rows = CALCS.map(c => `
     <tr>
       <th class="rowlab">${c.tab}</th>
@@ -875,36 +744,18 @@ function renderReport(p){
 
   return `
   <section class="sheet" data-sheet="header">
-    <div class="stamp">检验专用章</div>
-    <div style="text-align:center;font-family:'SimHei','黑体',sans-serif;font-size:18px;margin-bottom:2px">
-      ${orgInput('w180')}</div>
-    <h1 class="sheet-title">成品检验报告书</h1>
-    <table class="hdr">
-      <tr><th>品　　名</th><td>${f('name', p.name)}</td><th>检验单号</th><td>${f('no')}</td></tr>
-      <tr><th>规　　格</th><td>${f('spec', p.spec)}</td><th>药材产地</th><td>${f('origin', p.origin)}</td></tr>
-      <tr><th>产品批号</th><td>${f('batch')}</td><th>取样量</th><td>${f('sample', '300g')}</td></tr>
-      <tr><th>请验部门</th><td>${f('dept', '普通饮片车间包装岗位')}</td><th>检验日期</th><td>${f('dateTest')}</td></tr>
-      <tr><th>检验项目</th><td>${f('item', '全检')}</td><th>报告日期</th><td>${f('dateRpt')}</td></tr>
-      <tr><th>等级规格</th><td colspan="3">${f('grade', p.grade)}</td></tr>
-      <tr><th>检验依据</th><td colspan="3" style="text-align:left">${f('basis', p.basis)}</td></tr>
-    </table>
-    <div class="tscroll"><table class="form" style="margin-top:14px">
+    <h2 class="sec">结果汇总</h2>
+    <div class="tscroll"><table class="form">
       <tr><th class="rowlab" style="width:26%">检测项目</th>
           <th style="width:44%">标准规定</th><th style="width:30%">检测结果</th></tr>
       ${rows}${arows}
     </table></div>
     <div class="verdict">
-      <div>结论：本品按 ${esc(p.basis)} 检验，结果
-        <b id="rpt.verdict" style="color:var(--calc)">—</b>规定。</div>
-      <div class="signrow">
-        <span class="f">质量部负责人：${inlineInput('rpt.qa', '', 'w120')}</span>
-        <span class="f">检验人：${inlineInput('rpt.op', '', 'w120')}</span>
-        <span class="f">复核人：${inlineInput('rpt.ck', '', 'w120')}</span>
-      </div>
+      <div class="sec-num">总体判定：<b id="rpt.verdict" style="color:var(--calc)">—</b>规定</div>
     </div>
     <div class="note">
-      本页汇总各检验项目的计算结果，数据来自其余各页，随填随更新。
-      二氧化硫残留量、铝盐/镁盐、鉴别等项在原始报告中标注为“引用原料检验”，无独立计算过程，故本工具未设计算器。
+      本页汇总各项计算结果，随其余各页填写实时更新。
+      二氧化硫残留量、铝盐/镁盐、鉴别等项无独立计算过程，未设计算器。
     </div>
   </section>`;
 }
@@ -1094,106 +945,63 @@ $('#fileImport').addEventListener('change', e => {
 
 const DEMO = {
   baixianpi: {
-    'rpt.name':'白鲜皮','rpt.no':'JCP00001-250101','rpt.spec':'切制','rpt.origin':'黑龙江黑河',
-    'rpt.batch':'250101','rpt.sample':'300g','rpt.dept':'普通饮片车间包装岗位',
-    'rpt.dateTest':'2025年01月06日','rpt.dateRpt':'2025年01月11日','rpt.item':'全检','rpt.grade':'精选',
-    'hdr.name':'白鲜皮','hdr.batch':'250101','hdr.no':'JCP00001-250101',
-    'hdr.dateTest':'2025年01月06日','hdr.dateRpt':'2025年01月11日',
-
-    'impurity.bal':'YP5002','impurity.balNo':'TP-01',
     'impurity.M.1':'51.47','impurity.M1.1':'0.67',
     'impurity.M.2':'50.17','impurity.M1.2':'0.66',
-    'impurity.temp':'14','impurity.rh':'56',
 
-    'moisture.bal':'ME155DV','moisture.balNo':'TP-05',
-    'moisture.oven':'GZX-136BS','moisture.ovenNo':'GW-04',
     'moisture.W0a.1':'27.2431','moisture.W0b.1':'27.2429','moisture.Ws.1':'2.6801',
     'moisture.W1a.1':'29.5597','moisture.W1b.1':'29.5587',
     'moisture.W0a.2':'27.2462','moisture.W0b.2':'27.2461','moisture.Ws.2':'2.5815',
     'moisture.W1a.2':'29.4758','moisture.W1b.2':'29.4748',
-    'moisture.temp':'15','moisture.rh':'55',
 
-    'extract.bal':'ME204E','extract.balNo':'TP-06',
-    'extract.oven':'GZX-136BS','extract.ovenNo':'GW-03',
     'extract.Q':'13.6',
     'extract.W0a.1':'110.6085','extract.W0b.1':'110.6084','extract.Ws.1':'4.9867',
     'extract.V.1':'100','extract.Vs.1':'20','extract.W1.1':'110.8147',
     'extract.W0a.2':'116.0736','extract.W0b.2':'116.0735','extract.Ws.2':'4.8804',
     'extract.V.2':'100','extract.Vs.2':'20','extract.W1.2':'116.2791',
-    'extract.temp':'20','extract.rh':'51',
 
-    'assay.cenketone.hplc':'2695','assay.cenketone.hplcNo':'TP-09',
-    'assay.cenketone.column':'C18','assay.cenketone.colTemp':'30',
-    'assay.cenketone.detector':'2489','assay.cenketone.wavelength':'236',
-    'assay.cenketone.mobile':'甲醇-水（60:40）','assay.cenketone.flow':'1.0',
-    'assay.cenketone.refLot':'示例对照品批号','assay.cenketone.refSrc':'中检院','assay.cenketone.refPurity':'99.6',
-    'assay.cenketone.Cref':'0.06064','assay.cenketone.Vref':'10',
+    'assay.cenketone.refPurity':'99.6','assay.cenketone.Cref':'0.06064',
     'assay.cenketone.refA.0':'444228','assay.cenketone.refA.1':'442483','assay.cenketone.refA.2':'438787',
     'assay.cenketone.refA.3':'442183','assay.cenketone.refA.4':'441028',
     'assay.cenketone.Q':'13.6',
-    'assay.cenketone.Ws.1':'1.0623','assay.cenketone.f.1':'25','assay.cenketone.Vs.1':'10',
+    'assay.cenketone.Ws.1':'1.0623','assay.cenketone.f.1':'25',
     'assay.cenketone.smpA.1.0':'598185','assay.cenketone.smpA.1.1':'615092',
-    'assay.cenketone.Ws.2':'1.0785','assay.cenketone.f.2':'25','assay.cenketone.Vs.2':'10',
+    'assay.cenketone.Ws.2':'1.0785','assay.cenketone.f.2':'25',
     'assay.cenketone.smpA.2.0':'616565','assay.cenketone.smpA.2.1':'626566',
     'assay.cenketone.platesLim':'3000','assay.cenketone.rsdLim':'2.0',
 
-    'assay.obakunone.hplc':'2695','assay.obakunone.hplcNo':'TP-09',
-    'assay.obakunone.column':'C18','assay.obakunone.colTemp':'30',
-    'assay.obakunone.detector':'2489','assay.obakunone.wavelength':'236',
-    'assay.obakunone.mobile':'甲醇-水（60:40）','assay.obakunone.flow':'1.0',
-    'assay.obakunone.refLot':'示例对照品批号','assay.obakunone.refSrc':'中检院','assay.obakunone.refPurity':'99.7',
-    'assay.obakunone.Cref':'0.1017','assay.obakunone.Vref':'10',
+    'assay.obakunone.refPurity':'99.7','assay.obakunone.Cref':'0.1017',
     'assay.obakunone.refA.0':'1335090','assay.obakunone.refA.1':'1326881','assay.obakunone.refA.2':'1285858',
     'assay.obakunone.refA.3':'1320591','assay.obakunone.refA.4':'1318831',
     'assay.obakunone.Q':'13.6',
-    'assay.obakunone.Ws.1':'1.0623','assay.obakunone.f.1':'25','assay.obakunone.Vs.1':'10',
+    'assay.obakunone.Ws.1':'1.0623','assay.obakunone.f.1':'25',
     'assay.obakunone.smpA.1.0':'1465965','assay.obakunone.smpA.1.1':'1478213',
-    'assay.obakunone.Ws.2':'1.0785','assay.obakunone.f.2':'25','assay.obakunone.Vs.2':'10',
+    'assay.obakunone.Ws.2':'1.0785','assay.obakunone.f.2':'25',
     'assay.obakunone.smpA.2.0':'1516477','assay.obakunone.smpA.2.1':'1530228',
     'assay.obakunone.platesLim':'3000','assay.obakunone.rsdLim':'2.0'
   },
   jiaozhizi: {
-    'rpt.name':'焦栀子','rpt.no':'JCP00002-250102','rpt.spec':'清炒','rpt.origin':'江西吉安',
-    'rpt.batch':'250102','rpt.sample':'300g','rpt.dept':'普通饮片车间包装岗位',
-    'rpt.dateTest':'2025年01月04日','rpt.dateRpt':'2025年01月07日','rpt.item':'全检','rpt.grade':'选',
-    'hdr.name':'焦栀子','hdr.batch':'250102','hdr.no':'JCP00002-250102',
-    'hdr.dateTest':'2025年01月04日','hdr.dateRpt':'2025年01月07日',
-
-    'impurity.bal':'YP5002','impurity.balNo':'TP-01',
     'impurity.M.1':'51.45','impurity.M1.1':'0.57',
     'impurity.M.2':'50.37','impurity.M1.2':'0.56',
-    'impurity.temp':'17','impurity.rh':'54',
 
-    'moisture.bal':'ME155DV','moisture.balNo':'TP-05',
-    'moisture.oven':'GZX-136BS','moisture.ovenNo':'GW-04',
     'moisture.W0a.1':'33.1692','moisture.W0b.1':'33.1691','moisture.Ws.1':'2.1424',
     'moisture.W1a.1':'35.2887','moisture.W1b.1':'35.2877',
     'moisture.W0a.2':'27.7042','moisture.W0b.2':'27.7039','moisture.Ws.2':'2.3548',
     'moisture.W1a.2':'30.0330','moisture.W1b.2':'30.0320',
-    'moisture.temp':'18','moisture.rh':'54',
 
     'ash.W0a.1':'39.8926','ash.W0b.1':'39.8925','ash.Ws.1':'2.1105',
     'ash.W1a.1':'40.0032','ash.W1b.1':'40.0031',
     'ash.W0a.2':'41.5270','ash.W0b.2':'41.5269','ash.Ws.2':'2.9915',
     'ash.W1a.2':'41.6822','ash.W1b.2':'41.6821',
-    'ash.temp':'19','ash.rh':'52',
 
-    'assay.gardenoside.hplc':'2695','assay.gardenoside.hplcNo':'TP-09',
-    'assay.gardenoside.bal':'AUW120D','assay.gardenoside.balNo':'TP-09',
-    'assay.gardenoside.column':'C18','assay.gardenoside.colTemp':'30',
-    'assay.gardenoside.detector':'2489','assay.gardenoside.wavelength':'238',
-    'assay.gardenoside.mobile':'乙腈-水（15:85）','assay.gardenoside.flow':'1.0',
-    'assay.gardenoside.refLot':'示例对照品批号','assay.gardenoside.refSrc':'中检院','assay.gardenoside.refPurity':'97.1',
-    'assay.gardenoside.Cref':'0.03136','assay.gardenoside.Vref':'10',
+    'assay.gardenoside.refPurity':'97.1','assay.gardenoside.Cref':'0.03136',
     'assay.gardenoside.refA.0':'435726','assay.gardenoside.refA.1':'435419','assay.gardenoside.refA.2':'436698',
     'assay.gardenoside.refA.3':'437133','assay.gardenoside.refA.4':'436985',
     'assay.gardenoside.Q':'1.1',
-    'assay.gardenoside.Ws.1':'0.1091','assay.gardenoside.f.1':'62.5','assay.gardenoside.Vs.1':'10',
+    'assay.gardenoside.Ws.1':'0.1091','assay.gardenoside.f.1':'62.5',
     'assay.gardenoside.smpA.1.0':'1070511','assay.gardenoside.smpA.1.1':'1062932',
-    'assay.gardenoside.Ws.2':'0.1095','assay.gardenoside.f.2':'62.5','assay.gardenoside.Vs.2':'10',
+    'assay.gardenoside.Ws.2':'0.1095','assay.gardenoside.f.2':'62.5',
     'assay.gardenoside.smpA.2.0':'1065845','assay.gardenoside.smpA.2.1':'1070760',
-    'assay.gardenoside.plates':'6525.4','assay.gardenoside.platesLim':'2000','assay.gardenoside.rsdLim':'2.0',
-    'assay.gardenoside.temp':'24','assay.gardenoside.rh':'56'
+    'assay.gardenoside.plates':'6525.4','assay.gardenoside.platesLim':'2000','assay.gardenoside.rsdLim':'2.0'
   }
 };
 
