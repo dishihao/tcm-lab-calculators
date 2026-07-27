@@ -6,21 +6,6 @@ const { chromium } = require(
 );
 
 const PAGE_URL = new URL('../index.html', import.meta.url).href;
-const TEMPLATES = {
-  'patchouli-patchoulol': ['广藿香', '百秋李醇', 'internal', '50000', true],
-  'mugwort-eucalyptol': ['艾叶', '桉油精', 'external', '50000', true],
-  'mugwort-borneol': ['艾叶', '龙脑', 'external', '50000', true],
-  'star-anise-anethole': ['八角茴香', '反式茴香脑', 'external', '30000', false],
-  'mint-menthol': ['薄荷', '薄荷脑', 'external', '10000', true],
-  'clove-eugenol': ['丁香', '丁香酚', 'external', '1500', false],
-  'homalomena-linalool': ['千年健', '芳樟醇', 'external', '20000', true],
-  'fennel-anethole': ['小茴香', '反式茴香脑', 'external', '5000', false],
-  'brucea-oleic': ['鸦胆子', '油酸', 'internal', '5000', true],
-  'flax-linoleic': ['亚麻子', '亚油酸', 'external', '20000', true],
-  'flax-linolenic': ['亚麻子', 'α-亚麻酸', 'external', '20000', true],
-  'elsholtzia-thymol': ['香薷', '麝香草酚', 'external', '1700', true],
-  'elsholtzia-carvacrol': ['香薷', '香荆芥酚', 'external', '1700', true],
-};
 
 const assert = (ok, message) => {
   if (!ok) throw new Error(message);
@@ -32,12 +17,16 @@ const fillPeaks = async (page, prefix, values) => {
   }
 };
 const chooseTemplate = async (page, templateId) => {
-  const [product] = TEMPLATES[templateId];
+  const template = await page.evaluate(id => GC_TEMPLATES.find(t => t.id === id), templateId);
+  assert(template, `找不到模板 ${templateId}`);
   const productInput = page.locator('[data-assay-product]');
-  await productInput.fill(product);
+  await productInput.fill(template.product);
   await productInput.press('Enter');
+  const record = page.locator('[data-assay-record]');
+  if (await record.count()) await record.selectOption(template.recordKey);
   const component = page.locator('[data-assay-component]');
   if (await component.count()) await component.selectOption(templateId);
+  return template;
 };
 
 const browser = await chromium.launch({
@@ -54,18 +43,37 @@ await page.reload();
 await page.waitForLoadState('networkidle');
 await page.locator('[data-tab="assay"]').click();
 
-assert(await page.locator('#gcProductList option').count() === 10, '品种候选数量不正确');
+const templateIds = await page.evaluate(() => GC_TEMPLATES.map(t => t.id));
+const recordCount = await page.evaluate(() => new Set(GC_TEMPLATES.map(t => t.recordKey)).size);
+assert(await page.locator('#gcProductList option').count() === 14, '品种候选数量不正确');
+assert(templateIds.length === 33, '气相成分模板数量不正确');
+assert(recordCount === 28, '原料/成品记录数量不正确');
 
-for (const [templateId, [product, name, mode, plates, dry]] of Object.entries(TEMPLATES)) {
-  await chooseTemplate(page, templateId);
-  assert(await page.locator('[data-assay-product]').inputValue() === product, `${templateId}: 品种名错误`);
-  assert(await field(page, 'assay.name').inputValue() === name, `${templateId}: 成分名错误`);
+for (const templateId of templateIds) {
+  const template = await chooseTemplate(page, templateId);
+  assert(await page.locator('[data-assay-product]').inputValue() === template.product, `${templateId}: 品种名错误`);
+  assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
-  assert(await field(page, 'assay.mode').inputValue() === mode, `${templateId}: 定量方法错误`);
-  assert(await field(page, 'assay.platesLim').inputValue() === plates, `${templateId}: 板数错误`);
-  assert(await field(page, 'assay.dryBasis').isChecked() === dry, `${templateId}: 干燥品口径错误`);
-  assert(await page.locator('th', { hasText: '水分 Q' }).count() === (dry ? 1 : 0),
+  assert(await field(page, 'assay.mode').inputValue() === template.mode, `${templateId}: 定量方法错误`);
+  assert(await field(page, 'assay.platesLim').inputValue() === template.plates, `${templateId}: 板数错误`);
+  assert(await field(page, 'assay.limval').inputValue() === template.limit, `${templateId}: 判定限度错误`);
+  assert(await field(page, 'assay.dryBasis').isChecked() === template.dry, `${templateId}: 干燥品口径错误`);
+  assert(await page.locator('th', { hasText: '水分 Q' }).count() === (template.dry ? 1 : 0),
     `${templateId}: 水分行错误`);
+  assert((await page.locator('.standard-quote').innerText()).includes(template.standardText),
+    `${templateId}: 标准规定原文错误`);
+}
+
+// 同名原料/成品必须保持各自标准；新增四个品种必须可选。
+await chooseTemplate(page, 'mint-menthol');
+assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.20%'), '薄荷原料标准错误');
+assert((await page.locator('.standard-quote').innerText()).includes('内控标准'), '薄荷原料内控标准缺失');
+await chooseTemplate(page, 'mint-menthol-finished');
+assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.13%'), '薄荷成品标准错误');
+await chooseTemplate(page, 'fennel-anethole-salted-finished');
+assert((await page.locator('.standard-quote').innerText()).includes('不得少于1.3%'), '盐小茴香标准错误');
+for (const id of ['cardamom-eucalyptol', 'dendrobium-dendrobine', 'amomum-bornyl-acetate', 'pine-alpha-pinene']) {
+  await chooseTemplate(page, id);
 }
 
 // 任意输入一个未预置品种，也应保留为自定义品种。
@@ -127,4 +135,4 @@ assert(await page.locator('#assay\\.judge').innerText() === '符合规定', '双
 await page.screenshot({ path: 'C:/tmp/gc-templates.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log(`PASS: ${Object.keys(TEMPLATES).length} 个气相成分模板、外标法、内标法、总量判定及数据隔离`);
+console.log(`PASS: ${templateIds.length} 个气相成分模板、${recordCount} 条原料/成品记录、标准原文、计算及数据隔离`);

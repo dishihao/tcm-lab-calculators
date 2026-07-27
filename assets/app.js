@@ -104,44 +104,201 @@ const RSD_LIM_DEFAULT = '2.0';
 const AP = 'assay.';
 
 /**
- * 气相含量测定模板。字段来自工作区内 2025 年原料质量标准和对应原料检验记录。
- * totalLabel 表示药典按两个成分的合计值判定，单个成分没有独立限度。
+ * 气相含量测定模板。一个 recordKey 对应一份原料或成品检验记录；
+ * 同名品种的原料、成品标准不得合并。standardText 保留记录中的标准规定原文。
  */
+function gcRecord(meta, analytes){
+  return analytes.map(analyte => ({ ...meta, ...analyte }));
+}
+
 const GC_TEMPLATES = [
-  { id:'patchouli-patchoulol', product:'广藿香', name:'百秋李醇', formulaText:'C₁₅H₂₆O',
-    mode:'internal', internalName:'正十八烷', dry:true, plates:'50000', limit:'0.22' },
-  { id:'mugwort-eucalyptol', product:'艾叶', name:'桉油精', formulaText:'C₁₀H₁₈O',
-    mode:'external', dry:true, plates:'50000', limit:'0.050' },
-  { id:'mugwort-borneol', product:'艾叶', name:'龙脑', formulaText:'C₁₀H₁₈O',
-    mode:'external', dry:true, plates:'50000', limit:'0.020' },
-  { id:'star-anise-anethole', product:'八角茴香', name:'反式茴香脑', formulaText:'C₁₀H₁₂O',
-    mode:'external', dry:false, plates:'30000', limit:'4.0' },
-  { id:'mint-menthol', product:'薄荷', name:'薄荷脑', formulaText:'C₁₀H₂₀O',
-    mode:'external', dry:true, plates:'10000', limit:'0.20' },
-  { id:'clove-eugenol', product:'丁香', name:'丁香酚', formulaText:'C₁₀H₁₂O₂',
-    mode:'external', dry:false, plates:'1500', limit:'11.0' },
-  { id:'homalomena-linalool', product:'千年健', name:'芳樟醇', formulaText:'C₁₀H₁₈O',
-    mode:'external', dry:true, plates:'20000', limit:'0.20' },
-  { id:'fennel-anethole', product:'小茴香', name:'反式茴香脑', formulaText:'C₁₀H₁₂O',
-    mode:'external', dry:false, plates:'5000', limit:'1.4' },
-  { id:'brucea-oleic', product:'鸦胆子', name:'油酸', formulaText:'C₁₈H₃₄O₂',
-    mode:'internal', internalName:'苯甲酸苯酯', dry:true, plates:'5000', limit:'8.0' },
-  { id:'flax-linoleic', product:'亚麻子', name:'亚油酸', formulaText:'C₁₈H₃₂O₂',
-    mode:'external', dry:true, plates:'20000', limit:'13.0',
-    totalLabel:'亚油酸与 α-亚麻酸的总量', partner:'α-亚麻酸' },
-  { id:'flax-linolenic', product:'亚麻子', name:'α-亚麻酸', formulaText:'C₁₈H₃₀O₂',
-    mode:'external', dry:true, plates:'20000', limit:'13.0',
-    totalLabel:'亚油酸与 α-亚麻酸的总量', partner:'亚油酸' },
-  { id:'elsholtzia-thymol', product:'香薷', name:'麝香草酚', formulaText:'C₁₀H₁₄O',
-    mode:'external', dry:true, plates:'1700', limit:'0.16',
-    totalLabel:'麝香草酚与香荆芥酚的总量', partner:'香荆芥酚' },
-  { id:'elsholtzia-carvacrol', product:'香薷', name:'香荆芥酚', formulaText:'C₁₀H₁₄O',
-    mode:'external', dry:true, plates:'1700', limit:'0.16',
-    totalLabel:'麝香草酚与香荆芥酚的总量', partner:'麝香草酚' }
+  ...gcRecord({
+    recordKey:'patchouli-raw', product:'广藿香', recordLabel:'原料', mode:'internal',
+    internalName:'正十八烷', dry:true, plates:'50000',
+    standardText:'本品按干燥品计算，含百秋李醇（C15H26O）不得少于0.22%。内控标准：不得少于0.25%'
+  }, [{ id:'patchouli-patchoulol', name:'百秋李醇', formulaText:'C₁₅H₂₆O', limit:'0.22' }]),
+  ...gcRecord({
+    recordKey:'patchouli-finished', product:'广藿香', recordLabel:'成品', mode:'internal',
+    internalName:'正十八烷', dry:true, plates:'50000',
+    standardText:'本品按干燥品计算，含百秋李醇（C15H26O）不得少于0.20%。'
+  }, [{ id:'patchouli-patchoulol-finished', name:'百秋李醇', formulaText:'C₁₅H₂₆O', limit:'0.20' }]),
+
+  ...gcRecord({
+    recordKey:'mugwort-raw', product:'艾叶', recordLabel:'原料', mode:'external',
+    dry:true, plates:'50000'
+  }, [
+    { id:'mugwort-eucalyptol', name:'桉油精', formulaText:'C₁₀H₁₈O', limit:'0.050',
+      standardText:'本品按干燥品计算，含桉油精（C10H18O）不得少于0.050%。内控标准：不得少于0.055%' },
+    { id:'mugwort-borneol', name:'龙脑', formulaText:'C₁₀H₁₈O', limit:'0.020',
+      standardText:'本品按干燥品计算，含龙脑（C10H18O）不得少于0.020%。内控标准：不得少于0.025%' }
+  ]),
+  ...gcRecord({
+    recordKey:'mugwort-finished', product:'艾叶', recordLabel:'成品', mode:'external',
+    dry:true, plates:'50000',
+    standardText:'本品按干燥品计算，含桉油精（C10H18O）不得少于0.050%，含龙脑（C10H18O）不得少于0.020%。'
+  }, [
+    { id:'mugwort-eucalyptol-finished', name:'桉油精', formulaText:'C₁₀H₁₈O', limit:'0.050' },
+    { id:'mugwort-borneol-finished', name:'龙脑', formulaText:'C₁₀H₁₈O', limit:'0.020' }
+  ]),
+
+  ...gcRecord({
+    recordKey:'star-anise-raw', product:'八角茴香', recordLabel:'原料', mode:'external',
+    dry:false, plates:'30000',
+    standardText:'本品含反式茴香脑（C10H12O）不得少于4.0%。内控标准：不得少于4.5%。'
+  }, [{ id:'star-anise-anethole', name:'反式茴香脑', formulaText:'C₁₀H₁₂O', limit:'4.0' }]),
+  ...gcRecord({
+    recordKey:'star-anise-finished', product:'八角茴香', recordLabel:'成品', mode:'external',
+    dry:false, plates:'30000',
+    standardText:'本品含反式茴香脑（C10H12O）不得少于4.0%。'
+  }, [{ id:'star-anise-anethole-finished', name:'反式茴香脑', formulaText:'C₁₀H₁₂O', limit:'4.0' }]),
+
+  ...gcRecord({
+    recordKey:'mint-raw', product:'薄荷', recordLabel:'原料', mode:'external',
+    dry:true, plates:'10000',
+    standardText:'本品按干燥品计算，含薄荷脑（C10H20O）不得少于0.20%。内控标准：含薄荷脑（C10H20O）不得少于0.25%'
+  }, [{ id:'mint-menthol', name:'薄荷脑', formulaText:'C₁₀H₂₀O', limit:'0.20' }]),
+  ...gcRecord({
+    recordKey:'mint-finished', product:'薄荷', recordLabel:'成品', mode:'external',
+    dry:true, plates:'10000',
+    standardText:'本品按干燥品计算，含薄荷脑（C10H20O）不得少于0.13%。'
+  }, [{ id:'mint-menthol-finished', name:'薄荷脑', formulaText:'C₁₀H₂₀O', limit:'0.13' }]),
+
+  ...gcRecord({
+    recordKey:'clove-raw', product:'丁香', recordLabel:'原料', mode:'external',
+    dry:false, plates:'1500',
+    standardText:'本品含丁香酚（C10H12O2）不得少于11.0%。内控标准：不得少于11.5%'
+  }, [{ id:'clove-eugenol', name:'丁香酚', formulaText:'C₁₀H₁₂O₂', limit:'11.0' }]),
+  ...gcRecord({
+    recordKey:'clove-finished', product:'丁香', recordLabel:'成品', mode:'external',
+    dry:false, plates:'1500',
+    standardText:'本品含丁香酚（C10H12O2）不得少于11.0%。'
+  }, [{ id:'clove-eugenol-finished', name:'丁香酚', formulaText:'C₁₀H₁₂O₂', limit:'11.0' }]),
+
+  ...gcRecord({
+    recordKey:'cardamom-raw', product:'豆蔻', recordLabel:'原料', mode:'external',
+    dry:true, plates:'1000',
+    standardText:'本品按干燥品计算，豆蔻仁含桉油精（C10H18O）不得少于3.0%。内控标准：不得少于3.5%'
+  }, [{ id:'cardamom-eucalyptol', name:'桉油精', formulaText:'C₁₀H₁₈O', limit:'3.0' }]),
+  ...gcRecord({
+    recordKey:'cardamom-finished', product:'豆蔻', recordLabel:'成品', mode:'external',
+    dry:true, plates:'1000',
+    standardText:'本品按干燥品计算，豆蔻仁含桉油精（C10H18O）不得少于3.0%。'
+  }, [{ id:'cardamom-eucalyptol-finished', name:'桉油精', formulaText:'C₁₀H₁₈O', limit:'3.0' }]),
+
+  ...gcRecord({
+    recordKey:'dendrobium-raw', product:'金钗石斛', recordLabel:'原料', mode:'external',
+    dry:false, plates:'10000',
+    standardText:'本品按干燥品计算，含石斛碱（C16H25NO2）不得少于0.40%。'
+  }, [{ id:'dendrobium-dendrobine', name:'石斛碱', formulaText:'C₁₆H₂₅NO₂', limit:'0.40' }]),
+
+  ...gcRecord({
+    recordKey:'homalomena-raw', product:'千年健', recordLabel:'原料', mode:'external',
+    dry:true, plates:'20000',
+    standardText:'本品按干燥品计算，含芳樟醇（C10H18O）不得少于0.20%。内控标准：不得少于0.25%'
+  }, [{ id:'homalomena-linalool', name:'芳樟醇', formulaText:'C₁₀H₁₈O', limit:'0.20' }]),
+  ...gcRecord({
+    recordKey:'homalomena-finished', product:'千年健', recordLabel:'成品', mode:'external',
+    dry:true, plates:'20000',
+    standardText:'本品按干燥品计算，含芳樟醇（C10H18O）不得少于0.20%。'
+  }, [{ id:'homalomena-linalool-finished', name:'芳樟醇', formulaText:'C₁₀H₁₈O', limit:'0.20' }]),
+
+  ...gcRecord({
+    recordKey:'amomum-raw', product:'砂仁', recordLabel:'原料', mode:'external',
+    dry:true, plates:'10000',
+    standardText:'本品按干燥品计算，含乙酸龙脑酯（C12H20O2）不得少于0.90%。内控标准：不得少于0.95%'
+  }, [{ id:'amomum-bornyl-acetate', name:'乙酸龙脑酯', formulaText:'C₁₂H₂₀O₂', limit:'0.90' }]),
+  ...gcRecord({
+    recordKey:'amomum-finished-national', product:'砂仁', recordLabel:'成品（砂仁·国炮）', mode:'external',
+    dry:true, plates:'10000',
+    standardText:'本品按干燥品计算，含乙酸龙脑酯（C12H20O2）不得少于0.90%。'
+  }, [{ id:'amomum-bornyl-acetate-finished-national', name:'乙酸龙脑酯', formulaText:'C₁₂H₂₀O₂', limit:'0.90' }]),
+  ...gcRecord({
+    recordKey:'amomum-finished-shanghai', product:'砂仁', recordLabel:'成品（去壳砂仁·上海2018）', mode:'external',
+    dry:true, plates:'10000',
+    standardText:'本品按干燥品计算，含乙酸龙脑酯（C12H20O2）不得少于0.90%。'
+  }, [{ id:'amomum-bornyl-acetate-finished-shanghai', name:'乙酸龙脑酯', formulaText:'C₁₂H₂₀O₂', limit:'0.90' }]),
+  ...gcRecord({
+    recordKey:'amomum-finished-beijing', product:'砂仁', recordLabel:'成品（砂仁米·北京2023）', mode:'external',
+    dry:true, plates:'10000',
+    standardText:'本品按干燥品计算，含乙酸龙脑酯（C12H20O2）不得少于0.90%。'
+  }, [{ id:'amomum-bornyl-acetate-finished-beijing', name:'乙酸龙脑酯', formulaText:'C₁₂H₂₀O₂', limit:'0.90' }]),
+
+  ...gcRecord({
+    recordKey:'fennel-raw', product:'小茴香', recordLabel:'原料', mode:'external',
+    dry:false, plates:'5000',
+    standardText:'本品含反式茴香脑（C10H12O）不得少于1.4%。'
+  }, [{ id:'fennel-anethole', name:'反式茴香脑', formulaText:'C₁₀H₁₂O', limit:'1.4' }]),
+  ...gcRecord({
+    recordKey:'fennel-finished', product:'小茴香', recordLabel:'成品', mode:'external',
+    dry:false, plates:'5000',
+    standardText:'本品含反式茴香脑（C10H12O）不得少于1.4%。'
+  }, [{ id:'fennel-anethole-finished', name:'反式茴香脑', formulaText:'C₁₀H₁₂O', limit:'1.4' }]),
+  ...gcRecord({
+    recordKey:'fennel-salted-finished', product:'小茴香', recordLabel:'成品（盐小茴香）', mode:'external',
+    dry:false, plates:'5000',
+    standardText:'本品含反式茴香脑（C10H12O）不得少于1.3%。'
+  }, [{ id:'fennel-anethole-salted-finished', name:'反式茴香脑', formulaText:'C₁₀H₁₂O', limit:'1.3' }]),
+
+  ...gcRecord({
+    recordKey:'brucea-raw', product:'鸦胆子', recordLabel:'原料', mode:'internal',
+    internalName:'苯甲酸苯酯', dry:true, plates:'5000',
+    standardText:'本品按干燥品计算，含油酸（C18H34O2）不得少于8.0%。'
+  }, [{ id:'brucea-oleic', name:'油酸', formulaText:'C₁₈H₃₄O₂', limit:'8.0' }]),
+  ...gcRecord({
+    recordKey:'brucea-finished', product:'鸦胆子', recordLabel:'成品', mode:'internal',
+    internalName:'苯甲酸苯酯', dry:true, plates:'5000',
+    standardText:'本品按干燥品计算，含油酸（C18H34O2）不得少于8.0%。'
+  }, [{ id:'brucea-oleic-finished', name:'油酸', formulaText:'C₁₈H₃₄O₂', limit:'8.0' }]),
+
+  ...gcRecord({
+    recordKey:'flax-raw', product:'亚麻子', recordLabel:'原料', mode:'external',
+    dry:true, plates:'20000',
+    standardText:'本品按干燥品计算，含亚油酸（C18H32O2）和α-亚麻酸（C18H30O2）的总量不得少于13.0%。'
+  }, [
+    { id:'flax-linoleic', name:'亚油酸', formulaText:'C₁₈H₃₂O₂', limit:'13.0',
+      totalLabel:'亚油酸与 α-亚麻酸的总量', partner:'α-亚麻酸' },
+    { id:'flax-linolenic', name:'α-亚麻酸', formulaText:'C₁₈H₃₀O₂', limit:'13.0',
+      totalLabel:'亚油酸与 α-亚麻酸的总量', partner:'亚油酸' }
+  ]),
+
+  ...gcRecord({
+    recordKey:'elsholtzia-raw', product:'香薷', recordLabel:'原料', mode:'external',
+    dry:true, plates:'1700',
+    standardText:'本品按干燥品计算，含麝香草酚（C10H14O）与香荆芥酚（C10H14O）的总量不得少于0.16%。'
+  }, [
+    { id:'elsholtzia-thymol', name:'麝香草酚', formulaText:'C₁₀H₁₄O', limit:'0.16',
+      totalLabel:'麝香草酚与香荆芥酚的总量', partner:'香荆芥酚' },
+    { id:'elsholtzia-carvacrol', name:'香荆芥酚', formulaText:'C₁₀H₁₄O', limit:'0.16',
+      totalLabel:'麝香草酚与香荆芥酚的总量', partner:'麝香草酚' }
+  ]),
+  ...gcRecord({
+    recordKey:'elsholtzia-finished', product:'香薷', recordLabel:'成品', mode:'external',
+    dry:true, plates:'1700',
+    standardText:'本品按干燥品计算，含麝香草酚（C10H14O）与香荆芥酚（C10H14O）的总量不得少于0.16%。'
+  }, [
+    { id:'elsholtzia-thymol-finished', name:'麝香草酚', formulaText:'C₁₀H₁₄O', limit:'0.16',
+      totalLabel:'麝香草酚与香荆芥酚的总量', partner:'香荆芥酚' },
+    { id:'elsholtzia-carvacrol-finished', name:'香荆芥酚', formulaText:'C₁₀H₁₄O', limit:'0.16',
+      totalLabel:'麝香草酚与香荆芥酚的总量', partner:'麝香草酚' }
+  ]),
+
+  ...gcRecord({
+    recordKey:'pine-raw', product:'油松节', recordLabel:'原料', mode:'external',
+    dry:true, plates:'25000',
+    standardText:'本品按干燥品计算，含α-蒎烯（C10H16）不得少于0.10%。'
+  }, [{ id:'pine-alpha-pinene', name:'α-蒎烯', formulaText:'C₁₀H₁₆', limit:'0.10' }])
 ];
 
 function gcTemplate(id){ return GC_TEMPLATES.find(t => t.id === id); }
 function templatesForProduct(name){ return GC_TEMPLATES.filter(t => t.product === name); }
+function templatesForRecord(key){ return GC_TEMPLATES.filter(t => t.recordKey === key); }
+function recordsForProduct(name){
+  const records = [];
+  templatesForProduct(name).forEach(t => {
+    if (!records.some(r => r.recordKey === t.recordKey)) records.push(t);
+  });
+  return records;
+}
 const GC_PRODUCTS = Array.from(new Set(GC_TEMPLATES.map(t => t.product)));
 
 /** 当前选用的色谱方法 */
@@ -552,7 +709,8 @@ function renderAssaySheet(){
   const T = TECH[tech] || TECH.hplc;
   const platesDef = platesDefault();
   const productName = tpl ? tpl.product : get(pre + 'productName');
-  const productTemplates = templatesForProduct(productName);
+  const productRecords = recordsForProduct(productName);
+  const recordTemplates = tpl ? templatesForRecord(tpl.recordKey) : [];
   const productPicker = `
     <input class="product-combo" type="text" list="gcProductList" data-assay-product
       value="${esc(productName)}" placeholder="输入或选择品种" autocomplete="off">
@@ -560,10 +718,17 @@ function renderAssaySheet(){
       ${GC_PRODUCTS.map(name => `<option value="${esc(name)}"></option>`).join('')}
     </datalist>
     <button type="button" class="apply-product" data-apply-assay-product>套用</button>`;
-  const componentSel = productTemplates.length > 1 ? `
+  const recordSel = productRecords.length > 1 ? `
+    <span>记录：</span>
+    <select class="dpsel" data-assay-record>
+      ${productRecords.map(t =>
+        `<option value="${t.recordKey}"${tpl && t.recordKey === tpl.recordKey ? ' selected' : ''}>${esc(t.recordLabel)}</option>`
+      ).join('')}
+    </select>` : '';
+  const componentSel = recordTemplates.length > 1 ? `
     <span>待测成分：</span>
     <select class="dpsel" data-assay-component>
-      ${productTemplates.map(t =>
+      ${recordTemplates.map(t =>
         `<option value="${t.id}"${t.id === get(pre + 'template') ? ' selected' : ''}>${esc(t.name)}</option>`
       ).join('')}
     </select>` : '';
@@ -633,7 +798,7 @@ function renderAssaySheet(){
     <div class="method">照${T.label}（通则 ${T.gz}）测定，${mode === 'internal' ? '内标法' : '外标法'}。</div>
 
     <div class="analyte-bar no-print">
-      <span>品种：</span>${productPicker}${componentSel}
+      <span>品种：</span>${productPicker}${recordSel}${componentSel}
       <span>方法：</span>${techSel}${modeSel}
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}dryBasis" ${dry ? 'checked' : ''}>
@@ -683,7 +848,10 @@ function renderAssaySheet(){
     </div>
 
     <div class="verdict">
-      <div class="sec-num">标准规定：本品${dry ? '按干燥品计算，' : ''}${standardTarget}
+      ${tpl && tpl.standardText
+        ? `<div class="standard-quote"><b>标准规定：</b>${esc(tpl.standardText)}</div>
+           <div class="sec-num">判定限度：`
+        : `<div class="sec-num">标准规定：本品${dry ? '按干燥品计算，' : ''}${standardTarget}`}
         <span class="limit-edit">
           <select data-k="${pre}limop" class="dpsel">
             <option value="ge">不得少于</option>
@@ -696,7 +864,7 @@ function renderAssaySheet(){
     </div>
 
     <div class="note">
-      ${tpl ? `当前模板：${esc(tpl.product)}—${esc(tpl.name)}；模板只预填经质量标准核实的成分、方法、干燥品口径、理论板数和法定限度。` : '当前为自定义模板。'}
+      ${tpl ? `当前模板：${esc(tpl.product)}（${esc(tpl.recordLabel)}）—${esc(tpl.name)}；标准规定原文与判定限度均按该条原料或成品记录预填。` : '当前为自定义模板。'}
       ${dry ? 'Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。' : '本模板不按干燥品折算，公式不扣除水分。'}
       C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
@@ -971,6 +1139,14 @@ function applyAssayProduct(value){
   applyAssayTemplate(target.id);
 }
 
+function applyAssayRecord(recordKey){
+  const choices = templatesForRecord(recordKey);
+  if (!choices.length) return;
+  const current = gcTemplate(get(AP + 'template'));
+  const target = choices.find(t => current && t.name === current.name) || choices[0];
+  applyAssayTemplate(target.id);
+}
+
 /** 判定方向：浸出物与含量测定是"不得少于"，其余是"不得过" */
 function seedDefaults(){
   CALCS.forEach(c => {
@@ -1027,6 +1203,10 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.matches('[data-assay-product]')){
     applyAssayProduct(t.value);
+    return;
+  }
+  if (t.matches('[data-assay-record]')){
+    applyAssayRecord(t.value);
     return;
   }
   if (t.matches('[data-assay-component]')){

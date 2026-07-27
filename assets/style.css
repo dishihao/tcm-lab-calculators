@@ -181,6 +181,10 @@ td.spanall{background:#fdfdfd}
   line-height:2.2;
 }
 .verdict .sec-num{margin:0}
+.standard-quote{
+  margin-bottom:6px; padding:8px 12px;
+  background:#faf8f3; border-left:3px solid #a79b84;
+}
 .limit-edit{display:inline-flex; align-items:center; gap:4px}
 .judge{
   display:inline-block; margin-left:14px; padding:2px 14px;
