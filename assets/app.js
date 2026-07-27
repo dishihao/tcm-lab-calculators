@@ -94,16 +94,60 @@ function summarize(xRaw, indDp, he){
 
 /* ---------------------------------------------------------------- 色谱方法 */
 
-/** 含量测定的色谱方法：公式一致，差别在通则号与理论板数限度 */
+/** 含量测定的色谱方法 */
 const TECH = {
   hplc: { label:'高效液相色谱法', gz:'0512', plates:'3000' },
   gc:   { label:'气相色谱法',     gz:'0521', plates:'10000' }
 };
 
 const RSD_LIM_DEFAULT = '2.0';
+const AP = 'assay.';
+
+/**
+ * 气相含量测定模板。字段来自工作区内 2025 年原料质量标准和对应原料检验记录。
+ * totalLabel 表示药典按两个成分的合计值判定，单个成分没有独立限度。
+ */
+const GC_TEMPLATES = [
+  { id:'patchouli-patchoulol', product:'广藿香', name:'百秋李醇', formulaText:'C₁₅H₂₆O',
+    mode:'internal', internalName:'正十八烷', dry:true, plates:'50000', limit:'0.22' },
+  { id:'mugwort-eucalyptol', product:'艾叶', name:'桉油精', formulaText:'C₁₀H₁₈O',
+    mode:'external', dry:true, plates:'50000', limit:'0.050' },
+  { id:'mugwort-borneol', product:'艾叶', name:'龙脑', formulaText:'C₁₀H₁₈O',
+    mode:'external', dry:true, plates:'50000', limit:'0.020' },
+  { id:'star-anise-anethole', product:'八角茴香', name:'反式茴香脑', formulaText:'C₁₀H₁₂O',
+    mode:'external', dry:false, plates:'30000', limit:'4.0' },
+  { id:'mint-menthol', product:'薄荷', name:'薄荷脑', formulaText:'C₁₀H₂₀O',
+    mode:'external', dry:true, plates:'10000', limit:'0.20' },
+  { id:'clove-eugenol', product:'丁香', name:'丁香酚', formulaText:'C₁₀H₁₂O₂',
+    mode:'external', dry:false, plates:'1500', limit:'11.0' },
+  { id:'homalomena-linalool', product:'千年健', name:'芳樟醇', formulaText:'C₁₀H₁₈O',
+    mode:'external', dry:true, plates:'20000', limit:'0.20' },
+  { id:'fennel-anethole', product:'小茴香', name:'反式茴香脑', formulaText:'C₁₀H₁₂O',
+    mode:'external', dry:false, plates:'5000', limit:'1.4' },
+  { id:'brucea-oleic', product:'鸦胆子', name:'油酸', formulaText:'C₁₈H₃₄O₂',
+    mode:'internal', internalName:'苯甲酸苯酯', dry:true, plates:'5000', limit:'8.0' },
+  { id:'flax-linoleic', product:'亚麻子', name:'亚油酸', formulaText:'C₁₈H₃₂O₂',
+    mode:'external', dry:true, plates:'20000', limit:'13.0',
+    totalLabel:'亚油酸与 α-亚麻酸的总量', partner:'α-亚麻酸' },
+  { id:'flax-linolenic', product:'亚麻子', name:'α-亚麻酸', formulaText:'C₁₈H₃₀O₂',
+    mode:'external', dry:true, plates:'20000', limit:'13.0',
+    totalLabel:'亚油酸与 α-亚麻酸的总量', partner:'亚油酸' },
+  { id:'elsholtzia-thymol', product:'香薷', name:'麝香草酚', formulaText:'C₁₀H₁₄O',
+    mode:'external', dry:true, plates:'1700', limit:'0.16',
+    totalLabel:'麝香草酚与香荆芥酚的总量', partner:'香荆芥酚' },
+  { id:'elsholtzia-carvacrol', product:'香薷', name:'香荆芥酚', formulaText:'C₁₀H₁₄O',
+    mode:'external', dry:true, plates:'1700', limit:'0.16',
+    totalLabel:'麝香草酚与香荆芥酚的总量', partner:'麝香草酚' }
+];
+
+function gcTemplate(id){ return GC_TEMPLATES.find(t => t.id === id); }
 
 /** 当前选用的色谱方法 */
 function techOf(){ return get('assay.tech') || 'hplc'; }
+function assayMode(){ return get(AP + 'mode') || 'external'; }
+function dryBasisOf(){
+  return store[AP + 'dryBasis'] === undefined ? true : get(AP + 'dryBasis') === '1';
+}
 
 /**
  * 理论板数的默认限度，随色谱方法走（液相 3000 / 气相 10000）。
@@ -113,9 +157,6 @@ function techOf(){ return get('assay.tech') || 'hplc'; }
 function platesDefault(){
   return (TECH[techOf()] || TECH.hplc).plates;
 }
-
-/* 含量测定：成分名称与限度全部手填，故只有一套字段，前缀固定为 assay. */
-const AP = 'assay.';
 
 /** 标准规定留空时平均含量的兜底位数（填了限度就按限度的位数走） */
 const ASSAY_FALLBACK_MEAN_DP = 2;
@@ -289,12 +330,22 @@ const ASSAY = {
   id: 'assay',
   tab: '含量测定',
   section: '【含量测定】',
-  method: '照高效液相色谱法（通则 0512）测定。',
   refShots: 5,   // 对照品连续进样针数
   smpShots: 2,   // 每份供试品进样针数
-  formula: () => `X = ${frac(
+  formula(){
+    const q = dryBasisOf() ? ' × (1 − Q)' : '';
+    if (assayMode() === 'internal'){
+      return `f = ${frac(
+        '<span style="text-decoration:overline">A</span><sub>内</sub> × C<sub>对</sub>',
+        '<span style="text-decoration:overline">A</span><sub>对</sub> × C<sub>内</sub>')}
+       　　X = ${frac(
+        'f × <span style="text-decoration:overline">A</span><sub>样</sub> × C<sub>内</sub> × V',
+        '<span style="text-decoration:overline">A</span><sub>样内</sub> × W<sub>样</sub>' + q + ' × 1000')} × 100%`;
+    }
+    return `X = ${frac(
       '<span style="text-decoration:overline">A</span> × C<sub>对</sub> × f<sub>样</sub>',
-      '<span style="text-decoration:overline">A</span><sub>对</sub> × W<sub>样</sub> × (1 − Q) × 1000')} × 100%`
+      '<span style="text-decoration:overline">A</span><sub>对</sub> × W<sub>样</sub>' + q + ' × 1000')} × 100%`;
+  }
 };
 
 /* ---------------------------------------------------------------- 状态 */
@@ -474,14 +525,15 @@ function renderSheet(c){
 /** 含量测定页 */
 function renderAssaySheet(){
   const pre = AP;
+  const tpl = gcTemplate(get(pre + 'template'));
+  const mode = assayMode();
+  const dry = dryBasisOf();
 
-  const refPeaks = Array.from({length: ASSAY.refShots}, (_, i) =>
-    `<input type="text" inputmode="decimal" autocomplete="off" data-k="${pre}refA.${i}"
-       value="${esc(get(pre + 'refA.' + i))}" placeholder="第${i+1}针">`).join('');
-
-  const smpPeaks = s => Array.from({length: ASSAY.smpShots}, (_, i) =>
-    `<input type="text" inputmode="decimal" autocomplete="off" data-k="${pre}smpA.${s}.${i}"
-       value="${esc(get(`${pre}smpA.${s}.${i}`))}" placeholder="第${i+1}针">`).join('');
+  const peaks = (key, count) => Array.from({length: count}, (_, i) =>
+    `<input type="text" inputmode="decimal" autocomplete="off" data-k="${pre}${key}.${i}"
+       value="${esc(get(`${pre}${key}.${i}`))}" placeholder="第${i+1}针">`).join('');
+  const refPeaks = key => peaks(key, ASSAY.refShots);
+  const smpPeaks = (key, s) => peaks(`${key}.${s}`, ASSAY.smpShots);
 
   const ii = (k, def, cls) => inlineInput(pre + k, def, cls);
   const ic = k => `<input class="cell" type="text" inputmode="decimal" autocomplete="off"
@@ -497,29 +549,90 @@ function renderAssaySheet(){
   const tech = techOf();
   const T = TECH[tech] || TECH.hplc;
   const platesDef = platesDefault();
+  const templateSel = `<select class="dpsel template-select" data-assay-template>` +
+    `<option value="">自定义（不套用品种）</option>` +
+    GC_TEMPLATES.map(t =>
+      `<option value="${t.id}"${t.id === get(pre + 'template') ? ' selected' : ''}>` +
+      `${esc(t.product)} — ${esc(t.name)}${t.mode === 'internal' ? '（内标法）' : ''}</option>`
+    ).join('') + `</select>`;
   const techSel = `<select class="dpsel" data-k="${pre}tech">` +
     Object.keys(TECH).map(k =>
       `<option value="${k}"${k === tech ? ' selected' : ''}>${TECH[k].label}（通则 ${TECH[k].gz}）</option>`
     ).join('') + `</select>`;
+  const modeSel = `<select class="dpsel" data-k="${pre}mode">
+      <option value="external"${mode === 'external' ? ' selected' : ''}>外标法</option>
+      <option value="internal"${mode === 'internal' ? ' selected' : ''}>内标法</option>
+    </select>`;
+
+  const refRows = mode === 'internal' ? `
+      <tr><th class="rowlab" style="width:38%">内标物名称</th>
+          <td colspan="2"><input class="inline w180" type="text" autocomplete="off"
+            data-k="${pre}internalName" value="${esc(get(pre + 'internalName'))}" placeholder="内标物名称"></td></tr>
+      <tr><th class="rowlab">内标物浓度 C<sub>内</sub>（mg/ml）</th><td colspan="2">${ic('Cis')}</td></tr>
+      <tr><th class="rowlab">对照品浓度 C<sub>对</sub>（mg/ml）</th><td colspan="2">${ic('Cref')}</td></tr>
+      <tr><th class="rowlab">纯度 S（%）</th><td colspan="2">${ic('refPurity')}</td></tr>
+      <tr><th class="rowlab">内标物峰面积 A<sub>内</sub></th>
+          <td colspan="2"><div class="peaks">${refPeaks('refIS')}</div></td></tr>
+      <tr><th class="rowlab">内标物平均峰面积 <span style="text-decoration:overline">A</span><sub>内</sub></th>
+          <td colspan="2">${outCell('assay.out.ISref')}</td></tr>
+      <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th>
+          <td colspan="2"><div class="peaks">${refPeaks('refA')}</div></td></tr>
+      <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
+          <td colspan="2">${outCell('assay.out.Aref')}</td></tr>
+      <tr><th class="rowlab">校正因子 f</th><td colspan="2">${outCell('assay.out.factor')}</td></tr>`
+    : `
+      <tr><th class="rowlab" style="width:38%">对照品浓度 C<sub>对</sub>（mg/ml）</th>
+          <td colspan="2">${ic('Cref')}</td></tr>
+      <tr><th class="rowlab">纯度 S（%）</th><td colspan="2">${ic('refPurity')}</td></tr>
+      <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th>
+          <td colspan="2"><div class="peaks">${refPeaks('refA')}</div></td></tr>
+      <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
+          <td colspan="2">${outCell('assay.out.Aref')}</td></tr>`;
+
+  const samplePeakRows = mode === 'internal' ? `
+      <tr><th class="rowlab">样品稀释体积 V（ml）</th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
+      <tr><th class="rowlab">${esc(get(pre + 'internalName') || '内标物')}峰面积 A<sub>样内</sub></th>
+          <td><div class="peaks">${smpPeaks('smpIS', 1)}</div></td>
+          <td><div class="peaks">${smpPeaks('smpIS', 2)}</div></td></tr>
+      <tr><th class="rowlab">${esc(get(pre + 'internalName') || '内标物')}平均峰面积
+          <span style="text-decoration:overline">A</span><sub>样内</sub></th>
+          <td>${outCell('assay.out.IS.1')}</td><td>${outCell('assay.out.IS.2')}</td></tr>
+      <tr><th class="rowlab">待测成分峰面积 A<sub>样</sub></th>
+          <td><div class="peaks">${smpPeaks('smpA', 1)}</div></td>
+          <td><div class="peaks">${smpPeaks('smpA', 2)}</div></td></tr>`
+    : `
+      <tr><th class="rowlab">样品稀释倍数 f<sub>样</sub></th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
+      <tr><th class="rowlab">样品峰面积 A<sub>样</sub></th>
+          <td><div class="peaks">${smpPeaks('smpA', 1)}</div></td>
+          <td><div class="peaks">${smpPeaks('smpA', 2)}</div></td></tr>`;
+
+  const totalRows = tpl && tpl.totalLabel ? `
+      <tr><th class="rowlab">${esc(tpl.partner)}平均含量（%）<span class="lim">录入另一成分的计算结果</span></th>
+          <td class="spanall" colspan="2">${ic('partnerMean')}</td></tr>
+      <tr><th class="rowlab">${esc(tpl.totalLabel)}（%）</th>
+          <td class="spanall" colspan="2">${outCell('assay.out.TOTAL')}</td></tr>` : '';
+  const standardTarget = tpl && tpl.totalLabel
+    ? esc(tpl.totalLabel)
+    : `含 <b id="assay.nameEcho"></b>${get(pre + 'formulaText') ? `（${esc(get(pre + 'formulaText'))}）` : ''}`;
 
   return `
   <section class="sheet" data-sheet="assay">
     <h2 class="sec">【含量测定】</h2>
-    <div class="method">照${T.label}（通则 ${T.gz}）测定，外标法。</div>
+    <div class="method">照${T.label}（通则 ${T.gz}）测定，${mode === 'internal' ? '内标法' : '外标法'}。</div>
 
     <div class="analyte-bar no-print">
-      <span>方法：</span>${techSel}
+      <span>品种模板：</span>${templateSel}
+      <span>方法：</span>${techSel}${modeSel}
+      <label class="tb-chk" style="color:#333">
+        <input type="checkbox" data-k="${pre}dryBasis" ${dry ? 'checked' : ''}>
+        按干燥品计算
+      </label>
     </div>
 
     <div class="subhead">对照品：<input class="inline w180" type="text" autocomplete="off"
         data-k="${pre}name" value="${esc(get(pre + 'name'))}" placeholder="成分名称"></div>
     <div class="tscroll"><table class="form">
-      <tr><th class="rowlab" style="width:38%">对照品浓度 C<sub>对</sub>（mg/ml）</th>
-          <td colspan="2">${ic('Cref')}</td></tr>
-      <tr><th class="rowlab">纯度 S（%）</th><td colspan="2">${ic('refPurity')}</td></tr>
-      <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th><td colspan="2"><div class="peaks">${refPeaks}</div></td></tr>
-      <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
-          <td colspan="2">${outCell('assay.out.Aref')}</td></tr>
+      ${refRows}
       <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%</span></th>
           <td colspan="2">${outCell('assay.out.RSD')}
               <span class="judge none" id="assay.rsdJudge">—</span></td></tr>
@@ -531,12 +644,9 @@ function renderAssaySheet(){
     <div class="subhead">供试品测量</div>
     <div class="tscroll"><table class="form">
       <tr><th class="rowlab" style="width:38%">样品编号</th><th style="width:31%">1</th><th style="width:31%">2</th></tr>
-      <tr><th class="rowlab">水分 Q（%）</th><td class="spanall" colspan="2">${ic('Q')}</td></tr>
+      ${dry ? `<tr><th class="rowlab">水分 Q（%）</th><td class="spanall" colspan="2">${ic('Q')}</td></tr>` : ''}
       <tr><th class="rowlab">取样量 W<sub>样</sub>（g）</th><td>${ic('Ws.1')}</td><td>${ic('Ws.2')}</td></tr>
-      <tr><th class="rowlab">样品稀释倍数 f<sub>样</sub></th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
-      <tr><th class="rowlab">样品峰面积 A<sub>样</sub></th>
-          <td><div class="peaks">${smpPeaks(1)}</div></td>
-          <td><div class="peaks">${smpPeaks(2)}</div></td></tr>
+      ${samplePeakRows}
       <tr><th class="rowlab">样品平均峰面积 <span style="text-decoration:overline">A</span></th>
           <td>${outCell('assay.out.A.1')}</td><td>${outCell('assay.out.A.2')}</td></tr>
       <tr><th class="rowlab">含量 X（%）</th>
@@ -544,6 +654,7 @@ function renderAssaySheet(){
       <tr><th class="rowlab">相对偏差(%)</th><td class="spanall" colspan="2">${outCell('assay.out.RD')}</td></tr>
       <tr><th class="rowlab">平均含量 <span style="text-decoration:overline">X</span>（%）</th>
           <td class="spanall" colspan="2">${outCell('assay.out.MEAN')}</td></tr>
+      ${totalRows}
     </table></div>
 
     <div class="analyte-bar">
@@ -560,7 +671,7 @@ function renderAssaySheet(){
     </div>
 
     <div class="verdict">
-      <div class="sec-num">标准规定：本品按干燥品计算，含 <b id="assay.nameEcho"></b>
+      <div class="sec-num">标准规定：本品${dry ? '按干燥品计算，' : ''}${standardTarget}
         <span class="limit-edit">
           <select data-k="${pre}limop" class="dpsel">
             <option value="ge">不得少于</option>
@@ -573,10 +684,12 @@ function renderAssaySheet(){
     </div>
 
     <div class="note">
-      Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。
+      ${tpl ? `当前模板：${esc(tpl.product)}—${esc(tpl.name)}；模板只预填经质量标准核实的成分、方法、干燥品口径、理论板数和法定限度。` : '当前为自定义模板。'}
+      ${dry ? 'Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。' : '本模板不按干燥品折算，公式不扣除水分。'}
       C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g，分母乘 1000 完成 mg→g 的单位换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
-      气相（0521）与液相（0512）外标法公式一致，切换方法只改变通则号与理论板数限度。
+      ${mode === 'internal' ? '内标法先由对照品与内标物的峰面积、浓度计算校正因子，再计算供试品含量。' : '气相（0521）与液相（0512）外标法公式一致。'}
+      ${tpl && tpl.totalLabel ? `<br><b>${esc(tpl.totalLabel)}</b>按合计值判定：先计算当前成分，再把另一成分的平均含量填入表格。` : ''}
       <br>三个修约位数默认都跟着下方标准规定走：<b>平均含量</b>与标准规定同位，
       <b>含量 X</b> 多一位，<b>相对偏差</b> 少一位。任一项手动改过后即固定，不再跟随。
     </div>
@@ -656,6 +769,9 @@ function computeCalc(c){
 function computeAssay(){
   const pre = AP;
   const he = useHE();
+  const mode = assayMode();
+  const dry = dryBasisOf();
+  const tpl = gcTemplate(get(pre + 'template'));
   const indDp  = assayDp('ind');
   const meanDp = assayDp('mean');
   const rdDp   = assayDp('rd');
@@ -671,6 +787,12 @@ function computeAssay(){
   setOut('assay.out.Aref', fmtArea(Aref));
   setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
+  const refIS = mode === 'internal'
+    ? Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refIS.${i}`)).filter(isFinite)
+    : [];
+  const ISref = mean(refIS);
+  setOut('assay.out.ISref', fmtArea(ISref));
+
   // 限度栏留空时按默认限度判定（默认值只渲染在输入框里，不写入 store）
   const rsdLim    = isFinite(getN(pre + 'rsdLim'))    ? getN(pre + 'rsdLim')    : num(RSD_LIM_DEFAULT);
   const platesLim = isFinite(getN(pre + 'platesLim')) ? getN(pre + 'platesLim') : num(platesDefault());
@@ -684,17 +806,33 @@ function computeAssay(){
     if (isFinite(S)) Cref = Cref * S / 100;
   }
   const Q = getN(pre + 'Q');
+  const qFactor = dry ? (isFinite(Q) ? 1 - Q/100 : NaN) : 1;
+  const Cis = getN(pre + 'Cis');
+  const factor = mode === 'internal' && [ISref, Cref, Aref, Cis].every(isFinite) && Aref !== 0 && Cis !== 0
+    ? ISref * Cref / (Aref * Cis) : NaN;
+  setOut('assay.out.factor', isFinite(factor) ? factor.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') : '');
 
   const A = [1,2].map(s => {
     const shots = Array.from({length: ASSAY.smpShots}, (_, i) => getN(`${pre}smpA.${s}.${i}`)).filter(isFinite);
     return shots.length ? mean(shots) : NaN;
   });
   [1,2].forEach(s => setOut(`assay.out.A.${s}`, fmtArea(A[s-1])));
+  const AIS = mode === 'internal' ? [1,2].map(s => {
+    const shots = Array.from({length: ASSAY.smpShots}, (_, i) => getN(`${pre}smpIS.${s}.${i}`)).filter(isFinite);
+    return shots.length ? mean(shots) : NaN;
+  }) : [NaN, NaN];
+  [1,2].forEach(s => setOut(`assay.out.IS.${s}`, fmtArea(AIS[s-1])));
 
   const xRaw = [1,2].map(s => {
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
-    if (![Ai, Cref, f, Aref, Ws, Q].every(isFinite)) return NaN;
-    const den = Aref * Ws * (1 - Q/100) * 1000;
+    if (mode === 'internal'){
+      const ISi = AIS[s-1];
+      if (![factor, Ai, Cis, f, ISi, Ws, qFactor].every(isFinite)) return NaN;
+      const den = ISi * Ws * qFactor * 1000;
+      return den === 0 ? NaN : (factor * Ai * Cis * f) / den * 100;
+    }
+    if (![Ai, Cref, f, Aref, Ws, qFactor].every(isFinite)) return NaN;
+    const den = Aref * Ws * qFactor * 1000;
     return den === 0 ? NaN : (Ai * Cref * f) / den * 100;
   });
   const { x, mean: mn, rd } = summarize(xRaw, indDp, he);
@@ -706,10 +844,19 @@ function computeAssay(){
   /* 代入过程 */
   const lines = [1,2].map(s => {
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
-    if (![Ai, Cref, f, Aref, Ws, Q].every(isFinite)) return '';
+    const qText = dry ? ` × (1 − ${Q}%)` : '';
+    if (mode === 'internal'){
+      const ISi = AIS[s-1];
+      if (![factor, Ai, Cis, f, ISi, Ws, qFactor].every(isFinite)) return '';
+      return `X<sub>${s}</sub> = ${frac(
+          `${factor.toFixed(6)} × ${fmtArea(Ai)} × ${Cis} × ${f}`,
+          `${fmtArea(ISi)} × ${Ws}${qText} × 1000`)} × 100% = `
+        + `<span class="sx">${x[s-1].toFixed(indDp)}%</span>`;
+    }
+    if (![Ai, Cref, f, Aref, Ws, qFactor].every(isFinite)) return '';
     return `X<sub>${s}</sub> = ${frac(
         `${fmtArea(Ai)} × ${Cref} × ${f}`,
-        `${fmtArea(Aref)} × ${Ws} × (1 − ${Q}%) × 1000`)} × 100% = `
+        `${fmtArea(Aref)} × ${Ws}${qText} × 1000`)} × 100% = `
       + `<span class="sx">${x[s-1].toFixed(indDp)}%</span>`;
   }).filter(Boolean);
 
@@ -720,7 +867,11 @@ function computeAssay(){
          　　　相对偏差 = <span class="sx">${isFinite(rd) ? fmt(rd, rdDp, he) : '—'}%</span>` : '');
   }
 
-  judge('assay.judge', isFinite(mn) ? roundTo(mn, meanDp, he) : NaN,
+  const partnerMean = getN(pre + 'partnerMean');
+  const total = tpl && tpl.totalLabel && isFinite(mn) && isFinite(partnerMean) ? mn + partnerMean : NaN;
+  setOut('assay.out.TOTAL', isFinite(total) ? fmt(total, meanDp, he) : '');
+  const verdictValue = tpl && tpl.totalLabel ? total : mn;
+  judge('assay.judge', isFinite(verdictValue) ? roundTo(verdictValue, meanDp, he) : NaN,
         get(pre + 'limop') || 'ge', getN(pre + 'limval'));
 }
 
@@ -748,6 +899,48 @@ function recompute(){
 
 /* ---------------------------------------------------------------- 挂载 */
 
+/** 在不同品种模板之间切换时分别保存已填数据，避免互相覆盖。 */
+function assaySnapshot(){
+  const snap = {};
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(AP) && k !== AP + 'template') snap[k] = store[k];
+  });
+  return snap;
+}
+
+function applyAssayTemplate(id){
+  const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
+    ? store.__assayTemplateStates : {};
+  const oldId = get(AP + 'template') || 'custom';
+  const newId = id || 'custom';
+  if (oldId === newId) return;
+
+  states[oldId] = assaySnapshot();
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(AP)) delete store[k];
+  });
+
+  const restored = states[newId];
+  if (restored) Object.assign(store, restored);
+  const t = gcTemplate(id);
+  if (t && !restored){
+    store[AP + 'tech'] = 'gc';
+    store[AP + 'mode'] = t.mode;
+    store[AP + 'dryBasis'] = t.dry ? '1' : '0';
+    store[AP + 'name'] = t.name;
+    store[AP + 'formulaText'] = t.formulaText;
+    store[AP + 'internalName'] = t.internalName || '';
+    store[AP + 'platesLim'] = t.plates;
+    store[AP + 'rsdLim'] = RSD_LIM_DEFAULT;
+    store[AP + 'limop'] = 'ge';
+    store[AP + 'limval'] = t.limit;
+  }
+  store[AP + 'template'] = id || '';
+  store.__assayTemplateStates = states;
+  build();
+  showTab('assay');
+}
+
 /** 判定方向：浸出物与含量测定是"不得少于"，其余是"不得过" */
 function seedDefaults(){
   CALCS.forEach(c => {
@@ -755,6 +948,8 @@ function seedDefaults(){
     if (store[ko] === undefined) store[ko] = (c.id === 'extract' ? 'ge' : 'le');
   });
   if (store[AP + 'limop'] === undefined) store[AP + 'limop'] = 'ge';
+  if (store[AP + 'mode'] === undefined) store[AP + 'mode'] = 'external';
+  if (store[AP + 'dryBasis'] === undefined) store[AP + 'dryBasis'] = '1';
 }
 
 function build(){
@@ -800,11 +995,15 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.matches('[data-assay-template]')){
+    applyAssayTemplate(t.value);
+    return;
+  }
   if (!t.dataset || !t.dataset.k) return;
   const k = t.dataset.k;
   set(k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
-  if (k.endsWith('.tech')){
-    // 切换色谱方法要重绘（通则号、理论板数限度随之变化）
+  if (k.endsWith('.tech') || k.endsWith('.mode') || k.endsWith('.dryBasis')){
+    // 切换色谱方法、定量方法或干燥品口径要重绘相应字段与公式
     build(); showTab('assay');
     return;
   }

@@ -27,6 +27,13 @@ body{
 }
 
 .tb-chk{font-size:13px; display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none}
+.dpsel{
+  max-width:100%; padding:3px 6px;
+  border:1px solid #aaa; border-radius:3px;
+  background:#fff; color:#222;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+}
+.template-select{min-width:230px}
 
 /* ---------- 选项卡 ---------- */
 .tabs{
