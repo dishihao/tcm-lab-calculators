@@ -7,19 +7,19 @@ const { chromium } = require(
 
 const PAGE_URL = new URL('../index.html', import.meta.url).href;
 const TEMPLATES = {
-  'patchouli-patchoulol': ['百秋李醇', 'internal', '50000', true],
-  'mugwort-eucalyptol': ['桉油精', 'external', '50000', true],
-  'mugwort-borneol': ['龙脑', 'external', '50000', true],
-  'star-anise-anethole': ['反式茴香脑', 'external', '30000', false],
-  'mint-menthol': ['薄荷脑', 'external', '10000', true],
-  'clove-eugenol': ['丁香酚', 'external', '1500', false],
-  'homalomena-linalool': ['芳樟醇', 'external', '20000', true],
-  'fennel-anethole': ['反式茴香脑', 'external', '5000', false],
-  'brucea-oleic': ['油酸', 'internal', '5000', true],
-  'flax-linoleic': ['亚油酸', 'external', '20000', true],
-  'flax-linolenic': ['α-亚麻酸', 'external', '20000', true],
-  'elsholtzia-thymol': ['麝香草酚', 'external', '1700', true],
-  'elsholtzia-carvacrol': ['香荆芥酚', 'external', '1700', true],
+  'patchouli-patchoulol': ['广藿香', '百秋李醇', 'internal', '50000', true],
+  'mugwort-eucalyptol': ['艾叶', '桉油精', 'external', '50000', true],
+  'mugwort-borneol': ['艾叶', '龙脑', 'external', '50000', true],
+  'star-anise-anethole': ['八角茴香', '反式茴香脑', 'external', '30000', false],
+  'mint-menthol': ['薄荷', '薄荷脑', 'external', '10000', true],
+  'clove-eugenol': ['丁香', '丁香酚', 'external', '1500', false],
+  'homalomena-linalool': ['千年健', '芳樟醇', 'external', '20000', true],
+  'fennel-anethole': ['小茴香', '反式茴香脑', 'external', '5000', false],
+  'brucea-oleic': ['鸦胆子', '油酸', 'internal', '5000', true],
+  'flax-linoleic': ['亚麻子', '亚油酸', 'external', '20000', true],
+  'flax-linolenic': ['亚麻子', 'α-亚麻酸', 'external', '20000', true],
+  'elsholtzia-thymol': ['香薷', '麝香草酚', 'external', '1700', true],
+  'elsholtzia-carvacrol': ['香薷', '香荆芥酚', 'external', '1700', true],
 };
 
 const assert = (ok, message) => {
@@ -30,6 +30,14 @@ const fillPeaks = async (page, prefix, values) => {
   for (let i = 0; i < values.length; i++) {
     await field(page, `${prefix}.${i}`).fill(String(values[i]));
   }
+};
+const chooseTemplate = async (page, templateId) => {
+  const [product] = TEMPLATES[templateId];
+  const productInput = page.locator('[data-assay-product]');
+  await productInput.fill(product);
+  await productInput.press('Enter');
+  const component = page.locator('[data-assay-component]');
+  if (await component.count()) await component.selectOption(templateId);
 };
 
 const browser = await chromium.launch({
@@ -46,13 +54,11 @@ await page.reload();
 await page.waitForLoadState('networkidle');
 await page.locator('[data-tab="assay"]').click();
 
-let templateSelect = page.locator('[data-assay-template]');
-assert(await templateSelect.locator('option').count() === Object.keys(TEMPLATES).length + 1,
-  '模板数量不正确');
+assert(await page.locator('#gcProductList option').count() === 10, '品种候选数量不正确');
 
-for (const [templateId, [name, mode, plates, dry]] of Object.entries(TEMPLATES)) {
-  await templateSelect.selectOption(templateId);
-  templateSelect = page.locator('[data-assay-template]');
+for (const [templateId, [product, name, mode, plates, dry]] of Object.entries(TEMPLATES)) {
+  await chooseTemplate(page, templateId);
+  assert(await page.locator('[data-assay-product]').inputValue() === product, `${templateId}: 品种名错误`);
   assert(await field(page, 'assay.name').inputValue() === name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
   assert(await field(page, 'assay.mode').inputValue() === mode, `${templateId}: 定量方法错误`);
@@ -62,8 +68,13 @@ for (const [templateId, [name, mode, plates, dry]] of Object.entries(TEMPLATES))
     `${templateId}: 水分行错误`);
 }
 
+// 任意输入一个未预置品种，也应保留为自定义品种。
+await page.locator('[data-assay-product]').fill('自定义品种');
+await page.locator('[data-assay-product]').press('Enter');
+assert(await page.locator('[data-assay-product]').inputValue() === '自定义品种', '自定义品种输入未保留');
+
 // 外标法、非干燥品口径：不要求 Q。
-await templateSelect.selectOption('star-anise-anethole');
+await chooseTemplate(page, 'star-anise-anethole');
 await fillPeaks(page, 'assay.refA', [100, 100, 100, 100, 100]);
 await field(page, 'assay.Cref').fill('1');
 for (const sample of [1, 2]) {
@@ -74,8 +85,7 @@ for (const sample of [1, 2]) {
 assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '0.5', '外标法计算错误');
 
 // 内标法：f=(A内×C对)/(A对×C内)=4，两个样品含量均为 2.00%。
-templateSelect = page.locator('[data-assay-template]');
-await templateSelect.selectOption('patchouli-patchoulol');
+await chooseTemplate(page, 'patchouli-patchoulol');
 await fillPeaks(page, 'assay.refIS', [200, 200, 200, 200, 200]);
 await fillPeaks(page, 'assay.refA', [100, 100, 100, 100, 100]);
 await field(page, 'assay.Cis').fill('1');
@@ -93,15 +103,15 @@ await page.screenshot({ path: 'C:/tmp/gc-internal-template.png', fullPage: true 
 
 // 不同模板的数据应隔离保存。
 await field(page, 'assay.Cref').fill('9');
-await page.locator('[data-assay-template]').selectOption('mint-menthol');
+await chooseTemplate(page, 'mint-menthol');
 await field(page, 'assay.Cref').fill('8');
-await page.locator('[data-assay-template]').selectOption('patchouli-patchoulol');
+await chooseTemplate(page, 'patchouli-patchoulol');
 assert(await field(page, 'assay.Cref').inputValue() === '9', '广藿香数据未恢复');
-await page.locator('[data-assay-template]').selectOption('mint-menthol');
+await chooseTemplate(page, 'mint-menthol');
 assert(await field(page, 'assay.Cref').inputValue() === '8', '薄荷数据未恢复');
 
 // 两成分总量模板：当前 0.10% + 另一成分 13.00% = 13.10%。
-await page.locator('[data-assay-template]').selectOption('flax-linoleic');
+await chooseTemplate(page, 'flax-linoleic');
 await fillPeaks(page, 'assay.refA', [100, 100, 100, 100, 100]);
 await field(page, 'assay.Cref').fill('1');
 await field(page, 'assay.Q').fill('0');

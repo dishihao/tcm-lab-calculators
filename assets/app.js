@@ -141,6 +141,8 @@ const GC_TEMPLATES = [
 ];
 
 function gcTemplate(id){ return GC_TEMPLATES.find(t => t.id === id); }
+function templatesForProduct(name){ return GC_TEMPLATES.filter(t => t.product === name); }
+const GC_PRODUCTS = Array.from(new Set(GC_TEMPLATES.map(t => t.product)));
 
 /** 当前选用的色谱方法 */
 function techOf(){ return get('assay.tech') || 'hplc'; }
@@ -549,12 +551,22 @@ function renderAssaySheet(){
   const tech = techOf();
   const T = TECH[tech] || TECH.hplc;
   const platesDef = platesDefault();
-  const templateSel = `<select class="dpsel template-select" data-assay-template>` +
-    `<option value="">自定义（不套用品种）</option>` +
-    GC_TEMPLATES.map(t =>
-      `<option value="${t.id}"${t.id === get(pre + 'template') ? ' selected' : ''}>` +
-      `${esc(t.product)} — ${esc(t.name)}${t.mode === 'internal' ? '（内标法）' : ''}</option>`
-    ).join('') + `</select>`;
+  const productName = tpl ? tpl.product : get(pre + 'productName');
+  const productTemplates = templatesForProduct(productName);
+  const productPicker = `
+    <input class="product-combo" type="text" list="gcProductList" data-assay-product
+      value="${esc(productName)}" placeholder="输入或选择品种" autocomplete="off">
+    <datalist id="gcProductList">
+      ${GC_PRODUCTS.map(name => `<option value="${esc(name)}"></option>`).join('')}
+    </datalist>
+    <button type="button" class="apply-product" data-apply-assay-product>套用</button>`;
+  const componentSel = productTemplates.length > 1 ? `
+    <span>待测成分：</span>
+    <select class="dpsel" data-assay-component>
+      ${productTemplates.map(t =>
+        `<option value="${t.id}"${t.id === get(pre + 'template') ? ' selected' : ''}>${esc(t.name)}</option>`
+      ).join('')}
+    </select>` : '';
   const techSel = `<select class="dpsel" data-k="${pre}tech">` +
     Object.keys(TECH).map(k =>
       `<option value="${k}"${k === tech ? ' selected' : ''}>${TECH[k].label}（通则 ${TECH[k].gz}）</option>`
@@ -621,7 +633,7 @@ function renderAssaySheet(){
     <div class="method">照${T.label}（通则 ${T.gz}）测定，${mode === 'internal' ? '内标法' : '外标法'}。</div>
 
     <div class="analyte-bar no-print">
-      <span>品种模板：</span>${templateSel}
+      <span>品种：</span>${productPicker}${componentSel}
       <span>方法：</span>${techSel}${modeSel}
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}dryBasis" ${dry ? 'checked' : ''}>
@@ -908,12 +920,18 @@ function assaySnapshot(){
   return snap;
 }
 
-function applyAssayTemplate(id){
+function applyAssayTemplate(id, customProductName){
   const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
     ? store.__assayTemplateStates : {};
   const oldId = get(AP + 'template') || 'custom';
   const newId = id || 'custom';
-  if (oldId === newId) return;
+  const t = gcTemplate(id);
+  if (oldId === newId){
+    store[AP + 'productName'] = t ? t.product : (customProductName || '');
+    build();
+    showTab('assay');
+    return;
+  }
 
   states[oldId] = assaySnapshot();
   Object.keys(store).forEach(k => {
@@ -922,7 +940,6 @@ function applyAssayTemplate(id){
 
   const restored = states[newId];
   if (restored) Object.assign(store, restored);
-  const t = gcTemplate(id);
   if (t && !restored){
     store[AP + 'tech'] = 'gc';
     store[AP + 'mode'] = t.mode;
@@ -935,10 +952,23 @@ function applyAssayTemplate(id){
     store[AP + 'limop'] = 'ge';
     store[AP + 'limval'] = t.limit;
   }
+  store[AP + 'productName'] = t ? t.product : (customProductName || '');
   store[AP + 'template'] = id || '';
   store.__assayTemplateStates = states;
   build();
   showTab('assay');
+}
+
+function applyAssayProduct(value){
+  const name = String(value || '').trim();
+  const choices = templatesForProduct(name);
+  if (!choices.length){
+    applyAssayTemplate('', name);
+    return;
+  }
+  const current = gcTemplate(get(AP + 'template'));
+  const target = current && current.product === name ? current : choices[0];
+  applyAssayTemplate(target.id);
 }
 
 /** 判定方向：浸出物与含量测定是"不得少于"，其余是"不得过" */
@@ -995,7 +1025,11 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.matches('[data-assay-template]')){
+  if (t.matches('[data-assay-product]')){
+    applyAssayProduct(t.value);
+    return;
+  }
+  if (t.matches('[data-assay-component]')){
     applyAssayTemplate(t.value);
     return;
   }
@@ -1012,7 +1046,17 @@ document.addEventListener('change', e => {
 
 document.addEventListener('click', e => {
   const tab = e.target.closest('.tab');
-  if (tab) showTab(tab.dataset.tab);
+  if (tab){ showTab(tab.dataset.tab); return; }
+  if (e.target.closest('[data-apply-assay-product]')){
+    const input = document.querySelector('[data-assay-product]');
+    if (input) applyAssayProduct(input.value);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.matches('[data-assay-product]')) return;
+  e.preventDefault();
+  applyAssayProduct(e.target.value);
 });
 
 

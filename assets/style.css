@@ -33,7 +33,20 @@ body{
   background:#fff; color:#222;
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
 }
-.template-select{min-width:230px}
+.product-combo{
+  width:160px; padding:4px 8px;
+  border:1px solid #999; border-radius:4px;
+  background:#fff; color:var(--pen);
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+}
+.product-combo:focus{outline:2px solid #c9daf8; border-color:var(--accent)}
+.apply-product{
+  padding:4px 12px; cursor:pointer;
+  border:1px solid var(--accent); border-radius:4px;
+  background:var(--accent); color:#fff;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+}
+.apply-product:hover{filter:brightness(.92)}
 
 /* ---------- 选项卡 ---------- */
 .tabs{
