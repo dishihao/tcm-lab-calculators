@@ -34,12 +34,19 @@ body{
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
 }
 .product-combo{
-  width:280px; max-width:100%; padding:4px 8px;
+  width:160px; max-width:100%; padding:4px 8px;
   border:1px solid #999; border-radius:4px;
   background:#fff; color:var(--pen);
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
 }
 .product-combo:focus{outline:2px solid #c9daf8; border-color:var(--accent)}
+.template-picker{
+  width:300px; max-width:100%; padding:4px 8px;
+  border:1px solid #999; border-radius:4px;
+  background:#fff; color:var(--pen);
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+}
+.template-picker:focus{outline:2px solid #c9daf8; border-color:var(--accent)}
 .apply-product{
   padding:4px 12px; cursor:pointer;
   border:1px solid var(--accent); border-radius:4px;

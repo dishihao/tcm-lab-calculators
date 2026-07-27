@@ -714,31 +714,16 @@ function renderAssaySheet(){
   const T = TECH[tech] || TECH.hplc;
   const platesDef = platesDefault();
   const productName = tpl ? tpl.product : get(pre + 'productName');
-  const productRecords = recordsForProduct(productName);
-  const recordTemplates = tpl ? templatesForRecord(tpl.recordKey) : [];
   const productPicker = `
-    <input class="product-combo" type="text" list="gcProductList" data-assay-product
-      value="${esc(tpl ? templateChoiceLabel(tpl) : productName)}" placeholder="输入品种或选择原料/成品记录" autocomplete="off">
-    <datalist id="gcProductList">
+    <select class="template-picker" data-assay-template-picker>
+      <option value="">请选择原料/成品模板</option>
       ${GC_TEMPLATE_CHOICES.map(choice =>
-        `<option value="${esc(choice.label)}"></option>`
+        `<option value="${choice.id}"${tpl && choice.id === tpl.id ? ' selected' : ''}>${esc(choice.label)}</option>`
       ).join('')}
-    </datalist>
-    <button type="button" class="apply-product" data-apply-assay-product>套用</button>`;
-  const recordSel = productRecords.length > 1 ? `
-    <span>记录：</span>
-    <select class="dpsel" data-assay-record>
-      ${productRecords.map(t =>
-        `<option value="${t.recordKey}"${tpl && t.recordKey === tpl.recordKey ? ' selected' : ''}>${esc(t.recordLabel)}</option>`
-      ).join('')}
-    </select>` : '';
-  const componentSel = recordTemplates.length > 1 ? `
-    <span>待测成分：</span>
-    <select class="dpsel" data-assay-component>
-      ${recordTemplates.map(t =>
-        `<option value="${t.id}"${t.id === get(pre + 'template') ? ' selected' : ''}>${esc(t.name)}</option>`
-      ).join('')}
-    </select>` : '';
+    </select>
+    <input class="product-combo" type="text" data-assay-product
+      value="${tpl ? '' : esc(productName)}" placeholder="或输入自定义品种" autocomplete="off">
+    <button type="button" class="apply-product" data-apply-assay-product>套用自定义</button>`;
   const techSel = `<select class="dpsel" data-k="${pre}tech">` +
     Object.keys(TECH).map(k =>
       `<option value="${k}"${k === tech ? ' selected' : ''}>${TECH[k].label}（通则 ${TECH[k].gz}）</option>`
@@ -805,7 +790,7 @@ function renderAssaySheet(){
     <div class="method">照${T.label}（通则 ${T.gz}）测定，${mode === 'internal' ? '内标法' : '外标法'}。</div>
 
     <div class="analyte-bar no-print">
-      <span>品种/记录：</span>${productPicker}${recordSel}${componentSel}
+      <span>品种/记录：</span>${productPicker}
       <span>方法：</span>${techSel}${modeSel}
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}dryBasis" ${dry ? 'checked' : ''}>
@@ -1213,6 +1198,10 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.matches('[data-assay-template-picker]')){
+    if (t.value) applyAssayTemplate(t.value);
+    return;
+  }
   if (t.matches('[data-assay-product]')){
     applyAssayProduct(t.value);
     return;
