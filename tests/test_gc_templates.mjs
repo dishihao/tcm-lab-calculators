@@ -45,13 +45,14 @@ await page.locator('[data-tab="assay"]').click();
 
 const templateIds = await page.evaluate(() => GC_TEMPLATES.map(t => t.id));
 const recordCount = await page.evaluate(() => new Set(GC_TEMPLATES.map(t => t.recordKey)).size);
-assert(await page.locator('#gcProductList option').count() === 14, '品种候选数量不正确');
 assert(templateIds.length === 33, '气相成分模板数量不正确');
 assert(recordCount === 28, '原料/成品记录数量不正确');
+assert(await page.locator('#gcProductList option').count() === 33, '原料/成品候选项数量不正确');
 
 for (const templateId of templateIds) {
   const template = await chooseTemplate(page, templateId);
-  assert(await page.locator('[data-assay-product]').inputValue() === template.product, `${templateId}: 品种名错误`);
+  const choiceLabel = `${template.product}（${template.recordLabel}）—${template.name}`;
+  assert(await page.locator('[data-assay-product]').inputValue() === choiceLabel, `${templateId}: 品种/记录名错误`);
   assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
   assert(await field(page, 'assay.mode').inputValue() === template.mode, `${templateId}: 定量方法错误`);
@@ -70,6 +71,9 @@ assert((await page.locator('.standard-quote').innerText()).includes('不得少�
 assert((await page.locator('.standard-quote').innerText()).includes('内控标准'), '薄荷原料内控标准缺失');
 await chooseTemplate(page, 'mint-menthol-finished');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.13%'), '薄荷成品标准错误');
+await page.locator('[data-assay-product]').fill('薄荷（成品）—薄荷脑');
+await page.locator('[data-assay-product]').press('Enter');
+assert(await field(page, 'assay.limval').inputValue() === '0.13', '从候选项直接选择薄荷成品失败');
 await chooseTemplate(page, 'fennel-anethole-salted-finished');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于1.3%'), '盐小茴香标准错误');
 for (const id of ['cardamom-eucalyptol', 'dendrobium-dendrobine', 'amomum-bornyl-acetate', 'pine-alpha-pinene']) {

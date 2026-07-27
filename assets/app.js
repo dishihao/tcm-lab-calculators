@@ -299,7 +299,12 @@ function recordsForProduct(name){
   });
   return records;
 }
-const GC_PRODUCTS = Array.from(new Set(GC_TEMPLATES.map(t => t.product)));
+function templateChoiceLabel(t){
+  return `${t.product}（${t.recordLabel}）—${t.name}`;
+}
+const GC_TEMPLATE_CHOICES = GC_TEMPLATES.map(t => ({
+  id:t.id, label:templateChoiceLabel(t)
+}));
 
 /** 当前选用的色谱方法 */
 function techOf(){ return get('assay.tech') || 'hplc'; }
@@ -713,9 +718,11 @@ function renderAssaySheet(){
   const recordTemplates = tpl ? templatesForRecord(tpl.recordKey) : [];
   const productPicker = `
     <input class="product-combo" type="text" list="gcProductList" data-assay-product
-      value="${esc(productName)}" placeholder="输入或选择品种" autocomplete="off">
+      value="${esc(tpl ? templateChoiceLabel(tpl) : productName)}" placeholder="输入品种或选择原料/成品记录" autocomplete="off">
     <datalist id="gcProductList">
-      ${GC_PRODUCTS.map(name => `<option value="${esc(name)}"></option>`).join('')}
+      ${GC_TEMPLATE_CHOICES.map(choice =>
+        `<option value="${esc(choice.label)}"></option>`
+      ).join('')}
     </datalist>
     <button type="button" class="apply-product" data-apply-assay-product>套用</button>`;
   const recordSel = productRecords.length > 1 ? `
@@ -798,7 +805,7 @@ function renderAssaySheet(){
     <div class="method">照${T.label}（通则 ${T.gz}）测定，${mode === 'internal' ? '内标法' : '外标法'}。</div>
 
     <div class="analyte-bar no-print">
-      <span>品种：</span>${productPicker}${recordSel}${componentSel}
+      <span>品种/记录：</span>${productPicker}${recordSel}${componentSel}
       <span>方法：</span>${techSel}${modeSel}
       <label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}dryBasis" ${dry ? 'checked' : ''}>
@@ -1129,6 +1136,11 @@ function applyAssayTemplate(id, customProductName){
 
 function applyAssayProduct(value){
   const name = String(value || '').trim();
+  const selected = GC_TEMPLATES.find(t => templateChoiceLabel(t) === name);
+  if (selected){
+    applyAssayTemplate(selected.id);
+    return;
+  }
   const choices = templatesForProduct(name);
   if (!choices.length){
     applyAssayTemplate('', name);

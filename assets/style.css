@@ -34,7 +34,7 @@ body{
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
 }
 .product-combo{
-  width:160px; padding:4px 8px;
+  width:280px; max-width:100%; padding:4px 8px;
   border:1px solid #999; border-radius:4px;
   background:#fff; color:var(--pen);
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
