@@ -42,10 +42,15 @@ assert(audit.invalid.length === 0, `存在无效模板: ${audit.invalid.join(','
 
 const selectTemplate = async (item, template) => {
   await page.locator(`[data-tab="${item}"]`).click();
+  const changeProduct = page.locator(`[data-change-quality-product="${item}"]`);
+  if (await changeProduct.count()) await changeProduct.click();
   const search = page.locator(`[data-quality-search="${item}"]`);
-  await search.fill(template.label);
+  await search.fill(template.baseProduct);
+  const product = page.locator(`[data-quality-product="${template.baseProduct}"]`);
+  assert(await product.count() === 1, `${item}: 品名搜索中找不到 ${template.baseProduct}`);
+  await product.click();
   const result = page.locator(`[data-quality-template="${template.id}"]`);
-  assert(await result.count() === 1, `${item}: 搜索结果中找不到 ${template.label}`);
+  assert(await result.count() === 1, `${item}: 品名下找不到模板 ${template.label}`);
   await result.click();
   assert(await field(page, `${item}.limop`).inputValue() === template.limop, `${item}: 判定方向错误`);
   assert(await field(page, `${item}.limval`).inputValue() === template.limit, `${item}: 判定限度错误`);
@@ -64,6 +69,8 @@ for (const item of ['impurity', 'moisture', 'ash', 'extract']) {
 
 // 搜索组件不是 datalist/超长 select，并且空关键词只显示提示。
 await page.locator('[data-tab="impurity"]').click();
+const changeImpurityForSearch = page.locator('[data-change-quality-product="impurity"]');
+if (await changeImpurityForSearch.count()) await changeImpurityForSearch.click();
 assert(await page.locator('[data-quality-search="impurity"]').getAttribute('list') === null, '仍在使用 datalist');
 await page.locator('[data-quality-search="impurity"]').focus();
 assert(await page.locator('[data-quality-results="impurity"]').isVisible(), '搜索结果面板没有显示');
@@ -87,20 +94,25 @@ assert(await field(page, 'moisture.Vwater.1').count() === 0, '干燥称量法仍
 await page.locator('[data-clear-quality-template="moisture"]').click();
 assert(await page.locator('.sheet.active .standard-quote').count() === 0, '清除模板后仍显示模板标准');
 
+await page.locator('[data-change-quality-product="moisture"]').click();
 await page.locator('[data-quality-search="moisture"]').fill('薄荷');
-assert(await page.locator('[data-quality-results="moisture"] .quality-result').count() > 0, '薄荷搜索没有结果');
-assert((await page.locator('[data-quality-results="moisture"] .quality-result').first().innerText()).includes('原料'),
-  '同时存在原料/成品时没有优先显示原料');
+await page.locator('[data-quality-product="薄荷"]').click();
+assert(await page.locator('.sheet.active [data-quality-template]').count() >= 2, '薄荷没有显示对应的多个模板');
+assert((await page.locator('.sheet.active [data-quality-template]').first().innerText()).includes('原料'),
+  '同时存在原料/成品时没有优先排列原料');
 
 // 黄芪原料本身无杂质项目：页面应明确显示 0 条原料，并提示其他可用项目。
 await page.locator('[data-tab="impurity"]').click();
+const changeImpurity = page.locator('[data-change-quality-product="impurity"]');
+if (await changeImpurity.count()) await changeImpurity.click();
 await page.locator('[data-quality-search="impurity"]').fill('黄芪');
-const huangqiCount = await page.locator('[data-quality-results="impurity"] .quality-search-count').innerText();
-assert(huangqiCount.includes('原料 0') && huangqiCount.includes('成品 4'), '黄芪杂质原料/成品计数错误');
-const crossHint = await page.locator('[data-quality-results="impurity"] .quality-cross-hint').innerText();
+await page.locator('[data-quality-product="黄芪"]').click();
+const huangqiCount = await page.locator('.sheet.active .quality-step-title').innerText();
+assert(huangqiCount.includes('原料 0') && huangqiCount.includes('成品 1'), '黄芪杂质原料/成品计数错误');
+const crossHint = await page.locator('.sheet.active .quality-cross-hint').innerText();
 assert(crossHint.includes('水分') && crossHint.includes('总灰分') && crossHint.includes('浸出物'),
   '黄芪原料其他项目提示不完整');
 await page.screenshot({ path: 'C:/tmp/quality-template-search.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log(`PASS: ${audit.total} 条质量项目模板、四类搜索、标准原文及水分方法分支`);
+console.log(`PASS: ${audit.total} 条质量项目模板、先选品名再选模板、标准原文及水分方法分支`);

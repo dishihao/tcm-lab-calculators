@@ -25,6 +25,14 @@ function cleanProduct(file, kind) {
   return (base + suffix).replace(/\s+/g, '');
 }
 
+function baseProductOf(product) {
+  let base = product;
+  while (/(?:（[^（）]+）|\([^()]+\))$/.test(base)) {
+    base = base.replace(/(?:（[^（）]+）|\([^()]+\))$/, '');
+  }
+  return base || product;
+}
+
 function methodInfo(record) {
   const text = String(record.method || '').replace(/\s+/g, ' ').trim();
   if (record.item === 'moisture') {
@@ -87,6 +95,7 @@ for (const record of source.records) {
   const kind = /原料检验/.test(record.file) ? '原料'
     : (/成品检验/.test(record.file) ? '成品' : record.kind);
   const product = cleanProduct(record.file, record.kind);
+  const baseProduct = baseProductOf(product);
   if (!product) continue;
   const method = methodInfo(record);
   const limits = legalLimits(record);
@@ -98,6 +107,7 @@ for (const record of source.records) {
       id: `q-${record.item}-${fnv1a(key)}`,
       item: record.item,
       product,
+      baseProduct,
       kind,
       variant,
       label,

@@ -336,13 +336,22 @@ const QUALITY_TEMPLATES_BY_ITEM = new Map(
 
 function qualityTemplate(id){ return QUALITY_TEMPLATE_BY_ID.get(id); }
 function qualityTemplatesFor(item){ return QUALITY_TEMPLATES_BY_ITEM.get(item) || []; }
+function qualityProductsFor(item){
+  const groups = new Map();
+  qualityTemplatesFor(item).forEach(template => {
+    const name = template.baseProduct || template.product;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(template);
+  });
+  return [...groups].map(([name, templates]) => ({ name, templates }));
+}
 function qualityTemplateForCalc(calcId){ return qualityTemplate(get(`${calcId}.template`)); }
 function qualityMethodType(calcId){
   const t = qualityTemplateForCalc(calcId);
   return t ? t.methodType : 'default';
 }
 function qualitySearchText(t){
-  return `${t.label} ${t.product} ${t.kind} ${t.variant || ''} ${t.sourceFile || ''}`.toLowerCase();
+  return `${t.label} ${t.baseProduct || ''} ${t.product} ${t.kind} ${t.variant || ''} ${t.sourceFile || ''}`.toLowerCase();
 }
 function qualityStandardText(t){
   return String(t.standardText || '').replace(/^\d*\.?\s*标准规定\s*[：:]?\s*/, '');
@@ -708,25 +717,65 @@ function renderDp(c){
 function renderQualityPicker(c){
   const tpl = qualityTemplateForCalc(c.id);
   const templates = qualityTemplatesFor(c.id);
+  const products = qualityProductsFor(c.id);
+  const selectedProduct = tpl
+    ? (tpl.baseProduct || tpl.product)
+    : get(`${c.id}.selectedProduct`);
+  const productTemplates = selectedProduct
+    ? templates
+      .filter(t => (t.baseProduct || t.product) === selectedProduct)
+      .sort((a, b) => (a.kind === b.kind ? a.label.localeCompare(b.label, 'zh-CN') : (a.kind === '原料' ? -1 : 1)))
+    : [];
   const rawCount = templates.filter(t => t.kind === '原料').length;
   const finishedCount = templates.length - rawCount;
+  const selectedRaw = productTemplates.filter(t => t.kind === '原料').length;
+  const selectedFinished = productTemplates.length - selectedRaw;
+  const otherRawItems = selectedProduct && !selectedRaw
+    ? ['impurity', 'moisture', 'ash', 'extract']
+      .filter(item => item !== c.id)
+      .filter(item => qualityTemplatesFor(item).some(t =>
+        t.kind === '原料' && (t.baseProduct || t.product) === selectedProduct))
+    : [];
+  const itemNames = { impurity:'杂质', moisture:'水分', ash:'总灰分', extract:'浸出物' };
   return `
     <div class="quality-picker no-print" data-quality-picker="${c.id}">
       <div class="quality-picker-title">
-        <b>品种模板</b>
-        <span>共 ${templates.length} 条（原料 ${rawCount}，成品 ${finishedCount}），可搜索品种、炮制名或地区标准</span>
+        <b>第一步：选择品名</b>
+        <span>${products.length} 个品名，共 ${templates.length} 条模板（原料 ${rawCount}，成品 ${finishedCount}）</span>
       </div>
-      <div class="quality-search-row">
-        <input class="quality-search" type="search" data-quality-search="${c.id}"
-          placeholder="输入关键词搜索，例如：薄荷、酒黄精、上海2018" autocomplete="off">
-        ${tpl ? `<button type="button" data-clear-quality-template="${c.id}">清除模板</button>` : ''}
+      ${selectedProduct ? `
+        <div class="quality-product-selected">
+          已选品名：<b>${esc(selectedProduct)}</b>
+          <button type="button" data-change-quality-product="${c.id}">更换品名</button>
+        </div>` : `
+        <div class="quality-search-row">
+          <input class="quality-search" type="search" data-quality-search="${c.id}"
+            placeholder="输入品名，例如：薄荷、黄芪、酒黄精" autocomplete="off">
+        </div>`}
+      <div class="quality-results" data-quality-results="${c.id}" hidden></div>
+
+      <div class="quality-step-two${selectedProduct ? '' : ' disabled'}">
+        <div class="quality-step-title"><b>第二步：选择对应模板</b>
+          ${selectedProduct ? `<span>找到 ${productTemplates.length} 条：原料 ${selectedRaw}，成品 ${selectedFinished}</span>` : '<span>请先选择品名</span>'}
+        </div>
+        ${selectedProduct ? `
+          ${otherRawItems.length
+            ? `<div class="quality-cross-hint">该品名在本项目没有原料模板；原料记录可在“${otherRawItems.map(item => itemNames[item]).join('、')}”项目中找到。</div>`
+            : ''}
+          <div class="quality-template-options">
+            ${productTemplates.map(t => `
+              <button type="button" class="quality-template-option${tpl && tpl.id === t.id ? ' selected' : ''}"
+                data-quality-template="${t.id}">
+                <span>${esc(t.label)}${tpl && tpl.id === t.id ? ' ✓' : ''}</span>
+                <small>${esc(t.standardText)}</small>
+              </button>`).join('')}
+          </div>` : ''}
       </div>
       <div class="quality-selected">
-        ${tpl
-          ? `当前：<b>${esc(tpl.label)}</b>`
-          : '当前：<b>自定义</b>（手工填写标准限度）'}
+        ${tpl ? `当前模板：<b>${esc(tpl.label)}</b>`
+          : selectedProduct ? '尚未套用模板。' : '当前：<b>自定义</b>（手工填写标准限度）'}
+        ${tpl ? `<button type="button" data-clear-quality-template="${c.id}">取消模板</button>` : ''}
       </div>
-      <div class="quality-results" data-quality-results="${c.id}" hidden></div>
     </div>`;
 }
 
@@ -1262,6 +1311,7 @@ function applyQualityTemplate(calcId, templateId){
   }
   store[`${calcId}.template`] = templateId;
   store[`${calcId}.productName`] = template.label;
+  store[`${calcId}.selectedProduct`] = template.baseProduct || template.product;
   store.__qualityTemplateStates = states;
   build();
   showTab(calcId);
@@ -1270,6 +1320,8 @@ function applyQualityTemplate(calcId, templateId){
 function clearQualityTemplate(calcId){
   const current = get(`${calcId}.template`);
   if (!current) return;
+  const template = qualityTemplate(current);
+  const selectedProduct = template ? (template.baseProduct || template.product) : get(`${calcId}.selectedProduct`);
   const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
     ? store.__qualityTemplateStates : {};
   states[`${calcId}:${current}`] = qualitySnapshot(calcId);
@@ -1279,7 +1331,51 @@ function clearQualityTemplate(calcId){
   const restored = states[`${calcId}:custom`];
   if (restored) Object.assign(store, restored);
   store[`${calcId}.template`] = '';
+  store[`${calcId}.selectedProduct`] = selectedProduct;
   store.__qualityTemplateStates = states;
+  build();
+  showTab(calcId);
+}
+
+function selectQualityProduct(calcId, productName){
+  const product = String(productName || '').trim();
+  if (!product) return;
+  const current = qualityTemplateForCalc(calcId);
+  if (current && (current.baseProduct || current.product) === product){
+    store[`${calcId}.selectedProduct`] = product;
+    build();
+    showTab(calcId);
+    return;
+  }
+
+  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
+    ? store.__qualityTemplateStates : {};
+  const oldId = get(`${calcId}.template`) || 'custom';
+  states[`${calcId}:${oldId}`] = qualitySnapshot(calcId);
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(calcId + '.')) delete store[k];
+  });
+  const restored = states[`${calcId}:custom`];
+  if (restored) Object.assign(store, restored);
+  store[`${calcId}.template`] = '';
+  store[`${calcId}.selectedProduct`] = product;
+  store.__qualityTemplateStates = states;
+  build();
+  showTab(calcId);
+}
+
+function changeQualityProduct(calcId){
+  const current = get(`${calcId}.template`);
+  if (current){
+    const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
+      ? store.__qualityTemplateStates : {};
+    states[`${calcId}:${current}`] = qualitySnapshot(calcId);
+    store.__qualityTemplateStates = states;
+  }
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(calcId + '.')) delete store[k];
+  });
+  store[`${calcId}.template`] = '';
   build();
   showTab(calcId);
 }
@@ -1293,26 +1389,22 @@ function renderQualitySearchResults(calcId, query){
     box.hidden = false;
     return;
   }
-  const all = qualityTemplatesFor(calcId);
-  const matched = all.filter(t => qualitySearchText(t).includes(q));
-  const raw = matched.filter(t => t.kind === '原料');
-  const finished = matched.filter(t => t.kind === '成品');
-  const ordered = [...raw, ...finished];
-  const shown = ordered.slice(0, 40);
-  const otherRawItems = raw.length ? [] : ['impurity', 'moisture', 'ash', 'extract']
-    .filter(item => item !== calcId)
-    .filter(item => qualityTemplatesFor(item).some(t => t.kind === '原料' && qualitySearchText(t).includes(q)));
-  const itemNames = { impurity:'杂质', moisture:'水分', ash:'总灰分', extract:'浸出物' };
+  const matched = qualityProductsFor(calcId).filter(group =>
+    group.name.toLowerCase().includes(q) ||
+    group.templates.some(template => qualitySearchText(template).includes(q))
+  );
+  const shown = matched.slice(0, 40);
   box.innerHTML = shown.length
-    ? `<div class="quality-search-count">找到 ${matched.length} 条：原料 ${raw.length}，成品 ${finished.length}${matched.length > shown.length ? `；显示前 ${shown.length} 条（原料优先）` : ''}</div>` +
-      (otherRawItems.length
-        ? `<div class="quality-cross-hint">该关键词在本项目没有原料模板；原料记录可在“${otherRawItems.map(item => itemNames[item]).join('、')}”项目中找到。</div>`
-        : '') +
-      shown.map(t => `
-        <button type="button" class="quality-result" data-quality-template="${t.id}">
-          <span>${esc(t.label)}</span>
-          <small>${esc(t.standardText)}</small>
-        </button>`).join('')
+    ? `<div class="quality-search-count">找到 ${matched.length} 个品名${matched.length > shown.length ? `，显示前 ${shown.length} 个` : ''}</div>` +
+      shown.map(group => {
+        const raw = group.templates.filter(t => t.kind === '原料').length;
+        const finished = group.templates.length - raw;
+        return `
+        <button type="button" class="quality-result" data-quality-product="${esc(group.name)}">
+          <span>${esc(group.name)}</span>
+          <small>${group.templates.length} 条模板（原料 ${raw}，成品 ${finished}）</small>
+        </button>`;
+      }).join('')
     : '<div class="quality-search-hint">没有匹配模板，请换一个关键词。</div>';
   box.hidden = false;
 }
@@ -1403,6 +1495,12 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('click', e => {
+  const qualityProduct = e.target.closest('[data-quality-product]');
+  if (qualityProduct){
+    const picker = qualityProduct.closest('[data-quality-picker]');
+    if (picker) selectQualityProduct(picker.dataset.qualityPicker, qualityProduct.dataset.qualityProduct);
+    return;
+  }
   const qualityResult = e.target.closest('[data-quality-template]');
   if (qualityResult){
     const picker = qualityResult.closest('[data-quality-picker]');
@@ -1412,6 +1510,11 @@ document.addEventListener('click', e => {
   const clearQuality = e.target.closest('[data-clear-quality-template]');
   if (clearQuality){
     clearQualityTemplate(clearQuality.dataset.clearQualityTemplate);
+    return;
+  }
+  const changeProduct = e.target.closest('[data-change-quality-product]');
+  if (changeProduct){
+    changeQualityProduct(changeProduct.dataset.changeQualityProduct);
     return;
   }
   const tab = e.target.closest('.tab');

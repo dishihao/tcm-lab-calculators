@@ -251,6 +251,34 @@ td.spanall{background:#fdfdfd}
   font-family:inherit;
 }
 .quality-selected{margin-top:7px; color:#555}
+.quality-selected button,.quality-product-selected button{
+  margin-left:8px; padding:4px 10px; cursor:pointer;
+  border:1px solid #aaa; border-radius:4px; background:#fff; color:#444;
+  font-family:inherit;
+}
+.quality-product-selected{
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px;
+  padding:7px 9px; border:1px solid #c8d8ee; border-radius:4px; background:#eef5ff;
+}
+.quality-step-two{
+  margin-top:12px; padding-top:10px; border-top:1px solid #ddd7ce;
+}
+.quality-step-two.disabled{color:#999}
+.quality-step-title{display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; margin-bottom:7px}
+.quality-step-title span{color:#777; font-size:12px}
+.quality-template-options{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:7px}
+.quality-template-option{
+  padding:8px 10px; text-align:left; cursor:pointer;
+  border:1px solid #bbb; border-radius:4px; background:#fff; color:#222;
+  font-family:inherit;
+}
+.quality-template-option:hover,.quality-template-option:focus{background:#eef4ff; outline:none}
+.quality-template-option.selected{border-color:#3f6faa; background:#e8f1ff}
+.quality-template-option span{display:block; font-weight:700}
+.quality-template-option small{
+  display:block; margin-top:3px; overflow:hidden; color:#666;
+  white-space:nowrap; text-overflow:ellipsis;
+}
 .quality-results{
   position:absolute; z-index:30; left:12px; right:12px; top:92px;
   max-height:360px; overflow:auto;
