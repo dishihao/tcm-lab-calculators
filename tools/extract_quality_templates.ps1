@@ -1,6 +1,8 @@
 ﻿param(
   [string]$WorkspaceRoot = (Split-Path -Parent $PSScriptRoot),
-  [string]$OutputPath = (Join-Path $PSScriptRoot 'quality-template-extract.json')
+  [string]$OutputPath = (Join-Path $PSScriptRoot 'quality-template-extract.json'),
+  [ValidateSet('All','Raw','Finished')]
+  [string]$Scope = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,6 +10,8 @@ $roots = @(
   @{ Path = (Join-Path (Split-Path -Parent $WorkspaceRoot) '原料检验记录'); Kind = '原料' },
   @{ Path = (Join-Path (Split-Path -Parent $WorkspaceRoot) '成品检验记录'); Kind = '成品' }
 )
+if ($Scope -eq 'Raw') { $roots = @($roots | Where-Object Kind -eq '原料') }
+if ($Scope -eq 'Finished') { $roots = @($roots | Where-Object Kind -eq '成品') }
 
 function Normalize-Lines([string]$text) {
   return @(
@@ -33,7 +37,7 @@ function Find-Item($lines, [string]$itemId, [string]$headingPattern) {
         $standard = $line
         break
       }
-      if ($j -gt ($i + 3) -and $line -match '^(【检查】)?(杂质|水分|总灰分|酸不溶性灰分|水溶性浸出物|醇溶性浸出物|浸出物|含量测定)(】|\s|$)') {
+      if ($j -gt ($i + 3) -and $line -match '^(【检查】\s*)?(杂质|水分|总灰分|酸不溶性灰分|水溶性浸出物|醇溶性浸出物|浸出物|含量测定)(】|\s|$)') {
         break
       }
     }
@@ -88,9 +92,9 @@ try {
       $doc = $word.Documents.Open($entry.File.FullName, $false, $true, $false)
       $lines = Normalize-Lines $doc.Content.Text
       $items = @(
-        Find-Item $lines 'impurity' '^(【检查】)?杂质(】|\s|$)'
-        Find-Item $lines 'moisture' '^水分(\s|$|1\.)'
-        Find-Item $lines 'ash' '^总灰分(\s|$|1\.)'
+        Find-Item $lines 'impurity' '^(【检查】\s*)?杂质(】|\s|$)'
+        Find-Item $lines 'moisture' '^(【检查】\s*)?水分(\s|$|1\.)'
+        Find-Item $lines 'ash' '^(【检查】\s*)?总灰分(\s|$|1\.)'
         Find-Item $lines 'extract' '^【?(水溶性|醇溶性)?浸出物】?'
       ) | Where-Object { $_ }
 
@@ -132,6 +136,3 @@ try {
 
 Write-Host ("Extracted {0} item records; {1} document errors" -f $results.Count, $errors.Count)
 Write-Host $OutputPath
-
-
-

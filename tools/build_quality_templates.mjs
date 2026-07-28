@@ -4,8 +4,13 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const inputPath = path.join(here, 'quality-template-extract.json');
+const rawOverlayPath = path.join(here, 'quality-template-raw-extract.json');
 const outputPath = path.join(here, '..', 'assets', 'quality-templates.js');
 const source = JSON.parse(fs.readFileSync(inputPath, 'utf8').replace(/^\uFEFF/, ''));
+if (fs.existsSync(rawOverlayPath)) {
+  const raw = JSON.parse(fs.readFileSync(rawOverlayPath, 'utf8').replace(/^\uFEFF/, ''));
+  source.records = source.records.filter(record => record.kind !== '原料').concat(raw.records);
+}
 
 function cleanProduct(file, kind) {
   let stem = file.replace(/\.docx?$/i, '').replace(/^\d+/, '').trim();

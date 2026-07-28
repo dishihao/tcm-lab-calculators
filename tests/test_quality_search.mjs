@@ -36,7 +36,7 @@ const audit = await page.evaluate(() => {
     ).map(t => t.id)
   };
 });
-assert(audit.total === 3665, '质量项目模板总数错误');
+assert(audit.total === 3893, '质量项目模板总数错误');
 assert(audit.uniqueIds === audit.total, '质量项目模板 ID 不唯一');
 assert(audit.invalid.length === 0, `存在无效模板: ${audit.invalid.join(',')}`);
 
@@ -49,7 +49,8 @@ const selectTemplate = async (item, template) => {
   await result.click();
   assert(await field(page, `${item}.limop`).inputValue() === template.limop, `${item}: 判定方向错误`);
   assert(await field(page, `${item}.limval`).inputValue() === template.limit, `${item}: 判定限度错误`);
-  assert((await page.locator('.sheet.active .standard-quote').innerText()).includes(template.standardText),
+  const expectedStandard = template.standardText.replace(/^\d*\.?\s*标准规定\s*[：:]?\s*/, '');
+  assert((await page.locator('.sheet.active .standard-quote').innerText()).includes(expectedStandard),
     `${item}: 标准规定原文错误`);
   assert((await page.locator('.sheet.active .method').innerText()).includes(template.method),
     `${item}: 测定方法错误`);
@@ -88,6 +89,17 @@ assert(await page.locator('.sheet.active .standard-quote').count() === 0, '清�
 
 await page.locator('[data-quality-search="moisture"]').fill('薄荷');
 assert(await page.locator('[data-quality-results="moisture"] .quality-result').count() > 0, '薄荷搜索没有结果');
+assert((await page.locator('[data-quality-results="moisture"] .quality-result').first().innerText()).includes('原料'),
+  '同时存在原料/成品时没有优先显示原料');
+
+// 黄芪原料本身无杂质项目：页面应明确显示 0 条原料，并提示其他可用项目。
+await page.locator('[data-tab="impurity"]').click();
+await page.locator('[data-quality-search="impurity"]').fill('黄芪');
+const huangqiCount = await page.locator('[data-quality-results="impurity"] .quality-search-count').innerText();
+assert(huangqiCount.includes('原料 0') && huangqiCount.includes('成品 4'), '黄芪杂质原料/成品计数错误');
+const crossHint = await page.locator('[data-quality-results="impurity"] .quality-cross-hint').innerText();
+assert(crossHint.includes('水分') && crossHint.includes('总灰分') && crossHint.includes('浸出物'),
+  '黄芪原料其他项目提示不完整');
 await page.screenshot({ path: 'C:/tmp/quality-template-search.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();

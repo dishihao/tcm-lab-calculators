@@ -344,6 +344,9 @@ function qualityMethodType(calcId){
 function qualitySearchText(t){
   return `${t.label} ${t.product} ${t.kind} ${t.variant || ''} ${t.sourceFile || ''}`.toLowerCase();
 }
+function qualityStandardText(t){
+  return String(t.standardText || '').replace(/^\d*\.?\s*标准规定\s*[：:]?\s*/, '');
+}
 
 /* ---------------------------------------------------------------- 计算器定义 */
 
@@ -704,12 +707,14 @@ function renderDp(c){
 
 function renderQualityPicker(c){
   const tpl = qualityTemplateForCalc(c.id);
-  const count = qualityTemplatesFor(c.id).length;
+  const templates = qualityTemplatesFor(c.id);
+  const rawCount = templates.filter(t => t.kind === '原料').length;
+  const finishedCount = templates.length - rawCount;
   return `
     <div class="quality-picker no-print" data-quality-picker="${c.id}">
       <div class="quality-picker-title">
         <b>品种模板</b>
-        <span>${count} 条原料/成品记录，可搜索品种、炮制名或地区标准</span>
+        <span>共 ${templates.length} 条（原料 ${rawCount}，成品 ${finishedCount}），可搜索品种、炮制名或地区标准</span>
       </div>
       <div class="quality-search-row">
         <input class="quality-search" type="search" data-quality-search="${c.id}"
@@ -731,7 +736,7 @@ function renderVerdict(c){
   return `
   <div class="verdict">
     ${tpl
-      ? `<div class="standard-quote"><b>标准规定：</b>${esc(tpl.standardText)}</div>
+      ? `<div class="standard-quote"><b>标准规定：</b>${esc(qualityStandardText(tpl))}</div>
          <div class="sec-num">判定限度：`
       : `<div class="sec-num">标准规定：`}
       <span class="limit-edit">
@@ -1290,9 +1295,19 @@ function renderQualitySearchResults(calcId, query){
   }
   const all = qualityTemplatesFor(calcId);
   const matched = all.filter(t => qualitySearchText(t).includes(q));
-  const shown = matched.slice(0, 40);
+  const raw = matched.filter(t => t.kind === '原料');
+  const finished = matched.filter(t => t.kind === '成品');
+  const ordered = [...raw, ...finished];
+  const shown = ordered.slice(0, 40);
+  const otherRawItems = raw.length ? [] : ['impurity', 'moisture', 'ash', 'extract']
+    .filter(item => item !== calcId)
+    .filter(item => qualityTemplatesFor(item).some(t => t.kind === '原料' && qualitySearchText(t).includes(q)));
+  const itemNames = { impurity:'杂质', moisture:'水分', ash:'总灰分', extract:'浸出物' };
   box.innerHTML = shown.length
-    ? `<div class="quality-search-count">找到 ${matched.length} 条${matched.length > shown.length ? `，显示前 ${shown.length} 条` : ''}</div>` +
+    ? `<div class="quality-search-count">找到 ${matched.length} 条：原料 ${raw.length}，成品 ${finished.length}${matched.length > shown.length ? `；显示前 ${shown.length} 条（原料优先）` : ''}</div>` +
+      (otherRawItems.length
+        ? `<div class="quality-cross-hint">该关键词在本项目没有原料模板；原料记录可在“${otherRawItems.map(item => itemNames[item]).join('、')}”项目中找到。</div>`
+        : '') +
       shown.map(t => `
         <button type="button" class="quality-result" data-quality-template="${t.id}">
           <span>${esc(t.label)}</span>

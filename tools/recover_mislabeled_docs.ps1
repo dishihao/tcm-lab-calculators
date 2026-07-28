@@ -25,7 +25,7 @@ function Find-Item($lines, [string]$itemId, [string]$headingPattern) {
         $standard = $line
         break
       }
-      if ($j -gt ($i + 3) -and $line -match '^(【检查】)?(杂质|水分|总灰分|酸不溶性灰分|水溶性浸出物|醇溶性浸出物|浸出物|含量测定)(】|\s|$)') {
+      if ($j -gt ($i + 3) -and $line -match '^(【检查】\s*)?(杂质|水分|总灰分|酸不溶性灰分|水溶性浸出物|醇溶性浸出物|浸出物|含量测定)(】|\s|$)') {
         break
       }
     }
@@ -57,9 +57,9 @@ try {
       $doc = $word.Documents.Open($tempPath, $false, $true, $false)
       $lines = Normalize-Lines $doc.Content.Text
       $items = @(
-        Find-Item $lines 'impurity' '^(【检查】)?杂质(】|\s|$)'
-        Find-Item $lines 'moisture' '^水分(\s|$|1\.)'
-        Find-Item $lines 'ash' '^总灰分(\s|$|1\.)'
+        Find-Item $lines 'impurity' '^(【检查】\s*)?杂质(】|\s|$)'
+        Find-Item $lines 'moisture' '^(【检查】\s*)?水分(\s|$|1\.)'
+        Find-Item $lines 'ash' '^(【检查】\s*)?总灰分(\s|$|1\.)'
         Find-Item $lines 'extract' '^【?(水溶性|醇溶性)?浸出物】?'
       ) | Where-Object { $_ }
       $sourceFile = Get-Item -LiteralPath $entry.file
@@ -96,4 +96,3 @@ try {
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $DataPath -Encoding UTF8
 
 Write-Host ("Total records: {0}; remaining errors: {1}" -f $records.Count, $remainingErrors.Count)
-
