@@ -849,15 +849,16 @@ function renderAssaySheet(){
   const T = TECH[tech] || TECH.hplc;
   const platesDef = platesDefault();
   const productName = tpl ? tpl.product : get(pre + 'productName');
+  const isGc = tech === 'gc';
   const productPicker = `
-    <select class="template-picker" data-assay-template-picker>
-      <option value="">请选择原料/成品模板</option>
-      ${GC_TEMPLATE_CHOICES.map(choice =>
+    <select class="template-picker" data-assay-template-picker${isGc ? '' : ' disabled'}>
+      <option value="">${isGc ? '请选择气相原料/成品模板' : '液相暂无预设品种模板'}</option>
+      ${isGc ? GC_TEMPLATE_CHOICES.map(choice =>
         `<option value="${choice.id}"${tpl && choice.id === tpl.id ? ' selected' : ''}>${esc(choice.label)}</option>`
-      ).join('')}
+      ).join('') : ''}
     </select>
     <input class="product-combo" type="text" data-assay-product
-      value="${tpl ? '' : esc(productName)}" placeholder="或输入自定义品种" autocomplete="off">
+      value="${tpl ? '' : esc(productName)}" placeholder="${isGc ? '或输入自定义气相品种' : '输入液相品种'}" autocomplete="off">
     <button type="button" class="apply-product" data-apply-assay-product>套用自定义</button>`;
   const techSel = `<select class="dpsel" data-k="${pre}tech">` +
     Object.keys(TECH).map(k =>
@@ -1256,6 +1257,10 @@ function applyAssayTemplate(id, customProductName){
 
 function applyAssayProduct(value){
   const name = String(value || '').trim();
+  if (techOf() !== 'gc'){
+    applyAssayTemplate('', name);
+    return;
+  }
   const selected = GC_TEMPLATES.find(t => templateChoiceLabel(t) === name);
   if (selected){
     applyAssayTemplate(selected.id);
@@ -1277,6 +1282,28 @@ function applyAssayRecord(recordKey){
   const current = gcTemplate(get(AP + 'template'));
   const target = choices.find(t => current && t.name === current.name) || choices[0];
   applyAssayTemplate(target.id);
+}
+
+function switchAssayTech(nextTech){
+  const tech = TECH[nextTech] ? nextTech : 'hplc';
+  const current = gcTemplate(get(AP + 'template'));
+  if (tech === 'hplc' && current){
+    const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
+      ? store.__assayTemplateStates : {};
+    states[current.id] = assaySnapshot();
+    Object.keys(store).forEach(k => {
+      if (k.startsWith(AP)) delete store[k];
+    });
+    const restored = states.custom;
+    if (restored) Object.assign(store, restored);
+    store[AP + 'tech'] = 'hplc';
+    store[AP + 'template'] = '';
+    store.__assayTemplateStates = states;
+  } else {
+    store[AP + 'tech'] = tech;
+  }
+  build();
+  showTab('assay');
 }
 
 function qualitySnapshot(calcId){
@@ -1485,8 +1512,12 @@ document.addEventListener('change', e => {
   }
   if (!t.dataset || !t.dataset.k) return;
   const k = t.dataset.k;
+  if (k === AP + 'tech'){
+    switchAssayTech(t.value);
+    return;
+  }
   set(k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
-  if (k.endsWith('.tech') || k.endsWith('.mode') || k.endsWith('.dryBasis')){
+  if (k.endsWith('.mode') || k.endsWith('.dryBasis')){
     // 切换色谱方法、定量方法或干燥品口径要重绘相应字段与公式
     build(); showTab('assay');
     return;

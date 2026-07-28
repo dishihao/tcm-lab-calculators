@@ -42,6 +42,17 @@ const recordCount = await page.evaluate(() => new Set(GC_TEMPLATES.map(t => t.re
 assert(templateIds.length === 33, '气相成分模板数量不正确');
 assert(recordCount === 28, '原料/成品记录数量不正确');
 const templatePicker = page.locator('[data-assay-template-picker]');
+assert(await templatePicker.isDisabled(), '液相模式仍可选择气相模板');
+assert(await templatePicker.locator('option[value]:not([value=""])').count() === 0,
+  '液相模式仍显示气相品种');
+assert((await templatePicker.locator('option').first().innerText()).includes('液相暂无预设'),
+  '液相模式没有给出准确的模板提示');
+await page.locator('[data-assay-product]').fill('薄荷');
+await page.locator('[data-assay-product]').press('Enter');
+assert(await field(page, 'assay.tech').inputValue() === 'hplc', '液相输入气相同名品种后错误切到气相');
+assert(await page.locator('.sheet.active .standard-quote').count() === 0, '液相输入气相同名品种后错误套用气相标准');
+await field(page, 'assay.tech').selectOption('gc');
+assert(!(await templatePicker.isDisabled()), '切换气相后模板选择仍不可用');
 assert(await templatePicker.locator('option').count() === 34, '原料/成品下拉选项数量不正确');
 await templatePicker.click();
 
@@ -69,6 +80,15 @@ await chooseTemplate(page, 'mint-menthol-finished');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.13%'), '薄荷成品标准错误');
 await page.locator('[data-assay-template-picker]').selectOption('mint-menthol-finished');
 assert(await field(page, 'assay.limval').inputValue() === '0.13', '从候选项直接选择薄荷成品失败');
+await field(page, 'assay.tech').selectOption('hplc');
+assert(await page.locator('[data-assay-template-picker]').isDisabled(), '切回液相后气相模板选择仍可用');
+assert(await page.locator('[data-assay-template-picker] option[value]:not([value=""])').count() === 0,
+  '切回液相后仍显示气相品种');
+assert(await page.locator('.sheet.active .standard-quote').count() === 0, '切回液相后仍保留气相标准规定');
+assert(await field(page, 'assay.tech').inputValue() === 'hplc', '没有成功切回液相');
+assert(await page.locator('[data-assay-product]').inputValue() === '薄荷', '切回液相后没有恢复原液相自定义品种');
+await page.screenshot({ path: 'C:/tmp/assay-hplc-separated.png', fullPage: true });
+await field(page, 'assay.tech').selectOption('gc');
 await chooseTemplate(page, 'fennel-anethole-salted-finished');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于1.3%'), '盐小茴香标准错误');
 for (const id of ['cardamom-eucalyptol', 'dendrobium-dendrobine', 'amomum-bornyl-acetate', 'pine-alpha-pinene']) {
