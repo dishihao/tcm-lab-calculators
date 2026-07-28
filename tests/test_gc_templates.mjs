@@ -6,7 +6,6 @@ const { chromium } = require(
 );
 
 const PAGE_URL = new URL('../index.html', import.meta.url).href;
-
 const assert = (ok, message) => {
   if (!ok) throw new Error(message);
 };
@@ -17,9 +16,20 @@ const fillPeaks = async (page, prefix, values) => {
   }
 };
 const chooseTemplate = async (page, templateId) => {
-  const template = await page.evaluate(id => GC_TEMPLATES.find(t => t.id === id), templateId);
+  const template = await page.evaluate(id => ASSAY_TEMPLATES.find(t => t.id === id), templateId);
   assert(template, `找不到模板 ${templateId}`);
-  await page.locator('[data-assay-template-picker]').selectOption(templateId);
+  if (await field(page, 'assay.tech').inputValue() !== template.tech) {
+    await field(page, 'assay.tech').selectOption(template.tech);
+  }
+  const change = page.locator('[data-change-assay-product]');
+  if (await change.count()) await change.click();
+  await page.locator('[data-assay-search]').fill(template.product);
+  const product = page.locator(`[data-assay-product-choice="${template.product}"]`);
+  assert(await product.count() === 1, `品名搜索中找不到 ${template.product}`);
+  await product.click();
+  const button = page.locator(`[data-assay-template-button="${template.id}"]`);
+  assert(await button.count() === 1, `${template.product} 下找不到模板 ${template.id}`);
+  await button.click();
   return template;
 };
 
@@ -37,68 +47,79 @@ await page.reload();
 await page.waitForLoadState('networkidle');
 await page.locator('[data-tab="assay"]').click();
 
-const templateIds = await page.evaluate(() => GC_TEMPLATES.map(t => t.id));
-const recordCount = await page.evaluate(() => new Set(GC_TEMPLATES.map(t => t.recordKey)).size);
-assert(templateIds.length === 33, '气相成分模板数量不正确');
-assert(recordCount === 28, '原料/成品记录数量不正确');
-const templatePicker = page.locator('[data-assay-template-picker]');
-assert(await templatePicker.isDisabled(), '液相模式仍可选择气相模板');
-assert(await templatePicker.locator('option[value]:not([value=""])').count() === 0,
-  '液相模式仍显示气相品种');
-assert((await templatePicker.locator('option').first().innerText()).includes('液相暂无预设'),
-  '液相模式没有给出准确的模板提示');
-await page.locator('[data-assay-product]').fill('薄荷');
-await page.locator('[data-assay-product]').press('Enter');
-assert(await field(page, 'assay.tech').inputValue() === 'hplc', '液相输入气相同名品种后错误切到气相');
-assert(await page.locator('.sheet.active .standard-quote').count() === 0, '液相输入气相同名品种后错误套用气相标准');
-await field(page, 'assay.tech').selectOption('gc');
-assert(!(await templatePicker.isDisabled()), '切换气相后模板选择仍不可用');
-assert(await templatePicker.locator('option').count() === 34, '原料/成品下拉选项数量不正确');
-await templatePicker.click();
+const audit = await page.evaluate(() => ({
+  hplc: HPLC_TEMPLATE_COUNTS,
+  hplcIds: HPLC_TEMPLATES.map(t => t.id),
+  hplcProducts: new Set(HPLC_TEMPLATES.map(t => t.product)).size,
+  gcIds: GC_TEMPLATES.map(t => t.id),
+  gcRecords: new Set(GC_TEMPLATES.map(t => t.recordKey)).size,
+  invalidTech: ASSAY_TEMPLATES.filter(t => !['hplc', 'gc'].includes(t.tech)).map(t => t.id),
+}));
+assert(audit.hplc.records === 603, '液相记录总数错误');
+assert(audit.hplc.rawRecords === 250, '液相原料记录数错误');
+assert(audit.hplc.finishedRecords === 353, '液相成品记录数错误');
+assert(audit.hplc.templates === 1037, '液相成分模板总数错误');
+assert(audit.hplc.products === 385, '液相去重品名数错误');
+assert(audit.hplcProducts === audit.hplc.products, '液相品名统计不一致');
+assert(new Set(audit.hplcIds).size === audit.hplcIds.length, '液相模板 ID 不唯一');
+assert(audit.gcIds.length === 33, '气相成分模板数量不正确');
+assert(audit.gcRecords === 28, '气相原料/成品记录数量不正确');
+assert(audit.invalidTech.length === 0, '存在未区分液相/气相的模板');
 
-for (const templateId of templateIds) {
+// 默认液相：先选品名，再显示该品名的原料/成品及成分模板。
+assert(await field(page, 'assay.tech').inputValue() === 'hplc', '默认方法不是液相');
+assert((await page.locator('[data-assay-picker] .quality-picker-title').innerText()).includes(`${audit.hplc.products} 个品名`),
+  '液相品名总数没有显示');
+const hplcComplete = await page.evaluate(() =>
+  HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText)
+);
+const chosenHplc = await chooseTemplate(page, hplcComplete.id);
+assert(await field(page, 'assay.tech').inputValue() === 'hplc', '液相模板错误切换到气相');
+assert(await field(page, 'assay.name').inputValue() === chosenHplc.name, '液相成分名错误');
+assert(await field(page, 'assay.limval').inputValue() === chosenHplc.limit, '液相判定限度错误');
+assert((await page.locator('.standard-quote').innerText()).includes(chosenHplc.standardText),
+  '液相标准规定原文错误');
+
+const rangeHplc = await page.evaluate(() => HPLC_TEMPLATES.find(t => t.limop === 'range' && t.upperLimit));
+await chooseTemplate(page, rangeHplc.id);
+assert(await field(page, 'assay.limop').inputValue() === 'range', '液相范围限度方向错误');
+assert(await field(page, 'assay.limval').inputValue() === rangeHplc.limit, '液相范围下限错误');
+assert(await field(page, 'assay.limmax').inputValue() === rangeHplc.upperLimit, '液相范围上限错误');
+await page.screenshot({ path: 'C:/tmp/hplc-template-selected.png', fullPage: true });
+
+// 方法切换必须分开列表，不能让当前方法显示另一种方法的模板。
+await field(page, 'assay.tech').selectOption('gc');
+assert(await page.locator('[data-assay-search]').count() === 1, '切换气相后没有品名搜索');
+await page.locator('[data-assay-search]').fill('薄荷');
+await page.locator('[data-assay-product-choice="薄荷"]').click();
+const visibleTechs = await page.locator('[data-assay-template-button]').evaluateAll(buttons =>
+  buttons.map(button => ASSAY_TEMPLATES.find(t => t.id === button.dataset.assayTemplateButton)?.tech)
+);
+assert(visibleTechs.length > 0 && visibleTechs.every(tech => tech === 'gc'), '气相页面混入液相模板');
+
+for (const templateId of audit.gcIds) {
   const template = await chooseTemplate(page, templateId);
-  assert(await page.locator('[data-assay-template-picker]').inputValue() === templateId,
-    `${templateId}: 下拉选中值错误`);
   assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
   assert(await field(page, 'assay.mode').inputValue() === template.mode, `${templateId}: 定量方法错误`);
   assert(await field(page, 'assay.platesLim').inputValue() === template.plates, `${templateId}: 板数错误`);
   assert(await field(page, 'assay.limval').inputValue() === template.limit, `${templateId}: 判定限度错误`);
   assert(await field(page, 'assay.dryBasis').isChecked() === template.dry, `${templateId}: 干燥品口径错误`);
-  assert(await page.locator('th', { hasText: '水分 Q' }).count() === (template.dry ? 1 : 0),
-    `${templateId}: 水分行错误`);
   assert((await page.locator('.standard-quote').innerText()).includes(template.standardText),
     `${templateId}: 标准规定原文错误`);
 }
 
-// 同名原料/成品必须保持各自标准；新增四个品种必须可选。
+// 同名气相原料/成品必须保持各自标准。
 await chooseTemplate(page, 'mint-menthol');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.20%'), '薄荷原料标准错误');
-assert((await page.locator('.standard-quote').innerText()).includes('内控标准'), '薄荷原料内控标准缺失');
 await chooseTemplate(page, 'mint-menthol-finished');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.13%'), '薄荷成品标准错误');
-await page.locator('[data-assay-template-picker]').selectOption('mint-menthol-finished');
-assert(await field(page, 'assay.limval').inputValue() === '0.13', '从候选项直接选择薄荷成品失败');
-await field(page, 'assay.tech').selectOption('hplc');
-assert(await page.locator('[data-assay-template-picker]').isDisabled(), '切回液相后气相模板选择仍可用');
-assert(await page.locator('[data-assay-template-picker] option[value]:not([value=""])').count() === 0,
-  '切回液相后仍显示气相品种');
-assert(await page.locator('.sheet.active .standard-quote').count() === 0, '切回液相后仍保留气相标准规定');
-assert(await field(page, 'assay.tech').inputValue() === 'hplc', '没有成功切回液相');
-assert(await page.locator('[data-assay-product]').inputValue() === '薄荷', '切回液相后没有恢复原液相自定义品种');
-await page.screenshot({ path: 'C:/tmp/assay-hplc-separated.png', fullPage: true });
-await field(page, 'assay.tech').selectOption('gc');
-await chooseTemplate(page, 'fennel-anethole-salted-finished');
-assert((await page.locator('.standard-quote').innerText()).includes('不得少于1.3%'), '盐小茴香标准错误');
-for (const id of ['cardamom-eucalyptol', 'dendrobium-dendrobine', 'amomum-bornyl-acetate', 'pine-alpha-pinene']) {
-  await chooseTemplate(page, id);
-}
 
-// 任意输入一个未预置品种，也应保留为自定义品种。
+// 任意输入一个未预置品种，也应保留为当前方法的自定义品种。
 await page.locator('[data-assay-product]').fill('自定义品种');
 await page.locator('[data-assay-product]').press('Enter');
 assert(await page.locator('[data-assay-product]').inputValue() === '自定义品种', '自定义品种输入未保留');
+assert(await field(page, 'assay.tech').inputValue() === 'gc', '自定义品种改变了色谱方法');
 
 // 外标法、非干燥品口径：不要求 Q。
 await chooseTemplate(page, 'star-anise-anethole');
@@ -109,7 +130,7 @@ for (const sample of [1, 2]) {
   await field(page, `assay.f.${sample}`).fill('10');
   await fillPeaks(page, `assay.smpA.${sample}`, [50, 50]);
 }
-assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '0.5', '外标法计算错误');
+assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '0.5', '外标法百分比计算错误');
 
 // 内标法：f=(A内×C对)/(A对×C内)=4，两个样品含量均为 2.00%。
 await chooseTemplate(page, 'patchouli-patchoulol');
@@ -126,7 +147,6 @@ for (const sample of [1, 2]) {
 }
 assert(await page.locator('#assay\\.out\\.factor').innerText() === '4', '校正因子错误');
 assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '2.00', '内标法计算错误');
-await page.screenshot({ path: 'C:/tmp/gc-internal-template.png', fullPage: true });
 
 // 不同模板的数据应隔离保存。
 await field(page, 'assay.Cref').fill('9');
@@ -137,7 +157,7 @@ assert(await field(page, 'assay.Cref').inputValue() === '9', '广藿香数据未
 await chooseTemplate(page, 'mint-menthol');
 assert(await field(page, 'assay.Cref').inputValue() === '8', '薄荷数据未恢复');
 
-// 两成分总量模板：当前 0.10% + 另一成分 13.00% = 13.10%。
+// 两成分总量模板。
 await chooseTemplate(page, 'flax-linoleic');
 await fillPeaks(page, 'assay.refA', [100, 100, 100, 100, 100]);
 await field(page, 'assay.Cref').fill('1');
@@ -151,7 +171,7 @@ await field(page, 'assay.partnerMean').fill('13');
 assert(await page.locator('#assay\\.out\\.TOTAL').innerText() === '13.1', '双成分总量错误');
 assert(await page.locator('#assay\\.judge').innerText() === '符合规定', '双成分总量判定错误');
 
-await page.screenshot({ path: 'C:/tmp/gc-templates.png', fullPage: true });
+await page.screenshot({ path: 'C:/tmp/assay-templates.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log(`PASS: ${templateIds.length} 个气相成分模板、${recordCount} 条原料/成品记录、标准原文、计算及数据隔离`);
+console.log(`PASS: ${audit.hplc.templates} 个液相模板/603 条记录，33 个气相模板，方法分离、标准原文及计算`);

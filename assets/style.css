@@ -301,6 +301,12 @@ td.spanall{background:#fdfdfd}
   display:block; margin-top:3px; overflow:hidden; color:#666;
   white-space:nowrap; text-overflow:ellipsis;
 }
+.assay-picker{margin-top:10px}
+.assay-custom-row{
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  margin-top:10px; padding-top:10px; border-top:1px solid #ddd;
+}
+.assay-custom-row .product-combo{min-width:240px; flex:1}
 
 /* ---------- 站脚 ---------- */
 .site-foot{

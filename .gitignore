@@ -4,3 +4,4 @@ desktop.ini
 .DS_Store
 *.log
 tools/*quality-template*-extract.json
+tools/hplc-template-extract.json
