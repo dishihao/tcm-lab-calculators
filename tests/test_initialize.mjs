@@ -73,8 +73,8 @@ assert(await field(page, 'assay.name').inputValue() === assayTemplate.name,
 assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].selected`).count() === 1,
   '含量测定: 初始化后没有保留模板');
 
-assert(await page.locator('[data-initialize-project]').count() === 5, '初始化按钮没有覆盖全部五个项目');
+assert(await page.locator('[data-initialize-project]').count() === 6, '初始化按钮没有覆盖全部六个项目');
 await page.screenshot({ path: 'C:/tmp/initialize-buttons.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log('PASS: 五个项目初始化按钮均能清空检验数据并保留当前模板标准');
+console.log('PASS: 六个项目初始化按钮均能清空检验数据并保留当前模板标准');

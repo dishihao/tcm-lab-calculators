@@ -331,10 +331,14 @@ const ASSAY_FALLBACK_MEAN_DP = 2;
 
 /* ---------------------------------------------------------------- 品种质量项目模板 */
 
-const QUALITY_TEMPLATE_BY_ID = new Map(QUALITY_TEMPLATES.map(t => [t.id, t]));
+const ALL_QUALITY_TEMPLATES = [
+  ...QUALITY_TEMPLATES,
+  ...(typeof SULFUR_DIOXIDE_TEMPLATES === 'undefined' ? [] : SULFUR_DIOXIDE_TEMPLATES)
+];
+const QUALITY_TEMPLATE_BY_ID = new Map(ALL_QUALITY_TEMPLATES.map(t => [t.id, t]));
 const QUALITY_TEMPLATES_BY_ITEM = new Map(
-  ['impurity', 'moisture', 'ash', 'extract'].map(item => [
-    item, QUALITY_TEMPLATES.filter(t => t.item === item)
+  ['impurity', 'moisture', 'ash', 'extract', 'sulfur'].map(item => [
+    item, ALL_QUALITY_TEMPLATES.filter(t => t.item === item)
   ])
 );
 
@@ -538,6 +542,65 @@ const CALCS = [
       });
     },
     note: '“水分”按百分数填写（例：13.6 表示 13.6%），公式内部自动换算为小数参与 (1 − 水分) 的计算。'
+  },
+
+  /* ---------------- 5. 二氧化硫残留量 ---------------- */
+  {
+    id: 'sulfur',
+    tab: '二氧化硫',
+    section: '【检查】二氧化硫残留量',
+    method: '照二氧化硫残留量测定法（通则2331）测定。',
+    unit: 'mg/kg',
+    dp: { ind:1, mean:0 },
+    rows: [
+      { t:'spanIn', k:'C', lab:'氢氧化钠滴定液浓度 C（mol/L）' },
+      { t:'spanIn', k:'Vblank', lab:'空白消耗体积 V<sub>空</sub>（ml）' },
+      { t:'spanIn', k:'VblankCorr', lab:'空白滴定管校正值 ΔV<sub>空</sub>（ml，可填正/负）' },
+      { t:'spanOut', k:'VblankPrime', lab:'空白校正后体积 V′<sub>空</sub>（ml）' },
+      { t:'in', k:'Ws', lab:'样重 M（g）' },
+      { t:'in', k:'Vsample', lab:'供试品消耗体积 V<sub>样</sub>（ml）' },
+      { t:'in', k:'VsampleCorr', lab:'供试品滴定管校正值 ΔV<sub>样</sub>（ml，可填正/负）' },
+      { t:'out', k:'Vprime', lab:'供试品校正后体积 V′<sub>样</sub>（ml）' },
+      { t:'out', k:'X', lab:'二氧化硫残留量 X（mg/kg）' },
+      { t:'spanOut', k:'RD', lab:'相对偏差(%)' },
+      { t:'spanOut', k:'MEAN', lab:'平均含量 <span style="text-decoration:overline">X</span>（mg/kg）' }
+    ],
+    formula: () => `X = ${frac('|V′<sub>样</sub> − V′<sub>空</sub>| × C × 0.032 × 10<sup>6</sup>', 'M')}（mg/kg）`,
+    compute(g, gs){
+      const C = gs('C');
+      const Vblank = gs('Vblank');
+      const VblankCorrRaw = gs('VblankCorr');
+      const VblankCorr = isFinite(VblankCorrRaw) ? VblankCorrRaw : 0;
+      const VblankPrime = isFinite(Vblank) ? Vblank + VblankCorr : NaN;
+      const Vprime = [1,2].map(i => {
+        const v = g('Vsample', i), corrRaw = g('VsampleCorr', i);
+        const corr = isFinite(corrRaw) ? corrRaw : 0;
+        return isFinite(v) ? v + corr : NaN;
+      });
+      const x = [1,2].map((i, index) => {
+        const M = g('Ws', i), Vp = Vprime[index];
+        if (![C, VblankPrime, Vp, M].every(isFinite) || M === 0) return NaN;
+        return Math.abs(Vp - VblankPrime) * C * 0.032 * 1e6 / M;
+      });
+      return { x, outputs:{ VblankPrime, Vprime } };
+    },
+    subst(g, dp, he, gs){
+      const C = gs('C');
+      const Vblank = gs('Vblank');
+      const VblankCorrRaw = gs('VblankCorr');
+      const VblankCorr = isFinite(VblankCorrRaw) ? VblankCorrRaw : 0;
+      const VblankPrime = isFinite(Vblank) ? Vblank + VblankCorr : NaN;
+      return [1,2].map(i => {
+        const M = g('Ws', i), V = g('Vsample', i), corrRaw = g('VsampleCorr', i);
+        const corr = isFinite(corrRaw) ? corrRaw : 0;
+        const Vp = isFinite(V) ? V + corr : NaN;
+        if (![C, VblankPrime, Vp, M].every(isFinite) || M === 0) return '';
+        const result = Math.abs(Vp - VblankPrime) * C * 0.032 * 1e6 / M;
+        return `X<sub>${i}</sub> = ${frac(`|${Vp} − ${VblankPrime}| × ${C} × 0.032 × 10<sup>6</sup>`, M)} = `
+             + `<span class="sx">${fmt(result, dp, he)} mg/kg</span>`;
+      });
+    },
+    note: '按检验记录公式计算：校正后体积 = 消耗体积 + 滴定管校正值；没有校正值可留空（按 0 计算），校正值为负数时请直接填写负号。空白体积用于两份平行样，并按实际标定的氢氧化钠滴定液浓度计算。'
   }
 ];
 
@@ -556,7 +619,7 @@ function rowsForCalc(c){
   return c.rows;
 }
 
-/* ---------------- 5. 含量测定（HPLC 外标法）单独渲染 ---------------- */
+/* ---------------- 6. 含量测定（HPLC / GC）单独渲染 ---------------- */
 function assayUnitScale(){
   return ({ '%':0.1, 'mg/g':1, 'g/kg':1, 'μg/g':1000, 'mg/kg':1000, 'g/g':0.001 })[assayUnit()] || 0.1;
 }
@@ -748,12 +811,12 @@ function renderQualityPicker(c){
   const selectedRaw = productTemplates.filter(t => t.kind === '原料').length;
   const selectedFinished = productTemplates.length - selectedRaw;
   const otherRawItems = selectedProduct && !selectedRaw
-    ? ['impurity', 'moisture', 'ash', 'extract']
+    ? ['impurity', 'moisture', 'ash', 'extract', 'sulfur']
       .filter(item => item !== c.id)
       .filter(item => qualityTemplatesFor(item).some(t =>
         t.kind === '原料' && (t.baseProduct || t.product) === selectedProduct))
     : [];
-  const itemNames = { impurity:'杂质', moisture:'水分', ash:'总灰分', extract:'浸出物' };
+  const itemNames = { impurity:'杂质', moisture:'水分', ash:'总灰分', extract:'浸出物', sulfur:'二氧化硫' };
   return `
     <div class="quality-picker no-print" data-quality-picker="${c.id}">
       <div class="quality-picker-title">
@@ -810,7 +873,7 @@ function renderVerdict(c){
           <option value="le">不得过</option>
           <option value="ge">不得少于</option>
         </select>
-        ${inlineInput(c.id + '.limval', '', 'w120')} %
+          ${inlineInput(c.id + '.limval', '', 'w120')} ${esc(c.unit || '%')}
       </span>
       <span class="judge none" id="${c.id}.judge">待计算</span>
     </div>
@@ -1122,7 +1185,17 @@ function computeCalc(c){
   const indDp  = calcDp(c, 'ind');
   const meanDp = calcDp(c, 'mean');
 
-  const r = summarize(c.compute(g, gs).x, indDp, he);
+  const computed = c.compute(g, gs);
+  const r = summarize(computed.x, indDp, he);
+
+  Object.entries(computed.outputs || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)){
+      value.forEach((item, index) =>
+        setOut(`${c.id}.out.${key}.${index + 1}`, isFinite(item) ? fmt(item, 3, he) : ''));
+    } else {
+      setOut(`${c.id}.out.${key}`, isFinite(value) ? fmt(value, 3, he) : '');
+    }
+  });
 
   [1,2].forEach(i => setOut(`${c.id}.out.X.${i}`,
     isFinite(r.x[i-1]) ? r.x[i-1].toFixed(indDp) : ''));
@@ -1133,7 +1206,7 @@ function computeCalc(c){
   const se = document.getElementById(`${c.id}.subst`);
   if (se){
     se.innerHTML = sub + (isFinite(r.mean)
-      ? `<br><span style="text-decoration:overline">X</span> = <span class="sx">${fmt(r.mean, meanDp, he)}%</span>
+      ? `<br><span style="text-decoration:overline">X</span> = <span class="sx">${fmt(r.mean, meanDp, he)} ${esc(c.unit || '%')}</span>
          　　　相对偏差 = <span class="sx">${isFinite(r.rd) ? fmt(r.rd, 1, he) : '—'}%</span>` : '');
   }
 
