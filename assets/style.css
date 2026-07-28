@@ -230,6 +230,46 @@ td.spanall{background:#fdfdfd}
 }
 .analyte-bar button.on{background:var(--accent); color:#fff; border-color:var(--accent)}
 
+/* ---------- 品种模板搜索 ---------- */
+.quality-picker{
+  position:relative; margin:10px 0 14px; padding:10px 12px;
+  border:1px solid #d8d3ca; border-radius:5px; background:#faf9f6;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:13px;
+}
+.quality-picker-title{display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; margin-bottom:8px}
+.quality-picker-title span{color:#777; font-size:12px}
+.quality-search-row{display:flex; flex-wrap:wrap; gap:8px}
+.quality-search{
+  width:min(520px,100%); padding:7px 10px;
+  border:1px solid #999; border-radius:4px; background:#fff; color:#222;
+  font-family:inherit; font-size:13px;
+}
+.quality-search:focus{outline:2px solid #c9daf8; border-color:var(--accent)}
+.quality-search-row button{
+  padding:6px 12px; cursor:pointer;
+  border:1px solid #aaa; border-radius:4px; background:#fff; color:#444;
+  font-family:inherit;
+}
+.quality-selected{margin-top:7px; color:#555}
+.quality-results{
+  position:absolute; z-index:30; left:12px; right:12px; top:92px;
+  max-height:360px; overflow:auto;
+  border:1px solid #999; border-radius:5px; background:#fff;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+}
+.quality-search-count,.quality-search-hint{padding:9px 12px; color:#666; background:#f5f3ef}
+.quality-result{
+  display:block; width:100%; padding:8px 12px; text-align:left; cursor:pointer;
+  border:0; border-top:1px solid #eee; background:#fff; color:#222;
+  font-family:inherit;
+}
+.quality-result:hover,.quality-result:focus{background:#eef4ff; outline:none}
+.quality-result span{display:block; font-weight:700}
+.quality-result small{
+  display:block; margin-top:3px; overflow:hidden; color:#666;
+  white-space:nowrap; text-overflow:ellipsis;
+}
+
 /* ---------- 站脚 ---------- */
 .site-foot{
   max-width:1000px; margin:0 auto; padding:0 16px 40px;

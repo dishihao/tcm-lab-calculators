@@ -3,3 +3,4 @@ Thumbs.db
 desktop.ini
 .DS_Store
 *.log
+tools/quality-template-extract.json

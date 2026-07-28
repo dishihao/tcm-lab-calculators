@@ -325,6 +325,26 @@ function platesDefault(){
 /** 标准规定留空时平均含量的兜底位数（填了限度就按限度的位数走） */
 const ASSAY_FALLBACK_MEAN_DP = 2;
 
+/* ---------------------------------------------------------------- 品种质量项目模板 */
+
+const QUALITY_TEMPLATE_BY_ID = new Map(QUALITY_TEMPLATES.map(t => [t.id, t]));
+const QUALITY_TEMPLATES_BY_ITEM = new Map(
+  ['impurity', 'moisture', 'ash', 'extract'].map(item => [
+    item, QUALITY_TEMPLATES.filter(t => t.item === item)
+  ])
+);
+
+function qualityTemplate(id){ return QUALITY_TEMPLATE_BY_ID.get(id); }
+function qualityTemplatesFor(item){ return QUALITY_TEMPLATES_BY_ITEM.get(item) || []; }
+function qualityTemplateForCalc(calcId){ return qualityTemplate(get(`${calcId}.template`)); }
+function qualityMethodType(calcId){
+  const t = qualityTemplateForCalc(calcId);
+  return t ? t.methodType : 'default';
+}
+function qualitySearchText(t){
+  return `${t.label} ${t.product} ${t.kind} ${t.variant || ''} ${t.sourceFile || ''}`.toLowerCase();
+}
+
 /* ---------------------------------------------------------------- 计算器定义 */
 
 const CALCS = [
@@ -380,8 +400,16 @@ const CALCS = [
       { t:'spanOut', k:'RD',   lab:'相对偏差(%)' },
       { t:'spanOut', k:'MEAN', lab:'平均值 <span style="text-decoration:overline">X</span>（%）' }
     ],
-    formula: () => `X = ${frac('W<sub>0</sub> + W<sub>样</sub> − W<sub>1</sub>', 'W<sub>样</sub>')} × 100%`,
+    formula: () => qualityMethodType('moisture') === 'fourth'
+      ? `X = ${frac('V<sub>水</sub>', 'W<sub>样</sub>')} × 100%`
+      : `X = ${frac('W<sub>0</sub> + W<sub>样</sub> − W<sub>1</sub>', 'W<sub>样</sub>')} × 100%`,
     compute(g){
+      if (qualityMethodType('moisture') === 'fourth'){
+        return { x:[1,2].map(i => {
+          const Ws = g('Ws', i), Vwater = g('Vwater', i);
+          return (isFinite(Ws) && isFinite(Vwater) && Ws !== 0) ? Vwater / Ws * 100 : NaN;
+        }) };
+      }
       const x = [1,2].map(i => {
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1b', i);
         return (isFinite(W0) && isFinite(Ws) && isFinite(W1) && Ws !== 0)
@@ -390,6 +418,14 @@ const CALCS = [
       return { x };   // 汇总（修约→平均→偏差）统一交给 summarize()
     },
     subst(g, dp, he){
+      if (qualityMethodType('moisture') === 'fourth'){
+        return [1,2].map(i => {
+          const Ws = g('Ws', i), Vwater = g('Vwater', i);
+          if (!isFinite(Ws) || !isFinite(Vwater) || Ws === 0) return '';
+          return `X<sub>${i}</sub> = ${frac(Vwater, Ws)} × 100% = `
+               + `<span class="sx">${fmt(Vwater/Ws*100, dp, he)}%</span>`;
+        });
+      }
       return [1,2].map(i => {
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1b', i);
         if (!isFinite(W0) || !isFinite(Ws) || !isFinite(W1) || Ws === 0) return '';
@@ -488,6 +524,21 @@ const CALCS = [
     note: '“水分”按百分数填写（例：13.6 表示 13.6%），公式内部自动换算为小数参与 (1 − 水分) 的计算。'
   }
 ];
+
+const MOISTURE_FOURTH_ROWS = [
+  { t:'in', k:'Ws', lab:'称样量 W<sub>样</sub>（g）' },
+  { t:'in', k:'Vwater', lab:'馏出水量 V<sub>水</sub>（ml）' },
+  { t:'out', k:'X', lab:'水分 X（%）' },
+  { t:'spanOut', k:'RD', lab:'相对偏差(%)' },
+  { t:'spanOut', k:'MEAN', lab:'平均值 <span style="text-decoration:overline">X</span>（%）' }
+];
+
+function rowsForCalc(c){
+  if (c.id === 'moisture' && qualityMethodType(c.id) === 'fourth'){
+    return MOISTURE_FOURTH_ROWS;
+  }
+  return c.rows;
+}
 
 /* ---------------- 5. 含量测定（HPLC 外标法）单独渲染 ---------------- */
 const ASSAY = {
@@ -606,7 +657,7 @@ function outCell(id){
 
 /** 结果与计算表 */
 function renderTable(c){
-  const rows = c.rows.map(r => {
+  const rows = rowsForCalc(c).map(r => {
     let lab = r.lab;
     if (r.params){
       lab += '（' + r.params.map(pm =>
@@ -651,11 +702,38 @@ function renderDp(c){
   </div>`;
 }
 
+function renderQualityPicker(c){
+  const tpl = qualityTemplateForCalc(c.id);
+  const count = qualityTemplatesFor(c.id).length;
+  return `
+    <div class="quality-picker no-print" data-quality-picker="${c.id}">
+      <div class="quality-picker-title">
+        <b>品种模板</b>
+        <span>${count} 条原料/成品记录，可搜索品种、炮制名或地区标准</span>
+      </div>
+      <div class="quality-search-row">
+        <input class="quality-search" type="search" data-quality-search="${c.id}"
+          placeholder="输入关键词搜索，例如：薄荷、酒黄精、上海2018" autocomplete="off">
+        ${tpl ? `<button type="button" data-clear-quality-template="${c.id}">清除模板</button>` : ''}
+      </div>
+      <div class="quality-selected">
+        ${tpl
+          ? `当前：<b>${esc(tpl.label)}</b>`
+          : '当前：<b>自定义</b>（手工填写标准限度）'}
+      </div>
+      <div class="quality-results" data-quality-results="${c.id}" hidden></div>
+    </div>`;
+}
+
 /** 标准规定 + 符合性判定 */
 function renderVerdict(c){
+  const tpl = qualityTemplateForCalc(c.id);
   return `
   <div class="verdict">
-    <div class="sec-num">标准规定：
+    ${tpl
+      ? `<div class="standard-quote"><b>标准规定：</b>${esc(tpl.standardText)}</div>
+         <div class="sec-num">判定限度：`
+      : `<div class="sec-num">标准规定：`}
       <span class="limit-edit">
         <select data-k="${c.id}.limop" class="dpsel">
           <option value="le">不得过</option>
@@ -671,10 +749,12 @@ function renderVerdict(c){
 /* ---------------------------------------------------------------- 渲染整页 */
 
 function renderSheet(c){
+  const tpl = qualityTemplateForCalc(c.id);
   return `
   <section class="sheet" data-sheet="${c.id}">
     <h2 class="sec">${c.section}</h2>
-    <div class="method">${c.method}</div>
+    ${renderQualityPicker(c)}
+    <div class="method">${esc(tpl ? tpl.method : c.method)}</div>
     ${renderTable(c)}
     ${renderDp(c)}
     <div class="formula-wrap">
@@ -682,6 +762,7 @@ function renderSheet(c){
       <div class="subst" id="${c.id}.subst"></div>
     </div>
     ${renderVerdict(c)}
+    ${tpl ? `<div class="note">当前模板：${esc(tpl.label)}；标准原文及法定判定限度来自 ${esc(tpl.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用标准。</div>` : ''}
     ${c.note ? `<div class="note">${c.note}</div>` : ''}
   </section>`;
 }
@@ -894,7 +975,7 @@ function setOut(id, txt){
 
 /** 恒重差提示 */
 function hzHint(c){
-  (c.rows || []).forEach(r => {
+  rowsForCalc(c).forEach(r => {
     if (!r.hz) return;
     [1,2].forEach(i => {
       const el = document.getElementById(`${c.id}.hz.${r.k}.${i}`);
@@ -1144,6 +1225,83 @@ function applyAssayRecord(recordKey){
   applyAssayTemplate(target.id);
 }
 
+function qualitySnapshot(calcId){
+  const snap = {};
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(calcId + '.') && k !== `${calcId}.template`) snap[k] = store[k];
+  });
+  return snap;
+}
+
+function applyQualityTemplate(calcId, templateId){
+  const template = qualityTemplate(templateId);
+  if (!template || template.item !== calcId) return;
+
+  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
+    ? store.__qualityTemplateStates : {};
+  const oldId = get(`${calcId}.template`) || 'custom';
+  const oldKey = `${calcId}:${oldId}`;
+  const newKey = `${calcId}:${templateId}`;
+  if (oldId === templateId) return;
+
+  states[oldKey] = qualitySnapshot(calcId);
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(calcId + '.')) delete store[k];
+  });
+
+  const restored = states[newKey];
+  if (restored) Object.assign(store, restored);
+  if (!restored){
+    store[`${calcId}.limop`] = template.limop;
+    store[`${calcId}.limval`] = template.limit;
+  }
+  store[`${calcId}.template`] = templateId;
+  store[`${calcId}.productName`] = template.label;
+  store.__qualityTemplateStates = states;
+  build();
+  showTab(calcId);
+}
+
+function clearQualityTemplate(calcId){
+  const current = get(`${calcId}.template`);
+  if (!current) return;
+  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
+    ? store.__qualityTemplateStates : {};
+  states[`${calcId}:${current}`] = qualitySnapshot(calcId);
+  Object.keys(store).forEach(k => {
+    if (k.startsWith(calcId + '.')) delete store[k];
+  });
+  const restored = states[`${calcId}:custom`];
+  if (restored) Object.assign(store, restored);
+  store[`${calcId}.template`] = '';
+  store.__qualityTemplateStates = states;
+  build();
+  showTab(calcId);
+}
+
+function renderQualitySearchResults(calcId, query){
+  const box = document.querySelector(`[data-quality-results="${CSS.escape(calcId)}"]`);
+  if (!box) return;
+  const q = String(query || '').trim().toLowerCase();
+  if (!q){
+    box.innerHTML = '<div class="quality-search-hint">请输入品种、原料/成品、炮制名或地区关键词。</div>';
+    box.hidden = false;
+    return;
+  }
+  const all = qualityTemplatesFor(calcId);
+  const matched = all.filter(t => qualitySearchText(t).includes(q));
+  const shown = matched.slice(0, 40);
+  box.innerHTML = shown.length
+    ? `<div class="quality-search-count">找到 ${matched.length} 条${matched.length > shown.length ? `，显示前 ${shown.length} 条` : ''}</div>` +
+      shown.map(t => `
+        <button type="button" class="quality-result" data-quality-template="${t.id}">
+          <span>${esc(t.label)}</span>
+          <small>${esc(t.standardText)}</small>
+        </button>`).join('')
+    : '<div class="quality-search-hint">没有匹配模板，请换一个关键词。</div>';
+  box.hidden = false;
+}
+
 /** 判定方向：浸出物与含量测定是"不得少于"，其余是"不得过" */
 function seedDefaults(){
   CALCS.forEach(c => {
@@ -1191,6 +1349,10 @@ function showTab(id){
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.matches('[data-quality-search]')){
+    renderQualitySearchResults(t.dataset.qualitySearch, t.value);
+    return;
+  }
   if (!t.dataset || !t.dataset.k) return;
   set(t.dataset.k, t.type === 'checkbox' ? (t.checked ? '1' : '') : t.value);
   recompute();
@@ -1226,6 +1388,17 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('click', e => {
+  const qualityResult = e.target.closest('[data-quality-template]');
+  if (qualityResult){
+    const picker = qualityResult.closest('[data-quality-picker]');
+    if (picker) applyQualityTemplate(picker.dataset.qualityPicker, qualityResult.dataset.qualityTemplate);
+    return;
+  }
+  const clearQuality = e.target.closest('[data-clear-quality-template]');
+  if (clearQuality){
+    clearQualityTemplate(clearQuality.dataset.clearQualityTemplate);
+    return;
+  }
   const tab = e.target.closest('.tab');
   if (tab){ showTab(tab.dataset.tab); return; }
   if (e.target.closest('[data-apply-assay-product]')){
@@ -1234,7 +1407,24 @@ document.addEventListener('click', e => {
   }
 });
 
+document.addEventListener('focusin', e => {
+  if (e.target.matches('[data-quality-search]')){
+    renderQualitySearchResults(e.target.dataset.qualitySearch, e.target.value);
+  }
+});
+
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-quality-picker]')) return;
+  $$('.quality-results').forEach(box => { box.hidden = true; });
+});
+
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && e.target.matches('[data-quality-search]')){
+    const box = document.querySelector(`[data-quality-results="${CSS.escape(e.target.dataset.qualitySearch)}"]`);
+    if (box) box.hidden = true;
+    e.target.blur();
+    return;
+  }
   if (e.key !== 'Enter' || !e.target.matches('[data-assay-product]')) return;
   e.preventDefault();
   applyAssayProduct(e.target.value);
