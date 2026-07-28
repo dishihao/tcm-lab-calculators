@@ -823,7 +823,11 @@ function renderSheet(c){
   const tpl = qualityTemplateForCalc(c.id);
   return `
   <section class="sheet" data-sheet="${c.id}">
-    <h2 class="sec">${c.section}</h2>
+    <div class="sheet-heading">
+      <h2 class="sec">${c.section}</h2>
+      <button type="button" class="initialize-button no-print"
+        data-initialize-project="${c.id}" title="清空当前项目的检验录入值，保留已选品种模板">初始化</button>
+    </div>
     ${renderQualityPicker(c)}
     <div class="method">${esc(tpl ? tpl.method : c.method)}</div>
     ${renderTable(c)}
@@ -981,7 +985,11 @@ function renderAssaySheet(){
 
   return `
   <section class="sheet" data-sheet="assay">
-    <h2 class="sec">【含量测定】</h2>
+    <div class="sheet-heading">
+      <h2 class="sec">【含量测定】</h2>
+      <button type="button" class="initialize-button no-print"
+        data-initialize-project="assay" title="清空当前项目的检验录入值，保留已选品种模板">初始化</button>
+    </div>
     <div class="method">照${T.label}（通则 ${T.gz}）测定，${mode === 'internal' ? '内标法' : '外标法'}。</div>
 
     <div class="analyte-bar no-print">
@@ -1567,6 +1575,93 @@ function renderQualitySearchResults(calcId, query){
   box.hidden = false;
 }
 
+function initializeQualityProject(calcId){
+  const c = CALCS.find(item => item.id === calcId);
+  if (!c) return;
+  const templateId = get(`${calcId}.template`);
+  const template = qualityTemplate(templateId);
+  const selectedProduct = template
+    ? (template.baseProduct || template.product)
+    : get(`${calcId}.selectedProduct`);
+  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
+    ? store.__qualityTemplateStates : {};
+
+  delete states[`${calcId}:${templateId || 'custom'}`];
+  Object.keys(store).forEach(key => {
+    if (key.startsWith(calcId + '.')) delete store[key];
+  });
+
+  if (template){
+    store[`${calcId}.template`] = templateId;
+    store[`${calcId}.productName`] = template.label;
+    store[`${calcId}.selectedProduct`] = selectedProduct;
+    store[`${calcId}.limop`] = template.limop;
+    store[`${calcId}.limval`] = template.limit;
+  } else {
+    store[`${calcId}.template`] = '';
+    if (selectedProduct) store[`${calcId}.selectedProduct`] = selectedProduct;
+    store[`${calcId}.limop`] = calcId === 'extract' ? 'ge' : 'le';
+  }
+  store.__qualityTemplateStates = states;
+  build();
+  showTab(calcId);
+}
+
+function initializeAssayProject(){
+  const templateId = get(AP + 'template');
+  const template = assayTemplate(templateId);
+  const selectedProduct = template ? template.product : get(AP + 'selectedProduct');
+  const customProduct = get(AP + 'productName');
+  const tech = techOf();
+  const mode = assayMode();
+  const dryBasis = get(AP + 'dryBasis');
+  const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
+    ? store.__assayTemplateStates : {};
+
+  delete states[templateId || 'custom'];
+  Object.keys(store).forEach(key => {
+    if (key.startsWith(AP)) delete store[key];
+  });
+
+  if (template){
+    store[AP + 'tech'] = template.tech;
+    store[AP + 'mode'] = template.mode;
+    store[AP + 'dryBasis'] = template.dry ? '1' : '0';
+    store[AP + 'name'] = template.name;
+    store[AP + 'formulaText'] = template.formulaText;
+    store[AP + 'internalName'] = template.internalName || '';
+    store[AP + 'platesLim'] = template.plates;
+    store[AP + 'rsdLim'] = template.rsdLimit || RSD_LIM_DEFAULT;
+    store[AP + 'limop'] = template.limop || 'ge';
+    store[AP + 'limval'] = template.limit;
+    store[AP + 'limmax'] = template.upperLimit || '';
+    store[AP + 'unit'] = template.unit || '%';
+    store[AP + 'productName'] = template.product;
+    store[AP + 'selectedProduct'] = template.product;
+    store[AP + 'template'] = templateId;
+  } else {
+    store[AP + 'tech'] = tech;
+    store[AP + 'mode'] = mode;
+    store[AP + 'dryBasis'] = dryBasis;
+    store[AP + 'limop'] = 'ge';
+    store[AP + 'productName'] = customProduct;
+    if (selectedProduct) store[AP + 'selectedProduct'] = selectedProduct;
+    store[AP + 'template'] = '';
+  }
+  store.__assayTemplateStates = states;
+  build();
+  showTab('assay');
+}
+
+function initializeProject(projectId){
+  const tab = projectId === 'assay'
+    ? ASSAY.tab
+    : (CALCS.find(item => item.id === projectId) || {}).tab;
+  if (!tab || !window.confirm(`确定初始化“${tab}”吗？\n当前项目已填写的检验数据将被清空，所选品种模板和标准规定会保留。`)) return;
+  if (projectId === 'assay') initializeAssayProject();
+  else initializeQualityProject(projectId);
+}
+
 /** 判定方向：浸出物与含量测定是"不得少于"，其余是"不得过" */
 function seedDefaults(){
   CALCS.forEach(c => {
@@ -1661,6 +1756,11 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('click', e => {
+  const initialize = e.target.closest('[data-initialize-project]');
+  if (initialize){
+    initializeProject(initialize.dataset.initializeProject);
+    return;
+  }
   const assayProduct = e.target.closest('[data-assay-product-choice]');
   if (assayProduct){
     selectAssayProduct(assayProduct.dataset.assayProductChoice);
