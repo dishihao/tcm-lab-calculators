@@ -8,3 +8,4 @@ output/
 tools/*quality-template*-extract.json
 tools/hplc-template-extract.json
 tools/sulfur-dioxide-template-extract.json
+tools/identification-template-extract*.json

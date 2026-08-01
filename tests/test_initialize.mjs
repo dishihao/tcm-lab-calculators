@@ -73,8 +73,26 @@ assert(await field(page, 'assay.name').inputValue() === assayTemplate.name,
 assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].selected`).count() === 1,
   '含量测定: 初始化后没有保留模板');
 
-assert(await page.locator('[data-initialize-project]').count() === 6, '初始化按钮没有覆盖全部六个项目');
+for (const item of ['microscopy', 'tlc', 'physicochemical']) {
+  const template = await page.evaluate(id => IDENTIFICATION_TEMPLATES.find(t => t.item === id), item);
+  assert(template, `${item}: 没有鉴别模板`);
+  await page.locator(`[data-tab="${item}"]`).click();
+  await page.locator(`[data-identification-search="${item}"]`).fill(template.baseProduct);
+  await page.locator(`[data-identification-product="${template.baseProduct}"]`).click();
+  await page.locator(`[data-identification-template="${template.id}"]`).click();
+  await field(page, `${item}.sampleNo`).fill('TEST-001');
+  await field(page, `${item}.result`).fill('测试填写内容');
+  await field(page, `${item}.conclusion`).selectOption('符合规定');
+  await acceptInitialize(page, item);
+  assert(await field(page, `${item}.sampleNo`).inputValue() === '', `${item}: 样品编号没有清空`);
+  assert(await field(page, `${item}.result`).inputValue() === '', `${item}: 检验结果没有清空`);
+  assert(await field(page, `${item}.conclusion`).inputValue() === '', `${item}: 结论没有清空`);
+  assert(await page.locator(`[data-identification-template="${template.id}"].selected`).count() === 1,
+    `${item}: 初始化后没有保留鉴别模板`);
+}
+
+assert(await page.locator('[data-initialize-project]').count() === 9, '初始化按钮没有覆盖全部九个项目');
 await page.screenshot({ path: 'C:/tmp/initialize-buttons.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log('PASS: 六个项目初始化按钮均能清空检验数据并保留当前模板标准');
+console.log('PASS: 九个项目初始化按钮均能清空检验数据并保留当前模板标准');

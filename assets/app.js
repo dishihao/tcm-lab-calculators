@@ -365,6 +365,47 @@ function qualityStandardText(t){
   return String(t.standardText || '').replace(/^\d*\.?\s*标准规定\s*[：:]?\s*/, '');
 }
 
+/* ---------------------------------------------------------------- 鉴别项目模板 */
+
+const IDENTIFICATION_PROJECTS = [
+  { id:'microscopy', tab:'显微', section:'【鉴别】显微', resultLabel:'显微观察结果',
+    extraFields:[['microscopeModel', '生物显微镜型号'], ['microscopeNo', '生物显微镜编号']] },
+  { id:'tlc', tab:'薄层', section:'【鉴别】薄层色谱', resultLabel:'薄层色谱结果',
+    extraFields:[['plateBatch', '薄层板批号'], ['plateSource', '薄层板来源']] },
+  { id:'physicochemical', tab:'理化', section:'【鉴别】理化', resultLabel:'实验现象及结果', extraFields:[] }
+];
+const IDENTIFICATION_PROJECT_BY_ID = new Map(IDENTIFICATION_PROJECTS.map(project => [project.id, project]));
+const ALL_IDENTIFICATION_TEMPLATES = typeof IDENTIFICATION_TEMPLATES === 'undefined'
+  ? [] : IDENTIFICATION_TEMPLATES;
+const IDENTIFICATION_TEMPLATE_BY_ID = new Map(ALL_IDENTIFICATION_TEMPLATES.map(template => [template.id, template]));
+const IDENTIFICATION_TEMPLATES_BY_ITEM = new Map(
+  IDENTIFICATION_PROJECTS.map(project => [
+    project.id, ALL_IDENTIFICATION_TEMPLATES.filter(template => template.item === project.id)
+  ])
+);
+
+function identificationTemplate(id){ return IDENTIFICATION_TEMPLATE_BY_ID.get(id); }
+function identificationTemplatesFor(item){ return IDENTIFICATION_TEMPLATES_BY_ITEM.get(item) || []; }
+function identificationProductsFor(item){
+  const groups = new Map();
+  identificationTemplatesFor(item).forEach(template => {
+    const name = template.baseProduct || template.product;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(template);
+  });
+  return [...groups].map(([name, templates]) => ({ name, templates }));
+}
+function identificationTemplateForProject(projectId){
+  return identificationTemplate(get(`${projectId}.template`));
+}
+function identificationSearchText(template){
+  const blockText = (template.blocks || [])
+    .flatMap(block => [block.title || '', ...(block.lines || [])])
+    .join(' ');
+  return `${template.label} ${template.baseProduct || ''} ${template.product} ${template.kind} `
+    + `${template.variant || ''} ${template.sourceFile || ''} ${blockText}`.toLowerCase();
+}
+
 /* ---------------------------------------------------------------- 计算器定义 */
 
 const CALCS = [
@@ -878,6 +919,129 @@ function renderVerdict(c){
       <span class="judge none" id="${c.id}.judge">待计算</span>
     </div>
   </div>`;
+}
+
+function identificationTemplateSummary(template){
+  const lines = (template.blocks || []).flatMap(block => block.lines || []);
+  return lines[0] || (template.blocks && template.blocks[0] && template.blocks[0].title) || '鉴别记录模板';
+}
+
+function renderIdentificationPicker(project){
+  const template = identificationTemplateForProject(project.id);
+  const templates = identificationTemplatesFor(project.id);
+  const products = identificationProductsFor(project.id);
+  const selectedProduct = template
+    ? (template.baseProduct || template.product)
+    : get(`${project.id}.selectedProduct`);
+  const productTemplates = selectedProduct
+    ? templates
+      .filter(item => (item.baseProduct || item.product) === selectedProduct)
+      .sort((a, b) => (a.kind === b.kind
+        ? a.label.localeCompare(b.label, 'zh-CN')
+        : (a.kind === '原料' ? -1 : 1)))
+    : [];
+  const rawCount = templates.filter(item => item.kind === '原料').length;
+  const finishedCount = templates.length - rawCount;
+  const selectedRaw = productTemplates.filter(item => item.kind === '原料').length;
+  const selectedFinished = productTemplates.length - selectedRaw;
+  return `
+    <div class="quality-picker no-print" data-identification-picker="${project.id}">
+      <div class="quality-picker-title">
+        <b>第一步：选择品名</b>
+        <span>${products.length} 个品名，共 ${templates.length} 条模板（原料 ${rawCount}，成品 ${finishedCount}）</span>
+      </div>
+      ${selectedProduct ? `
+        <div class="quality-product-selected">
+          已选品名：<b>${esc(selectedProduct)}</b>
+          <button type="button" data-change-identification-product="${project.id}">更换品名</button>
+        </div>` : `
+        <div class="quality-search-row">
+          <input class="quality-search" type="search" data-identification-search="${project.id}"
+            placeholder="输入品名、炮制名或地区标准" autocomplete="off">
+        </div>`}
+      <div class="quality-results" data-identification-results="${project.id}" hidden></div>
+
+      <div class="quality-step-two${selectedProduct ? '' : ' disabled'}">
+        <div class="quality-step-title"><b>第二步：选择原料/成品模板</b>
+          ${selectedProduct
+            ? `<span>找到 ${productTemplates.length} 条：原料 ${selectedRaw}，成品 ${selectedFinished}</span>`
+            : '<span>请先选择品名</span>'}
+        </div>
+        ${selectedProduct ? `<div class="quality-template-options">
+          ${productTemplates.map(item => `
+            <button type="button" class="quality-template-option${template && template.id === item.id ? ' selected' : ''}"
+              data-identification-template="${item.id}">
+              <span>${esc(item.label)}${template && template.id === item.id ? ' ✓' : ''}</span>
+              <small>${esc(identificationTemplateSummary(item))}</small>
+            </button>`).join('')}
+        </div>` : ''}
+      </div>
+      <div class="quality-selected">
+        ${template ? `当前模板：<b>${esc(template.label)}</b>`
+          : selectedProduct ? '尚未套用模板。' : '请先搜索并选择品名。'}
+        ${template ? `<button type="button" data-clear-identification-template="${project.id}">取消模板</button>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderIdentificationBlocks(template){
+  return (template.blocks || []).map(block => `
+    <section class="identification-block">
+      ${block.title ? `<h3>${esc(block.title)}</h3>` : ''}
+      <div class="identification-lines">
+        ${(block.lines || []).map(line => `<p>${esc(line)}</p>`).join('')}
+      </div>
+    </section>`).join('');
+}
+
+function renderIdentificationRecord(project){
+  const extra = project.extraFields.map(([key, label]) => `
+    <label><span>${label}</span>
+      <input type="text" autocomplete="off" data-k="${project.id}.${key}"
+        value="${esc(get(`${project.id}.${key}`))}">
+    </label>`).join('');
+  return `
+    <div class="identification-record">
+      <h3>检验记录</h3>
+      <div class="identification-fields">
+        <label><span>样品编号</span>
+          <input type="text" autocomplete="off" data-k="${project.id}.sampleNo"
+            value="${esc(get(`${project.id}.sampleNo`))}">
+        </label>
+        ${extra}
+      </div>
+      <label class="identification-result"><span>${project.resultLabel}</span>
+        <textarea rows="5" data-k="${project.id}.result">${esc(get(`${project.id}.result`))}</textarea>
+      </label>
+      <label class="identification-conclusion"><span>结论</span>
+        <select data-k="${project.id}.conclusion">
+          <option value="">待判定</option>
+          <option value="符合规定">符合规定</option>
+          <option value="不符合规定">不符合规定</option>
+        </select>
+      </label>
+    </div>`;
+}
+
+function renderIdentificationSheet(project){
+  const template = identificationTemplateForProject(project.id);
+  return `
+    <section class="sheet" data-sheet="${project.id}">
+      <div class="sheet-heading">
+        <h2 class="sec">${project.section}</h2>
+        <button type="button" class="initialize-button no-print"
+          data-initialize-project="${project.id}" title="清空当前项目的可填数据，保留已选品种模板">初始化</button>
+      </div>
+      ${renderIdentificationPicker(project)}
+      ${template ? `
+        <div class="identification-content">
+          <div class="identification-source"><b>当前模板：</b>${esc(template.label)}</div>
+          ${renderIdentificationBlocks(template)}
+        </div>
+        ${renderIdentificationRecord(project)}
+        <div class="note">模板原文来自 ${esc(template.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用鉴别内容。</div>`
+        : '<div class="identification-empty">选择品名和原料/成品模板后，显示对应的检验记录原文及填写区域。</div>'}
+    </section>`;
 }
 
 /* ---------------------------------------------------------------- 渲染整页 */
@@ -1648,6 +1812,121 @@ function renderQualitySearchResults(calcId, query){
   box.hidden = false;
 }
 
+function identificationSnapshot(projectId){
+  const snapshot = {};
+  Object.keys(store).forEach(key => {
+    if (key.startsWith(projectId + '.') &&
+        key !== `${projectId}.template` && key !== `${projectId}.selectedProduct`){
+      snapshot[key] = store[key];
+    }
+  });
+  return snapshot;
+}
+
+function clearIdentificationProjectStore(projectId){
+  Object.keys(store).forEach(key => {
+    if (key.startsWith(projectId + '.')) delete store[key];
+  });
+}
+
+function applyIdentificationTemplate(projectId, templateId){
+  const template = identificationTemplate(templateId);
+  if (!template || template.item !== projectId) return;
+  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
+    ? store.__identificationTemplateStates : {};
+  const oldId = get(`${projectId}.template`) || 'unselected';
+  if (oldId === templateId) return;
+  states[`${projectId}:${oldId}`] = identificationSnapshot(projectId);
+  clearIdentificationProjectStore(projectId);
+  const restored = states[`${projectId}:${templateId}`];
+  if (restored) Object.assign(store, restored);
+  store[`${projectId}.template`] = templateId;
+  store[`${projectId}.selectedProduct`] = template.baseProduct || template.product;
+  store.__identificationTemplateStates = states;
+  build();
+  showTab(projectId);
+}
+
+function selectIdentificationProduct(projectId, productName){
+  const product = String(productName || '').trim();
+  if (!product || !IDENTIFICATION_PROJECT_BY_ID.has(projectId)) return;
+  const current = identificationTemplateForProject(projectId);
+  if (current && (current.baseProduct || current.product) === product){
+    store[`${projectId}.selectedProduct`] = product;
+    build();
+    showTab(projectId);
+    return;
+  }
+  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
+    ? store.__identificationTemplateStates : {};
+  const oldId = get(`${projectId}.template`) || 'unselected';
+  states[`${projectId}:${oldId}`] = identificationSnapshot(projectId);
+  clearIdentificationProjectStore(projectId);
+  store[`${projectId}.template`] = '';
+  store[`${projectId}.selectedProduct`] = product;
+  store.__identificationTemplateStates = states;
+  build();
+  showTab(projectId);
+}
+
+function changeIdentificationProduct(projectId){
+  if (!IDENTIFICATION_PROJECT_BY_ID.has(projectId)) return;
+  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
+    ? store.__identificationTemplateStates : {};
+  const current = get(`${projectId}.template`) || 'unselected';
+  states[`${projectId}:${current}`] = identificationSnapshot(projectId);
+  clearIdentificationProjectStore(projectId);
+  store[`${projectId}.template`] = '';
+  store.__identificationTemplateStates = states;
+  build();
+  showTab(projectId);
+}
+
+function clearIdentificationTemplate(projectId){
+  const currentId = get(`${projectId}.template`);
+  const current = identificationTemplate(currentId);
+  if (!current) return;
+  const selectedProduct = current.baseProduct || current.product;
+  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
+    ? store.__identificationTemplateStates : {};
+  states[`${projectId}:${currentId}`] = identificationSnapshot(projectId);
+  clearIdentificationProjectStore(projectId);
+  store[`${projectId}.template`] = '';
+  store[`${projectId}.selectedProduct`] = selectedProduct;
+  store.__identificationTemplateStates = states;
+  build();
+  showTab(projectId);
+}
+
+function renderIdentificationSearchResults(projectId, query){
+  const box = document.querySelector(`[data-identification-results="${CSS.escape(projectId)}"]`);
+  if (!box || !IDENTIFICATION_PROJECT_BY_ID.has(projectId)) return;
+  const q = String(query || '').trim().toLowerCase();
+  if (!q){
+    box.innerHTML = '<div class="quality-search-hint">请输入品种、原料/成品、炮制名或地区关键词。</div>';
+    box.hidden = false;
+    return;
+  }
+  const matched = identificationProductsFor(projectId).filter(group =>
+    group.name.toLowerCase().includes(q) ||
+    group.templates.some(template => identificationSearchText(template).includes(q))
+  );
+  const shown = matched.slice(0, 40);
+  box.innerHTML = shown.length
+    ? `<div class="quality-search-count">找到 ${matched.length} 个品名${matched.length > shown.length ? `，显示前 ${shown.length} 个` : ''}</div>` +
+      shown.map(group => {
+        const raw = group.templates.filter(template => template.kind === '原料').length;
+        const finished = group.templates.length - raw;
+        return `
+          <button type="button" class="quality-result" data-identification-product="${esc(group.name)}">
+            <span>${esc(group.name)}</span>
+            <small>${group.templates.length} 条模板（原料 ${raw}，成品 ${finished}）</small>
+          </button>`;
+      }).join('')
+    : '<div class="quality-search-hint">没有匹配模板，请换一个关键词。</div>';
+  box.hidden = false;
+}
+
 function initializeQualityProject(calcId){
   const c = CALCS.find(item => item.id === calcId);
   if (!c) return;
@@ -1726,12 +2005,32 @@ function initializeAssayProject(){
   showTab('assay');
 }
 
+function initializeIdentificationProject(projectId){
+  if (!IDENTIFICATION_PROJECT_BY_ID.has(projectId)) return;
+  const templateId = get(`${projectId}.template`);
+  const template = identificationTemplate(templateId);
+  const selectedProduct = template
+    ? (template.baseProduct || template.product)
+    : get(`${projectId}.selectedProduct`);
+  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
+    ? store.__identificationTemplateStates : {};
+  delete states[`${projectId}:${templateId || 'unselected'}`];
+  clearIdentificationProjectStore(projectId);
+  if (template) store[`${projectId}.template`] = templateId;
+  else store[`${projectId}.template`] = '';
+  if (selectedProduct) store[`${projectId}.selectedProduct`] = selectedProduct;
+  store.__identificationTemplateStates = states;
+  build();
+  showTab(projectId);
+}
+
 function initializeProject(projectId){
   const tab = projectId === 'assay'
     ? ASSAY.tab
-    : (CALCS.find(item => item.id === projectId) || {}).tab;
+    : (IDENTIFICATION_PROJECT_BY_ID.get(projectId) || CALCS.find(item => item.id === projectId) || {}).tab;
   if (!tab || !window.confirm(`确定初始化“${tab}”吗？\n当前项目已填写的检验数据将被清空，所选品种模板和标准规定会保留。`)) return;
   if (projectId === 'assay') initializeAssayProject();
+  else if (IDENTIFICATION_PROJECT_BY_ID.has(projectId)) initializeIdentificationProject(projectId);
   else initializeQualityProject(projectId);
 }
 
@@ -1750,6 +2049,7 @@ function build(){
   seedDefaults();
 
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
+    .concat(IDENTIFICATION_PROJECTS.map(project => ({ id:project.id, tab:project.tab })))
     .concat([{ id:'assay', tab:ASSAY.tab }])
     .concat(window.EnvironmentRecorder
       ? [{ id:window.EnvironmentRecorder.id, tab:window.EnvironmentRecorder.tab }]
@@ -1762,6 +2062,7 @@ function build(){
 
   $('#sheets').innerHTML =
       CALCS.map(c => renderSheet(c)).join('')
+    + IDENTIFICATION_PROJECTS.map(project => renderIdentificationSheet(project)).join('')
     + renderAssaySheet()
     + (window.EnvironmentRecorder ? window.EnvironmentRecorder.render() : '');
 
@@ -1788,6 +2089,10 @@ document.addEventListener('input', e => {
   const t = e.target;
   if (t.matches('[data-assay-search]')){
     renderAssaySearchResults(t.value);
+    return;
+  }
+  if (t.matches('[data-identification-search]')){
+    renderIdentificationSearchResults(t.dataset.identificationSearch, t.value);
     return;
   }
   if (t.matches('[data-quality-search]')){
@@ -1852,6 +2157,38 @@ document.addEventListener('click', e => {
     changeAssayProduct();
     return;
   }
+  const identificationProduct = e.target.closest('[data-identification-product]');
+  if (identificationProduct){
+    const picker = identificationProduct.closest('[data-identification-picker]');
+    if (picker){
+      selectIdentificationProduct(
+        picker.dataset.identificationPicker,
+        identificationProduct.dataset.identificationProduct
+      );
+    }
+    return;
+  }
+  const identificationTemplateButton = e.target.closest('[data-identification-template]');
+  if (identificationTemplateButton){
+    const picker = identificationTemplateButton.closest('[data-identification-picker]');
+    if (picker){
+      applyIdentificationTemplate(
+        picker.dataset.identificationPicker,
+        identificationTemplateButton.dataset.identificationTemplate
+      );
+    }
+    return;
+  }
+  const clearIdentification = e.target.closest('[data-clear-identification-template]');
+  if (clearIdentification){
+    clearIdentificationTemplate(clearIdentification.dataset.clearIdentificationTemplate);
+    return;
+  }
+  const changeIdentification = e.target.closest('[data-change-identification-product]');
+  if (changeIdentification){
+    changeIdentificationProduct(changeIdentification.dataset.changeIdentificationProduct);
+    return;
+  }
   const qualityProduct = e.target.closest('[data-quality-product]');
   if (qualityProduct){
     const picker = qualityProduct.closest('[data-quality-picker]');
@@ -1886,17 +2223,29 @@ document.addEventListener('focusin', e => {
   if (e.target.matches('[data-assay-search]')){
     renderAssaySearchResults(e.target.value);
   }
+  if (e.target.matches('[data-identification-search]')){
+    renderIdentificationSearchResults(e.target.dataset.identificationSearch, e.target.value);
+  }
   if (e.target.matches('[data-quality-search]')){
     renderQualitySearchResults(e.target.dataset.qualitySearch, e.target.value);
   }
 });
 
 document.addEventListener('click', e => {
-  if (e.target.closest('[data-quality-picker]') || e.target.closest('[data-assay-picker]')) return;
+  if (e.target.closest('[data-quality-picker]') || e.target.closest('[data-assay-picker]') ||
+      e.target.closest('[data-identification-picker]')) return;
   $$('.quality-results').forEach(box => { box.hidden = true; });
 });
 
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && e.target.matches('[data-identification-search]')){
+    const box = document.querySelector(
+      `[data-identification-results="${CSS.escape(e.target.dataset.identificationSearch)}"]`
+    );
+    if (box) box.hidden = true;
+    e.target.blur();
+    return;
+  }
   if (e.key === 'Escape' && e.target.matches('[data-quality-search]')){
     const box = document.querySelector(`[data-quality-results="${CSS.escape(e.target.dataset.qualitySearch)}"]`);
     if (box) box.hidden = true;

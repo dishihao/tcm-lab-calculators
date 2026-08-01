@@ -516,6 +516,47 @@ td.spanall{background:#fdfdfd}
 .env-empty p{max-width:560px; margin:0 auto; font-size:12px; line-height:1.8}
 .env-disclaimer{margin:0 34px 28px}
 
+/* ---------- 显微 / 薄层 / 理化鉴别 ---------- */
+.identification-empty{
+  margin:18px 0; padding:18px;
+  border:1px dashed #bbb; border-radius:5px;
+  background:#fafafa; color:#777;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+}
+.identification-content{
+  margin:14px 0; padding:14px 16px;
+  border:1px solid #cfc8bd; border-radius:5px; background:#fff;
+}
+.identification-source{
+  margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e2ded6;
+  color:#555; font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:13px;
+}
+.identification-block + .identification-block{margin-top:16px; padding-top:12px; border-top:1px dashed #ccc}
+.identification-block h3{
+  margin:0 0 7px; font-family:"SimHei","黑体",sans-serif; font-size:15px;
+}
+.identification-lines{white-space:pre-wrap; overflow-wrap:anywhere}
+.identification-lines p{margin:5px 0}
+.identification-record{
+  margin:16px 0; padding:14px 16px;
+  border:1px solid #222; background:#fff;
+}
+.identification-record h3{margin:0 0 12px; font-family:"SimHei","黑体",sans-serif; font-size:15px}
+.identification-fields{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px}
+.identification-record label{display:flex; gap:8px; align-items:center}
+.identification-record label span{min-width:105px}
+.identification-record input,.identification-record textarea,.identification-record select{
+  width:100%; padding:6px 8px;
+  border:1px solid #999; border-radius:3px; background:#fff; color:var(--pen);
+  font:inherit;
+}
+.identification-record textarea{resize:vertical; min-height:112px; line-height:1.7}
+.identification-result{align-items:flex-start !important; margin-top:13px}
+.identification-conclusion{max-width:460px; margin-top:13px}
+.identification-record input:focus,.identification-record textarea:focus,.identification-record select:focus{
+  outline:2px solid #c9daf8; border-color:var(--accent);
+}
+
 /* ---------- 站脚 ---------- */
 .site-foot{
   max-width:1000px; margin:0 auto; padding:0 16px 40px;
@@ -552,6 +593,8 @@ td.spanall{background:#fdfdfd}
   .env-records{padding:16px 14px 20px; gap:18px}
   .env-record-heading{align-items:flex-start; flex-direction:column; gap:3px}
   .env-disclaimer{margin:0 14px 20px}
+  .identification-record label{align-items:flex-start; flex-direction:column; gap:4px}
+  .identification-record label span{min-width:0}
 }
 
 @media (max-width:480px){
@@ -614,6 +657,7 @@ td.spanall{background:#fdfdfd}
   .tscroll{overflow:visible}
   .tscroll table{min-width:0}
   input.cell,input.inline{color:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .identification-record input,.identification-record textarea,.identification-record select{color:#000}
   .out{color:#000}
   .formula-wrap{background:none; border:none}
   .note{background:none; border-left:2px solid #999}
