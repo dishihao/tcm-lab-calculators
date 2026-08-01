@@ -4,6 +4,7 @@ desktop.ini
 .DS_Store
 *.log
 output/
+.playwright-cli/
 tools/*quality-template*-extract.json
 tools/hplc-template-extract.json
 tools/sulfur-dioxide-template-extract.json

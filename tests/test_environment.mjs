@@ -68,6 +68,43 @@ assert(sundayValueCells.length === 40 && sundayValueCells.every(value => value.t
 assert(await page.locator('[data-env-generate]').count() === 0, '生成后仍可直接重复生成');
 assert(await page.locator('.env-primary.fixed:disabled').count() === 1, '生成后没有锁定按钮');
 
+await page.setViewportSize({ width: 390, height: 844 });
+const mobileLayout = await page.evaluate(() => ({
+  pageFits: document.documentElement.scrollWidth <= window.innerWidth + 1,
+  tables: [...document.querySelectorAll('.env-mobile-record-table')].map(table => {
+    const rows = [...table.querySelectorAll('.env-mobile-record-row:not(.env-mobile-record-header)')];
+    const firstWorkdayReadings = [...rows.find(row => !row.hasAttribute('data-env-mobile-rest'))
+      .querySelectorAll('.env-mobile-reading')];
+    return {
+      visible: getComputedStyle(table).display !== 'none',
+      fits: table.scrollWidth <= table.clientWidth + 1,
+      rowCount: rows.length,
+      restCount: rows.filter(row => row.hasAttribute('data-env-mobile-rest')).length,
+      bothPeriodsComplete: firstWorkdayReadings.length === 2 && firstWorkdayReadings.every(cell =>
+        cell.textContent.includes('℃') && cell.textContent.includes('%RH')
+      ),
+      restCellsBlank: rows.filter(row => row.hasAttribute('data-env-mobile-rest')).every(row =>
+        [...row.querySelectorAll('.env-mobile-reading')].every(cell => cell.textContent.trim() === '')
+      )
+    };
+  })
+}));
+assert(mobileLayout.pageFits, '手机端页面出现了整页横向溢出');
+assert(mobileLayout.tables.length === 2 && mobileLayout.tables.every(table =>
+  table.visible && table.fits && table.rowCount === 31 && table.restCount === 5 &&
+    table.bothPeriodsComplete && table.restCellsBlank
+), '手机端没有同时显示上午、下午全部温湿度列');
+await page.screenshot({ path: `${OUTPUT_DIR}/temperature-humidity-mobile.png`, fullPage: true });
+
+await page.setViewportSize({ width: 1440, height: 1050 });
+const desktopTablesFit = await page.locator('.env-table-scroll').evaluateAll(wrappers =>
+  wrappers.every(wrapper => getComputedStyle(wrapper).display !== 'none' &&
+    wrapper.scrollWidth <= wrapper.clientWidth + 1)
+);
+assert(desktopTablesFit, '电脑端温湿度表格出现了不必要的横向滚动');
+assert(await page.locator('.env-mobile-record-table:visible').count() === 0,
+  '电脑端错误显示了手机专用记录布局');
+
 const generated = await page.evaluate(() => window.EnvironmentRecorder.getState());
 const august = generated.months['2026-08'];
 assert(Boolean(august), '固定月份没有写入本地状态');

@@ -427,7 +427,8 @@
   function renderRoomTable(room, record){
     const settings = record.settings[room.id];
     const season = displaySeason(record);
-    const rows = entriesForDisplay(record).map(entry => {
+    const entries = entriesForDisplay(record);
+    const rows = entries.map(entry => {
       const values = entry.readings && entry.readings[room.id];
       if (!values){
         return `
@@ -450,6 +451,20 @@
           <td class="env-value">${values.afternoon.humidity}</td>
         </tr>`;
     }).join('');
+    const mobileRows = entries.map(entry => {
+      const values = entry.readings && entry.readings[room.id];
+      const mobileReading = reading => reading ? `
+        <span><b>${reading.temperature.toFixed(1)}</b><small>℃</small></span>
+        <span><b>${reading.humidity}</b><small>%RH</small></span>` : '';
+      return `
+        <div class="env-mobile-record-row${entry.isRestDay ? ' env-mobile-rest-row' : ''}"
+          role="row" data-env-mobile-date="${entry.date}"${entry.isRestDay ? ' data-env-mobile-rest="true"' : ''}>
+          <div class="env-mobile-date" role="cell"><b>${entry.day} 日</b><span>星期${entry.weekday}</span></div>
+          <div class="env-mobile-reading" role="cell">${mobileReading(values && values.morning)}</div>
+          <div class="env-mobile-reading" role="cell">${mobileReading(values && values.afternoon)}</div>
+        </div>`;
+    }).join('');
+    const recordCaption = `${monthLabel(record.month)} · ${season.legacy ? '原固定数据' : `${season.label}空调室内微调`} · 星期日休息，数据格留空`;
     return `
       <article class="env-room-record" data-env-room-table="${room.id}">
         <div class="env-record-heading">
@@ -461,7 +476,7 @@
         </div>
         <div class="tscroll env-table-scroll">
           <table class="env-record-table">
-            <caption>${esc(monthLabel(record.month))} · ${season.legacy ? '原固定数据' : `${season.label}空调室内微调`} · 星期日休息，数据格留空</caption>
+            <caption>${esc(recordCaption)}</caption>
             <thead>
               <tr>
                 <th rowspan="2">日期</th>
@@ -478,6 +493,15 @@
             </thead>
             <tbody>${rows}</tbody>
           </table>
+        </div>
+        <div class="env-mobile-record-table" role="table" aria-label="${esc(`${room.name}${monthLabel(record.month)}温湿度记录`)}">
+          <div class="env-mobile-record-caption">${esc(recordCaption)}</div>
+          <div class="env-mobile-record-row env-mobile-record-header" role="row">
+            <div role="columnheader">日期</div>
+            <div role="columnheader"><b>上午</b><span>温度 / 湿度</span></div>
+            <div role="columnheader"><b>下午</b><span>温度 / 湿度</span></div>
+          </div>
+          ${mobileRows}
         </div>
       </article>`;
   }
