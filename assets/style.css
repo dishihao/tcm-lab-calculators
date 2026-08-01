@@ -377,6 +377,20 @@ td.spanall{background:#fdfdfd}
 .env-month-state.fixed b{color:#176344}
 .env-month-state.draft b{color:#9a681c}
 
+.env-mode-notice{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  margin-top:16px; padding:12px 14px; border:1px solid #bdd9cf; border-radius:9px;
+  background:#edf8f4; color:#2b554b;
+}
+.env-mode-notice.local{border-color:#e4d2ae; background:#fff8e9; color:#725723}
+.env-mode-notice > div{display:grid; gap:3px}
+.env-mode-notice b{font-size:13px}
+.env-mode-notice span{font-size:11px; line-height:1.55}
+.env-mode-notice button{
+  flex:0 0 auto; min-height:34px; padding:7px 12px; cursor:pointer; border-radius:7px;
+  font:600 11px/1.2 "Microsoft YaHei",sans-serif;
+}
+
 .env-season-card{
   display:flex; align-items:center; gap:12px;
   margin-top:18px; padding:12px 14px;
@@ -527,6 +541,7 @@ td.spanall{background:#fdfdfd}
   .env-panel{padding:18px 14px}
   .env-month-bar{align-items:flex-start; flex-direction:column}
   .env-month-state{justify-items:start; text-align:left}
+  .env-mode-notice{align-items:flex-start; flex-direction:column}
   .env-season-card{align-items:flex-start; flex-wrap:wrap}
   .env-season-card em{margin-left:48px}
   .env-config-intro{align-items:flex-start; flex-direction:column; gap:3px}

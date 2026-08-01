@@ -38,10 +38,73 @@ await page.waitForLoadState('networkidle');
 
 await page.locator('[data-tab="environment"]').click();
 assert(await page.locator('[data-sheet="environment"].active').count() === 1, '温湿度页签未打开');
+assert(await page.locator('[data-sheet="environment"][data-env-visibility="public"]').count() === 1,
+  '首次访问没有默认显示公共固定记录');
+assert(await page.locator('[data-env-public-notice]').count() === 1,
+  '页面没有说明公共记录对所有访问者一致');
+assert(await page.locator('[data-env-room-table]').count() === 2,
+  '新浏览器访问时没有立即显示两间房的公共记录');
+assert(await page.locator('[data-env-generate]').count() === 0,
+  '公共记录仍要求访问者先点击生成');
 assert(await page.locator('[data-env-room]').count() === 8, '两间房的四组范围输入未完整显示');
 
 await page.locator('[data-env-month]').fill('2026-08');
 await page.locator('[data-env-month]').dispatchEvent('change');
+
+const publicRecord = await page.evaluate(() => window.EnvironmentRecorder.getActiveRecord());
+const publicState = await page.evaluate(() => window.EnvironmentRecorder.getState());
+assert(publicRecord.visibility === 'public' && publicRecord.version === 4,
+  '默认记录没有标记为公共固定数据');
+assert(publicRecord.entries.length === 31 && publicRecord.restSundays.length === 5,
+  '公共记录没有保留完整月份和星期日空行');
+assert(Object.keys(publicState.months).length === 0,
+  '公共记录错误写入了某一浏览器的本机月份数据');
+const [publicJanuary, publicJuly] = await page.evaluate(() => [
+  window.EnvironmentRecorder.getPublicRecord('2027-01'),
+  window.EnvironmentRecorder.getPublicRecord('2027-07')
+]);
+assert(publicJanuary.season.key === 'winter' && publicJuly.season.key === 'summer',
+  '公共固定记录没有按月份应用季节模型');
+assert(
+  averageReading(publicJuly, 'instrument', 'temperature') >
+    averageReading(publicJanuary, 'instrument', 'temperature') + 1.2,
+  '公共固定记录没有体现空调室内的轻度冬夏差异'
+);
+const publicHumidityValues = [publicJanuary, publicJuly].flatMap(record => record.entries
+  .filter(entry => entry.readings)
+  .flatMap(entry => ['specimen', 'instrument'].flatMap(roomId => [
+    entry.readings[roomId].morning.humidity,
+    entry.readings[roomId].afternoon.humidity
+  ])));
+assert(publicHumidityValues.filter(value => value >= 48 && value <= 58).length /
+  publicHumidityValues.length >= 0.80, '公共固定记录的湿度没有主要集中在 48～58 %RH');
+await page.screenshot({ path: `${OUTPUT_DIR}/temperature-humidity-public-desktop.png`, fullPage: true });
+
+const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const secondPage = await secondContext.newPage();
+await secondPage.goto(PAGE_URL);
+await secondPage.waitForLoadState('networkidle');
+await secondPage.evaluate(() => localStorage.clear());
+await secondPage.reload();
+await secondPage.waitForLoadState('networkidle');
+await secondPage.locator('[data-tab="environment"]').click();
+await secondPage.locator('[data-env-month]').fill('2026-08');
+await secondPage.locator('[data-env-month]').dispatchEvent('change');
+const secondPublicRecord = await secondPage.evaluate(() => window.EnvironmentRecorder.getActiveRecord());
+assert(JSON.stringify(secondPublicRecord) === JSON.stringify(publicRecord),
+  '两个全新浏览器看到的公共温湿度数据不完全一致');
+assert(await secondPage.locator('[data-env-room-table]').count() === 2,
+  '第二个新浏览器没有立即看到两间房的公共记录');
+await secondPage.screenshot({ path: `${OUTPUT_DIR}/temperature-humidity-public-mobile.png`, fullPage: true });
+await secondContext.close();
+
+await page.locator('[data-env-view-local]').click();
+assert(await page.locator('[data-sheet="environment"][data-env-visibility="local"]').count() === 1,
+  '无法切换到本机自定义记录');
+assert(await page.locator('[data-env-room-table]').count() === 0,
+  '没有本机记录时错误复用了公共数据');
+assert(await page.locator('[data-env-generate]').count() === 1,
+  '本机自定义模式没有提供生成入口');
 
 await page.locator('[data-env-room="specimen"][data-env-field="temperatureMin"]').fill('30');
 await page.locator('[data-env-room="specimen"][data-env-field="temperatureMax"]').fill('20');
@@ -142,6 +205,16 @@ const storedAfterReload = await page.evaluate(() => localStorage.getItem('tcm-la
 const tableAfterReload = await page.locator('.env-records').innerText();
 assert(storedAfterReload === storedBeforeReload, '刷新后固定数据发生变化');
 assert(tableAfterReload === tableBeforeReload, '刷新后表格显示发生变化');
+
+await page.locator('[data-env-view-public]').click();
+const publicRecordAfterLocalGeneration = await page.evaluate(() =>
+  window.EnvironmentRecorder.getActiveRecord()
+);
+assert(JSON.stringify(publicRecordAfterLocalGeneration) === JSON.stringify(publicRecord),
+  '生成本机记录后改动了公共固定记录');
+assert(await page.locator('[data-env-room-table]').count() === 2,
+  '切回公共模式后没有显示两间房记录');
+await page.locator('[data-env-view-local]').click();
 
 await page.locator('[data-env-month]').fill('2027-01');
 await page.locator('[data-env-month]').dispatchEvent('change');
@@ -254,4 +327,4 @@ assert(legacyStoredAfterReload === legacyStoredBeforeReload,
 assert(errors.length === 0, `页面脚本错误：${errors.join('; ')}`);
 
 await browser.close();
-console.log('PASS: 星期日空行、48～58 湿度集中、季节智能、旧数据锁定及刷新持久化均正常');
+console.log('PASS: 公共跨设备一致、手机电脑可见、星期日空行、季节智能及本机记录保留均正常');

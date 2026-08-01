@@ -2,12 +2,15 @@
    温湿度月度记录生成器
    - 标本室、普通仪器室一次生成
    - 星期日保留空白行
-   - 每个月生成后写入 localStorage 并锁定
+   - 公共记录按月份固定，对所有访问者一致
+   - 本机自定义记录写入 localStorage 并锁定
    ========================================================================= */
 'use strict';
 
 (function initEnvironmentRecorder(){
   const STORAGE_KEY = 'tcm-lab-environment-v1';
+  const PUBLIC_SEED_VERSION = 'environment-public-v1';
+  const publicRecordCache = new Map();
   const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
   const ROOMS = [
     {
@@ -72,6 +75,7 @@
 
   function emptyState(){
     return {
+      viewMode: 'public',
       selectedMonth: currentMonth(),
       draft: defaultDraft(),
       months: {}
@@ -81,6 +85,7 @@
   function normalizeState(value){
     const next = emptyState();
     if (!value || typeof value !== 'object') return next;
+    next.viewMode = value.viewMode === 'local' ? 'local' : 'public';
     if (/^\d{4}-(0[1-9]|1[0-2])$/.test(value.selectedMonth || '')){
       next.selectedMonth = value.selectedMonth;
     }
@@ -194,10 +199,30 @@
     return Math.random();
   }
 
-  function bellRandom(){
+  function bellRandom(random = randomUnit){
     let sum = 0;
-    for (let i = 0; i < 6; i += 1) sum += randomUnit();
+    for (let i = 0; i < 6; i += 1) sum += random();
     return sum - 3;
+  }
+
+  function hashSeed(text){
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1){
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function seededRandom(seed){
+    let value = seed >>> 0;
+    return function nextSeededValue(){
+      value = (value + 0x6D2B79F5) >>> 0;
+      let mixed = value;
+      mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
+      mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+      return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   function clamp(value, min, max){
@@ -209,7 +234,7 @@
     return clamp(Math.round(value * factor) / factor, min, max);
   }
 
-  function roomReadings(settings, memory, shared, season, room){
+  function roomReadings(settings, memory, shared, season, room, random = randomUnit){
     const tempSpan = settings.temperatureMax - settings.temperatureMin;
     const humiditySpan = settings.humidityMax - settings.humidityMin;
     const tempMiddle = (settings.temperatureMin + settings.temperatureMax) / 2;
@@ -223,23 +248,23 @@
 
     const tempTarget = tempMiddle + tempSpan * season.temperatureBias + room.temperatureOffset +
       shared.temperature * tempSpan * 0.105 * stability +
-      bellRandom() * tempSpan * 0.05 * stability +
+      bellRandom(random) * tempSpan * 0.05 * stability +
       shared.temperatureEvent * tempSpan * 0.10 * stability;
     const tempBase = Number.isFinite(memory.temperature)
       ? memory.temperature * 0.45 + tempTarget * 0.55
       : tempTarget;
-    const coolingPulse = season.key === 'summer' && randomUnit() < 0.18
-      ? -(0.35 + randomUnit() * 0.85) * stability
+    const coolingPulse = season.key === 'summer' && random() < 0.18
+      ? -(0.35 + random() * 0.85) * stability
       : 0;
     const afternoonTemperatureDelta = season.afternoonTemperature + coolingPulse;
     const morningTemperature = roundedWithin(
-      tempBase - afternoonTemperatureDelta / 2 + bellRandom() * tempSpan * 0.035 * stability,
+      tempBase - afternoonTemperatureDelta / 2 + bellRandom(random) * tempSpan * 0.035 * stability,
       settings.temperatureMin,
       settings.temperatureMax,
       1
     );
     const afternoonTemperature = roundedWithin(
-      tempBase + afternoonTemperatureDelta / 2 + bellRandom() * tempSpan * 0.035 * stability,
+      tempBase + afternoonTemperatureDelta / 2 + bellRandom(random) * tempSpan * 0.035 * stability,
       settings.temperatureMin,
       settings.temperatureMax,
       1
@@ -249,21 +274,21 @@
     const temperatureEffect = (memory.temperature - tempMiddle) * 0.35;
     const humidityTarget = preferredHumidityMiddle + humiditySpan * season.humidityBias + room.humidityOffset +
       shared.humidity * humiditySpan * 0.12 * stability +
-      bellRandom() * humiditySpan * 0.06 * stability +
+      bellRandom(random) * humiditySpan * 0.06 * stability +
       shared.humidityEvent * humiditySpan * 0.16 * stability - temperatureEffect;
     const humidityBase = Number.isFinite(memory.humidity)
       ? memory.humidity * 0.45 + humidityTarget * 0.55
       : humidityTarget;
     const afternoonHumidityDelta = season.afternoonHumidity +
-      (coolingPulse < 0 ? -(0.3 + randomUnit() * 0.8) : 0);
+      (coolingPulse < 0 ? -(0.3 + random() * 0.8) : 0);
     const morningHumidity = roundedWithin(
-      humidityBase - afternoonHumidityDelta / 2 + bellRandom() * humiditySpan * 0.035 * stability,
+      humidityBase - afternoonHumidityDelta / 2 + bellRandom(random) * humiditySpan * 0.035 * stability,
       settings.humidityMin,
       settings.humidityMax,
       0
     );
     const afternoonHumidity = roundedWithin(
-      humidityBase + afternoonHumidityDelta / 2 + bellRandom() * humiditySpan * 0.035 * stability,
+      humidityBase + afternoonHumidityDelta / 2 + bellRandom(random) * humiditySpan * 0.035 * stability,
       settings.humidityMin,
       settings.humidityMax,
       0
@@ -276,9 +301,10 @@
     };
   }
 
-  function generateMonth(month, settings){
+  function generateMonth(month, settings, options = {}){
     const parsed = parseMonth(month);
     if (!parsed) throw new Error('月份格式不正确');
+    const random = options.random || randomUnit;
     const season = seasonProfileForMonth(month);
     const days = new Date(parsed.year, parsed.month, 0).getDate();
     const entries = [];
@@ -300,14 +326,14 @@
         continue;
       }
       const shared = {
-        temperature: bellRandom(),
-        humidity: bellRandom(),
-        temperatureEvent: randomUnit() < 0.10 ? randomUnit() * 2 - 1 : 0,
-        humidityEvent: randomUnit() < 0.12 ? randomUnit() * 2 - 1 : 0
+        temperature: bellRandom(random),
+        humidity: bellRandom(random),
+        temperatureEvent: random() < 0.10 ? random() * 2 - 1 : 0,
+        humidityEvent: random() < 0.12 ? random() * 2 - 1 : 0
       };
       const readings = {};
       ROOMS.forEach(room => {
-        readings[room.id] = roomReadings(settings[room.id], memory[room.id], shared, season, room);
+        readings[room.id] = roomReadings(settings[room.id], memory[room.id], shared, season, room, random);
       });
       entries.push({
         date: isoDate,
@@ -318,14 +344,39 @@
     }
 
     return {
-      version: 3,
+      version: options.visibility === 'public' ? 4 : 3,
       month,
-      createdAt: new Date().toISOString(),
+      createdAt: options.createdAt || new Date().toISOString(),
       settings,
       season,
       entries,
-      restSundays
+      restSundays,
+      ...(options.visibility ? { visibility: options.visibility } : {}),
+      ...(options.seedVersion ? { seedVersion: options.seedVersion } : {})
     };
+  }
+
+  function publicRecordForMonth(month){
+    if (!parseMonth(month)) return null;
+    if (!publicRecordCache.has(month)){
+      publicRecordCache.set(month, generateMonth(month, numericSettings(defaultDraft()), {
+        random: seededRandom(hashSeed(`${PUBLIC_SEED_VERSION}:${month}`)),
+        createdAt: `${month}-01T00:00:00.000Z`,
+        visibility: 'public',
+        seedVersion: PUBLIC_SEED_VERSION
+      }));
+    }
+    return publicRecordCache.get(month);
+  }
+
+  function localRecordForMonth(month = state.selectedMonth){
+    return state.months[month] || null;
+  }
+
+  function activeRecord(){
+    return state.viewMode === 'local'
+      ? localRecordForMonth()
+      : publicRecordForMonth(state.selectedMonth);
   }
 
   function entriesForDisplay(record){
@@ -375,7 +426,7 @@
   }
 
   function rangeField(room, field, label, unit, step){
-    const record = state.months[state.selectedMonth];
+    const record = activeRecord();
     const source = record ? record.settings : state.draft;
     const value = source[room.id][field];
     return `
@@ -390,7 +441,7 @@
   }
 
   function renderRoomConfig(room){
-    const record = state.months[state.selectedMonth];
+    const record = activeRecord();
     return `
       <div class="env-room-config${record ? ' locked' : ''}">
         <div class="env-room-config-title">
@@ -518,28 +569,32 @@
 
   function renderAlert(){
     if (storageFailed){
-      return '<div class="env-alert error" role="alert">浏览器未能保存数据，请检查是否禁用了本地存储。当前页面刷新后可能丢失。</div>';
+      return state.viewMode === 'public'
+        ? '<div class="env-alert error" role="alert">浏览器未能保存当前月份选择，但公共记录仍会保持一致。</div>'
+        : '<div class="env-alert error" role="alert">浏览器未能保存数据，请检查是否禁用了本地存储。当前页面刷新后可能丢失。</div>';
     }
     if (!flash) return '';
     return `<div class="env-alert ${flash.type}" role="status">${esc(flash.message)}</div>`;
   }
 
   function render(){
-    const record = state.months[state.selectedMonth];
+    const isPublic = state.viewMode !== 'local';
+    const localRecord = localRecordForMonth();
+    const record = activeRecord();
     const season = displaySeason(record);
     const workdayCount = record
       ? entriesForDisplay(record).filter(entry => !entry.isRestDay && entry.readings).length
       : 0;
     const sundayCount = record ? sundayDates(record).length : 0;
     return `
-      <section class="sheet environment-sheet" data-sheet="environment">
+      <section class="sheet environment-sheet" data-sheet="environment" data-env-visibility="${isPublic ? 'public' : 'local'}">
         <header class="env-hero">
           <div>
             <span class="env-eyebrow">ENVIRONMENT LOG</span>
             <h2>温湿度月度记录</h2>
             <p>标本室 + 普通仪器室 · 上午 / 下午各一次 · 星期日自动留空</p>
           </div>
-          <span class="env-save-chip"><span aria-hidden="true">●</span> 刷新不丢失</span>
+          <span class="env-save-chip"><span aria-hidden="true">●</span> ${isPublic ? '所有访问者都能看到' : '本机记录'}</span>
         </header>
 
         <div class="env-panel no-print">
@@ -554,17 +609,33 @@
               <button type="button" class="env-today-button" data-env-current-month>本月</button>
             </div>
             <div class="env-month-state ${record ? 'fixed' : 'draft'}">
-              ${record
-                ? `<b>数据已固定</b><span>生成于 ${esc(formatCreatedAt(record.createdAt))}</span>`
-                : '<b>等待生成</b><span>生成后本月数据将锁定</span>'}
+              ${isPublic
+                ? '<b>公共数据已固定</b><span>所有手机和电脑显示一致</span>'
+                : record
+                  ? `<b>本机数据已固定</b><span>生成于 ${esc(formatCreatedAt(record.createdAt))}</span>`
+                  : '<b>等待本机生成</b><span>生成后本月数据将锁定</span>'}
             </div>
+          </div>
+
+          <div class="env-mode-notice ${isPublic ? 'public' : 'local'}" ${isPublic ? 'data-env-public-notice' : 'data-env-local-notice'}>
+            <div>
+              <b>${isPublic ? '正在查看公共固定记录' : '正在查看本机自定义记录'}</b>
+              <span>${isPublic
+                ? '同一月份由固定规则生成唯一数据，任何访问者打开都能直接看到完全相同的记录。'
+                : '本机记录只保存在当前浏览器，不会改变所有访问者都能看到的公共记录。'}</span>
+            </div>
+            <button type="button" class="env-secondary" ${isPublic ? 'data-env-view-local' : 'data-env-view-public'}>
+              ${isPublic ? (localRecord ? '查看本机固定记录' : '本机自定义生成') : '返回公共记录'}
+            </button>
           </div>
 
           ${renderSeasonCard(record)}
 
           <div class="env-config-intro">
-            <div><b>生成范围</b><span>请按现场要求调整；下列默认值不是标准限度</span></div>
-            ${record ? '<span>本月范围已随数据锁定</span>' : '<span>湿度优先集中在 48～58 %RH，并保留自然小幅波动</span>'}
+            <div><b>${isPublic ? '公共生成范围' : '本机生成范围'}</b><span>${isPublic ? '公共记录采用统一范围' : '请按现场要求调整；下列默认值不是标准限度'}</span></div>
+            ${record
+              ? `<span>${isPublic ? '所有访问者使用同一组固定范围' : '本月范围已随数据锁定'}</span>`
+              : '<span>湿度优先集中在 48～58 %RH，并保留自然小幅波动</span>'}
           </div>
           <div class="env-room-configs">
             ${ROOMS.map(renderRoomConfig).join('')}
@@ -572,8 +643,12 @@
 
           ${renderAlert()}
           <div class="env-actions">
-            ${record ? `
-              <button type="button" class="env-primary fixed" disabled>✓ 已生成并固定</button>
+            ${isPublic ? `
+              <button type="button" class="env-primary fixed" disabled>✓ 公共数据已固定</button>
+              <button type="button" class="env-secondary" data-env-export>导出 CSV</button>
+              <button type="button" class="env-secondary" data-env-print>打印两间房记录</button>
+              <span>无需登录或点击生成，换设备打开仍是同一份数据。</span>` : record ? `
+              <button type="button" class="env-primary fixed" disabled>✓ 本机数据已生成并固定</button>
               <button type="button" class="env-secondary" data-env-export>导出 CSV</button>
               <button type="button" class="env-secondary" data-env-print>打印两间房记录</button>
               <button type="button" class="env-danger" data-env-clear>清除本月</button>` : `
@@ -588,12 +663,12 @@
             <div><span>星期日留空</span><b>${sundayCount} 行</b></div>
             <div><span>生成模型</span><b>${season.legacy ? '旧版固定数据' : `${season.label} · 空调室内`}</b></div>
             <div><span>房间</span><b>2 间 × 每天 2 次</b></div>
-            <div class="env-summary-lock"><span aria-hidden="true">◆</span><b>只读固定数据</b></div>
+            <div class="env-summary-lock"><span aria-hidden="true">◆</span><b>${isPublic ? '公共固定数据' : '本机固定数据'}</b></div>
           </div>
           <div class="env-records">
             ${ROOMS.map(room => renderRoomTable(room, record)).join('')}
           </div>
-          <div class="note env-disclaimer">生成值用于记录整理辅助，不替代现场温湿度测量。用于受控记录前，请逐项核对真实测量值和本单位规定范围。</div>` : renderEmpty()}
+          <div class="note env-disclaimer">${isPublic ? '公共记录对所有访问者可见，且同一月份的数据固定一致。' : '本机自定义记录仅在当前浏览器可见。'}生成值用于记录整理辅助，不替代现场温湿度测量。用于受控记录前，请逐项核对真实测量值和本单位规定范围。</div>` : renderEmpty()}
       </section>`;
   }
 
@@ -656,7 +731,7 @@
 
   document.addEventListener('input', event => {
     const input = event.target.closest('[data-env-room][data-env-field]');
-    if (!input || state.months[state.selectedMonth]) return;
+    if (!input || state.viewMode !== 'local' || localRecordForMonth()) return;
     const room = ROOMS.find(item => item.id === input.dataset.envRoom);
     const field = input.dataset.envField;
     if (!room || !(field in room.defaults)) return;
@@ -670,6 +745,20 @@
   });
 
   document.addEventListener('click', event => {
+    if (event.target.closest('[data-env-view-local]')){
+      state.viewMode = 'local';
+      flash = null;
+      saveState();
+      refresh();
+      return;
+    }
+    if (event.target.closest('[data-env-view-public]')){
+      state.viewMode = 'public';
+      flash = null;
+      saveState();
+      refresh();
+      return;
+    }
     const shift = event.target.closest('[data-env-month-shift]');
     if (shift){
       chooseMonth(shiftMonth(state.selectedMonth, Number(shift.dataset.envMonthShift)));
@@ -680,7 +769,7 @@
       return;
     }
     if (event.target.closest('[data-env-generate]')){
-      if (state.months[state.selectedMonth]) return;
+      if (state.viewMode !== 'local' || localRecordForMonth()) return;
       const errors = validateDraft();
       if (errors.length){
         flash = { type: 'error', message: errors[0] };
@@ -696,6 +785,7 @@
       return;
     }
     if (event.target.closest('[data-env-clear]')){
+      if (state.viewMode !== 'local' || !localRecordForMonth()) return;
       const label = monthLabel(state.selectedMonth);
       if (!window.confirm(`确定清除 ${label} 的固定温湿度数据吗？\n清除后可以重新设置范围并生成，原数据无法恢复。`)) return;
       delete state.months[state.selectedMonth];
@@ -705,7 +795,7 @@
       return;
     }
     if (event.target.closest('[data-env-export]')){
-      const record = state.months[state.selectedMonth];
+      const record = activeRecord();
       if (record) exportCsv(record);
       return;
     }
@@ -717,6 +807,8 @@
     tab: '温湿度记录',
     render,
     getState: () => JSON.parse(JSON.stringify(state)),
+    getActiveRecord: () => JSON.parse(JSON.stringify(activeRecord())),
+    getPublicRecord: month => JSON.parse(JSON.stringify(publicRecordForMonth(month))),
     storageKey: STORAGE_KEY
   };
 })();
