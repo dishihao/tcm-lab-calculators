@@ -1750,7 +1750,10 @@ function build(){
   seedDefaults();
 
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
-    .concat([{ id:'assay', tab:ASSAY.tab }]);
+    .concat([{ id:'assay', tab:ASSAY.tab }])
+    .concat(window.EnvironmentRecorder
+      ? [{ id:window.EnvironmentRecorder.id, tab:window.EnvironmentRecorder.tab }]
+      : []);
   if (!tabs.some(t => t.id === curTab)) curTab = tabs[0].id;
 
   $('#tabs').innerHTML = tabs.map(t =>
@@ -1759,7 +1762,8 @@ function build(){
 
   $('#sheets').innerHTML =
       CALCS.map(c => renderSheet(c)).join('')
-    + renderAssaySheet();
+    + renderAssaySheet()
+    + (window.EnvironmentRecorder ? window.EnvironmentRecorder.render() : '');
 
   /* 恢复 select 值 */
   $$('select[data-k]').forEach(s => {

@@ -3,6 +3,7 @@ Thumbs.db
 desktop.ini
 .DS_Store
 *.log
+output/
 tools/*quality-template*-extract.json
 tools/hplc-template-extract.json
 tools/sulfur-dioxide-template-extract.json
