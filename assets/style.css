@@ -486,6 +486,7 @@ td.spanall{background:#fdfdfd}
 .env-record-table thead th{color:#28453e; background:#edf4f1; font-size:11px; font-weight:700}
 .env-record-table tbody td{color:#303a38; background:#fff; font-size:11.5px}
 .env-record-table tbody tr:nth-child(even) td{background:#fafcfb}
+.env-record-table tbody tr.env-rest-row td{color:#7a8783; background:#f0f4f2}
 .env-record-table th:nth-child(1){width:12%}
 .env-record-table th:nth-child(2){width:14%}
 .env-record-table .env-value{color:#174f43; font-family:"KaiTi","楷体",serif; font-size:13px; font-weight:700}
@@ -586,6 +587,7 @@ td.spanall{background:#fdfdfd}
   .env-record-table caption{padding:1mm; color:#000; background:none; font-size:8pt}
   .env-record-table th,.env-record-table td{padding:1.25mm 1mm; border-color:#000}
   .env-record-table thead th,.env-record-table tbody td{color:#000; background:none; font-size:8pt}
+  .env-record-table tbody tr.env-rest-row td{color:#000; background:none}
   .env-record-table .env-value{color:#000; font-size:9pt}
   .env-disclaimer{display:none}
 }
