@@ -12,6 +12,13 @@ const OUTPUT_DIR = fileURLToPath(new URL('../output/playwright/', import.meta.ur
 const assert = (ok, message) => {
   if (!ok) throw new Error(message);
 };
+const average = values => values.reduce((sum, value) => sum + value, 0) / values.length;
+const averageReading = (record, roomId, metric, period = null) => {
+  const periods = period ? [period] : ['morning', 'afternoon'];
+  return average(record.entries.flatMap(entry =>
+    periods.map(name => entry.readings[roomId][name][metric])
+  ));
+};
 
 mkdirSync(OUTPUT_DIR, { recursive: true });
 
@@ -60,6 +67,10 @@ assert(Boolean(august), '固定月份没有写入本地状态');
 assert(august.entries.length === 26, '生成记录日数量错误');
 assert(august.skippedSundays.length === 5, '2026 年 8 月应跳过 5 个星期日');
 assert(august.entries.every(entry => new Date(`${entry.date}T12:00:00`).getDay() !== 0), '记录中混入了星期日');
+assert(august.version === 2, '新生成月份没有使用季节模型版本');
+assert(august.season.key === 'summer', '8 月没有识别为夏季');
+assert(august.season.mode === 'air-conditioned-indoor', '没有使用空调室内季节模型');
+assert(await page.locator('[data-env-season="summer"]').count() === 1, '页面未显示夏季智能生成提示');
 
 for (const entry of august.entries){
   for (const roomId of ['specimen', 'instrument']){
@@ -84,6 +95,40 @@ const tableAfterReload = await page.locator('.env-records').innerText();
 assert(storedAfterReload === storedBeforeReload, '刷新后固定数据发生变化');
 assert(tableAfterReload === tableBeforeReload, '刷新后表格显示发生变化');
 
+await page.locator('[data-env-month]').fill('2027-01');
+await page.locator('[data-env-month]').dispatchEvent('change');
+assert(await page.locator('[data-env-season="winter"]').count() === 1, '1 月没有显示冬季模型');
+await page.locator('[data-env-generate]').click();
+
+await page.locator('[data-env-month]').fill('2027-07');
+await page.locator('[data-env-month]').dispatchEvent('change');
+assert(await page.locator('[data-env-season="summer"]').count() === 1, '7 月没有显示夏季模型');
+await page.locator('[data-env-generate]').click();
+
+const seasonalState = await page.evaluate(() => window.EnvironmentRecorder.getState());
+const january = seasonalState.months['2027-01'];
+const july = seasonalState.months['2027-07'];
+assert(january.season.key === 'winter' && july.season.key === 'summer', '冬夏月份模型保存错误');
+const januaryTemperature = averageReading(january, 'instrument', 'temperature');
+const julyTemperature = averageReading(july, 'instrument', 'temperature');
+const januaryHumidity = averageReading(january, 'instrument', 'humidity');
+const julyHumidity = averageReading(july, 'instrument', 'humidity');
+assert(julyTemperature > januaryTemperature + 1.2, '夏季平均温度没有适度高于冬季');
+assert(julyTemperature < januaryTemperature + 5, '空调室内的冬夏温差过大');
+assert(julyHumidity > januaryHumidity + 1.2, '夏季平均湿度没有适度高于冬季');
+assert(julyHumidity < januaryHumidity + 8, '空调室内的冬夏湿度差过大');
+assert(
+  averageReading(july, 'instrument', 'temperature', 'afternoon') <
+    averageReading(july, 'instrument', 'temperature', 'morning') - 0.2,
+  '夏季下午制冷特征没有体现'
+);
+const julyTemperatures = july.entries.flatMap(entry => [
+  entry.readings.instrument.morning.temperature,
+  entry.readings.instrument.afternoon.temperature
+]);
+assert(Math.max(...julyTemperatures) - Math.min(...julyTemperatures) >= 2,
+  '普通仪器室夏季数据过于平直，缺少自然日变化');
+
 await page.locator('[data-env-month]').fill('2026-09');
 await page.locator('[data-env-month]').dispatchEvent('change');
 assert(await page.locator('.env-empty').count() === 1, '切换到未生成月份时未显示空状态');
@@ -96,7 +141,31 @@ await page.locator('[data-env-clear]').click();
 assert(await page.locator('[data-env-room-table]').count() === 2, '取消清除后数据仍被删除');
 
 await page.screenshot({ path: `${OUTPUT_DIR}/temperature-humidity.png`, fullPage: true });
+
+await page.evaluate(() => {
+  const state = window.EnvironmentRecorder.getState();
+  const legacy = JSON.parse(JSON.stringify(state.months['2026-08']));
+  legacy.version = 1;
+  legacy.month = '2025-08';
+  delete legacy.season;
+  legacy.entries = legacy.entries.map(entry => ({
+    ...entry,
+    date: entry.date.replace('2026-08-', '2025-08-')
+  }));
+  state.selectedMonth = '2025-08';
+  state.months['2025-08'] = legacy;
+  localStorage.setItem(window.EnvironmentRecorder.storageKey, JSON.stringify(state));
+});
+await page.reload();
+await page.waitForLoadState('networkidle');
+await page.locator('[data-tab="environment"]').click();
+assert(await page.locator('.env-season-card.legacy').count() === 1, '旧版固定月份没有显示保留提示');
+assert((await page.locator('.env-season-card.legacy').innerText()).includes('不自动改写'),
+  '旧版固定月份没有明确说明不自动改写');
+const legacyAfterReload = await page.evaluate(() => window.EnvironmentRecorder.getState().months['2025-08']);
+assert(legacyAfterReload.version === 1 && legacyAfterReload.season === undefined,
+  '加载页面时旧版固定月份被静默重算');
 assert(errors.length === 0, `页面脚本错误：${errors.join('; ')}`);
 
 await browser.close();
-console.log('PASS: 两间房整月生成、星期日跳过、范围校验、固定锁定与刷新持久化均正常');
+console.log('PASS: 季节智能、空调室内冬夏差异、夏季下午制冷、旧数据锁定及刷新持久化均正常');

@@ -14,15 +14,47 @@
       id: 'specimen',
       name: '标本室',
       short: '标本室',
+      stability: 0.76,
+      temperatureOffset: -0.15,
+      humidityOffset: 0.8,
       defaults: { temperatureMin: 18, temperatureMax: 26, humidityMin: 45, humidityMax: 65 }
     },
     {
       id: 'instrument',
       name: '普通仪器室',
       short: '仪器室',
+      stability: 1,
+      temperatureOffset: 0.15,
+      humidityOffset: 0,
       defaults: { temperatureMin: 18, temperatureMax: 28, humidityMin: 40, humidityMax: 65 }
     }
   ];
+
+  /*
+   * 空调室内逐月模型：季节只轻度移动生成区间的中心，不改变用户设置的硬上下限。
+   * afternoonTemperature / afternoonHumidity 表示“下午平均值 - 上午平均值”。
+   * 夏季下午制冷通常使温度略低；冬季设备运行后则可能轻微回升。
+   */
+  const MONTH_PROFILES = {
+    1:  { key:'winter', label:'冬季', glyph:'冬', temperatureBias:-0.10, humidityBias:-0.10, afternoonTemperature: 0.20, afternoonHumidity:-1.0 },
+    2:  { key:'winter', label:'冬季', glyph:'冬', temperatureBias:-0.08, humidityBias:-0.08, afternoonTemperature: 0.15, afternoonHumidity:-0.8 },
+    3:  { key:'spring', label:'春季', glyph:'春', temperatureBias:-0.05, humidityBias:-0.03, afternoonTemperature: 0.10, afternoonHumidity:-0.4 },
+    4:  { key:'spring', label:'春季', glyph:'春', temperatureBias:-0.02, humidityBias: 0.02, afternoonTemperature: 0.00, afternoonHumidity: 0.0 },
+    5:  { key:'spring', label:'春季', glyph:'春', temperatureBias: 0.05, humidityBias: 0.06, afternoonTemperature:-0.15, afternoonHumidity:-0.2 },
+    6:  { key:'summer', label:'夏季', glyph:'夏', temperatureBias: 0.12, humidityBias: 0.08, afternoonTemperature:-0.40, afternoonHumidity:-0.6 },
+    7:  { key:'summer', label:'夏季', glyph:'夏', temperatureBias: 0.16, humidityBias: 0.09, afternoonTemperature:-0.55, afternoonHumidity:-0.8 },
+    8:  { key:'summer', label:'夏季', glyph:'夏', temperatureBias: 0.14, humidityBias: 0.08, afternoonTemperature:-0.50, afternoonHumidity:-0.7 },
+    9:  { key:'autumn', label:'秋季', glyph:'秋', temperatureBias: 0.08, humidityBias: 0.04, afternoonTemperature:-0.25, afternoonHumidity:-0.4 },
+    10: { key:'autumn', label:'秋季', glyph:'秋', temperatureBias: 0.02, humidityBias:-0.01, afternoonTemperature:-0.05, afternoonHumidity:-0.3 },
+    11: { key:'autumn', label:'秋季', glyph:'秋', temperatureBias:-0.04, humidityBias:-0.05, afternoonTemperature: 0.10, afternoonHumidity:-0.7 },
+    12: { key:'winter', label:'冬季', glyph:'冬', temperatureBias:-0.08, humidityBias:-0.09, afternoonTemperature: 0.18, afternoonHumidity:-0.9 }
+  };
+  const SEASON_DESCRIPTIONS = {
+    spring: '春季接近设定范围中位，湿度随月份轻微回升。',
+    summer: '夏季轻度偏暖、偏湿；下午制冷后温度通常略低于上午。',
+    autumn: '秋季温湿度逐步回落，仍保留空调室内的小幅日变化。',
+    winter: '冬季轻度偏凉、偏干；下午受设备运行影响可能略回升。'
+  };
 
   const pad = value => String(value).padStart(2, '0');
   const esc = value => String(value).replace(/[&<>"']/g, char => ({
@@ -106,6 +138,23 @@
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
   }
 
+  function seasonProfileForMonth(month){
+    const parsed = parseMonth(month) || parseMonth(currentMonth());
+    const profile = MONTH_PROFILES[parsed.month];
+    return {
+      ...profile,
+      monthNumber: parsed.month,
+      description: SEASON_DESCRIPTIONS[profile.key],
+      mode: 'air-conditioned-indoor'
+    };
+  }
+
+  function displaySeason(record){
+    const calendarSeason = seasonProfileForMonth(record ? record.month : state.selectedMonth);
+    if (record && !record.season) return { ...calendarSeason, legacy: true };
+    return { ...calendarSeason, ...(record && record.season ? record.season : {}), legacy: false };
+  }
+
   function numericSettings(draft){
     return Object.fromEntries(ROOMS.map(room => {
       const source = draft[room.id] || {};
@@ -160,44 +209,56 @@
     return clamp(Math.round(value * factor) / factor, min, max);
   }
 
-  function roomReadings(settings, memory, shared){
+  function roomReadings(settings, memory, shared, season, room){
     const tempSpan = settings.temperatureMax - settings.temperatureMin;
     const humiditySpan = settings.humidityMax - settings.humidityMin;
     const tempMiddle = (settings.temperatureMin + settings.temperatureMax) / 2;
     const humidityMiddle = (settings.humidityMin + settings.humidityMax) / 2;
+    const stability = room.stability || 1;
 
-    const tempTarget = tempMiddle + shared.temperature * tempSpan * 0.07 + bellRandom() * tempSpan * 0.035;
+    const tempTarget = tempMiddle + tempSpan * season.temperatureBias + room.temperatureOffset +
+      shared.temperature * tempSpan * 0.105 * stability +
+      bellRandom() * tempSpan * 0.05 * stability +
+      shared.temperatureEvent * tempSpan * 0.10 * stability;
     const tempBase = Number.isFinite(memory.temperature)
-      ? memory.temperature * 0.68 + tempTarget * 0.32
+      ? memory.temperature * 0.45 + tempTarget * 0.55
       : tempTarget;
+    const coolingPulse = season.key === 'summer' && randomUnit() < 0.18
+      ? -(0.35 + randomUnit() * 0.85) * stability
+      : 0;
+    const afternoonTemperatureDelta = season.afternoonTemperature + coolingPulse;
     const morningTemperature = roundedWithin(
-      tempBase - Math.min(0.35, tempSpan * 0.04) + bellRandom() * tempSpan * 0.025,
+      tempBase - afternoonTemperatureDelta / 2 + bellRandom() * tempSpan * 0.035 * stability,
       settings.temperatureMin,
       settings.temperatureMax,
       1
     );
     const afternoonTemperature = roundedWithin(
-      tempBase + Math.min(0.45, tempSpan * 0.05) + bellRandom() * tempSpan * 0.025,
+      tempBase + afternoonTemperatureDelta / 2 + bellRandom() * tempSpan * 0.035 * stability,
       settings.temperatureMin,
       settings.temperatureMax,
       1
     );
     memory.temperature = (morningTemperature + afternoonTemperature) / 2;
 
-    const temperatureEffect = (memory.temperature - tempMiddle) * 0.9;
-    const humidityTarget = humidityMiddle + shared.humidity * humiditySpan * 0.08 -
-      temperatureEffect + bellRandom() * humiditySpan * 0.045;
+    const temperatureEffect = (memory.temperature - tempMiddle) * 0.65;
+    const humidityTarget = humidityMiddle + humiditySpan * season.humidityBias + room.humidityOffset +
+      shared.humidity * humiditySpan * 0.12 * stability +
+      bellRandom() * humiditySpan * 0.06 * stability +
+      shared.humidityEvent * humiditySpan * 0.20 * stability - temperatureEffect;
     const humidityBase = Number.isFinite(memory.humidity)
-      ? memory.humidity * 0.64 + humidityTarget * 0.36
+      ? memory.humidity * 0.45 + humidityTarget * 0.55
       : humidityTarget;
+    const afternoonHumidityDelta = season.afternoonHumidity +
+      (coolingPulse < 0 ? -(0.3 + randomUnit() * 0.8) : 0);
     const morningHumidity = roundedWithin(
-      humidityBase + Math.min(1.5, humiditySpan * 0.07) + bellRandom() * humiditySpan * 0.035,
+      humidityBase - afternoonHumidityDelta / 2 + bellRandom() * humiditySpan * 0.04 * stability,
       settings.humidityMin,
       settings.humidityMax,
       0
     );
     const afternoonHumidity = roundedWithin(
-      humidityBase - Math.min(1.2, humiditySpan * 0.06) + bellRandom() * humiditySpan * 0.035,
+      humidityBase + afternoonHumidityDelta / 2 + bellRandom() * humiditySpan * 0.04 * stability,
       settings.humidityMin,
       settings.humidityMax,
       0
@@ -213,6 +274,7 @@
   function generateMonth(month, settings){
     const parsed = parseMonth(month);
     if (!parsed) throw new Error('月份格式不正确');
+    const season = seasonProfileForMonth(month);
     const days = new Date(parsed.year, parsed.month, 0).getDate();
     const entries = [];
     const skippedSundays = [];
@@ -225,10 +287,15 @@
         skippedSundays.push(isoDate);
         continue;
       }
-      const shared = { temperature: bellRandom(), humidity: bellRandom() };
+      const shared = {
+        temperature: bellRandom(),
+        humidity: bellRandom(),
+        temperatureEvent: randomUnit() < 0.10 ? randomUnit() * 2 - 1 : 0,
+        humidityEvent: randomUnit() < 0.12 ? randomUnit() * 2 - 1 : 0
+      };
       const readings = {};
       ROOMS.forEach(room => {
-        readings[room.id] = roomReadings(settings[room.id], memory[room.id], shared);
+        readings[room.id] = roomReadings(settings[room.id], memory[room.id], shared, season, room);
       });
       entries.push({
         date: isoDate,
@@ -239,10 +306,11 @@
     }
 
     return {
-      version: 1,
+      version: 2,
       month,
       createdAt: new Date().toISOString(),
       settings,
+      season,
       entries,
       skippedSundays
     };
@@ -294,8 +362,26 @@
       </div>`;
   }
 
+  function renderSeasonCard(record){
+    const season = displaySeason(record);
+    const title = season.legacy ? '旧版固定数据保持不变' : `${season.label}智能生成`;
+    const description = season.legacy
+      ? `${season.label}月份已在季节模型升级前固定，系统不会改写；清除后重新生成才会应用新模型。`
+      : season.description;
+    return `
+      <div class="env-season-card ${season.key}${season.legacy ? ' legacy' : ''}" data-env-season="${season.key}">
+        <span class="env-season-glyph" aria-hidden="true">${season.glyph}</span>
+        <div>
+          <b>${title}</b>
+          <span>${description}</span>
+        </div>
+        <em>${season.legacy ? '不自动改写' : '空调室内 · 轻度季节修正'}</em>
+      </div>`;
+  }
+
   function renderRoomTable(room, record){
     const settings = record.settings[room.id];
+    const season = displaySeason(record);
     const rows = record.entries.map(entry => {
       const values = entry.readings[room.id];
       return `
@@ -319,7 +405,7 @@
         </div>
         <div class="tscroll env-table-scroll">
           <table class="env-record-table">
-            <caption>${esc(monthLabel(record.month))} · 星期日休息，不记录</caption>
+            <caption>${esc(monthLabel(record.month))} · ${season.legacy ? '原固定数据' : `${season.label}空调室内微调`} · 星期日休息，不记录</caption>
             <thead>
               <tr>
                 <th rowspan="2">日期</th>
@@ -341,11 +427,12 @@
   }
 
   function renderEmpty(){
+    const season = displaySeason(null);
     return `
       <div class="env-empty">
         <div class="env-empty-icon" aria-hidden="true">温</div>
         <h3>${esc(monthLabel(state.selectedMonth))}尚未生成</h3>
-        <p>确认两间房的生成范围后，点击“生成整月并固定”。系统会同时生成上午、下午记录，并自动跳过全部星期日。</p>
+        <p>确认两间房的生成范围后，点击“生成整月并固定”。系统会按${season.label}空调室内特征生成上午、下午记录，并自动跳过全部星期日。</p>
       </div>`;
   }
 
@@ -359,6 +446,7 @@
 
   function render(){
     const record = state.months[state.selectedMonth];
+    const season = displaySeason(record);
     const workdayCount = record ? record.entries.length : 0;
     const sundayCount = record ? record.skippedSundays.length : 0;
     return `
@@ -390,6 +478,8 @@
             </div>
           </div>
 
+          ${renderSeasonCard(record)}
+
           <div class="env-config-intro">
             <div><b>生成范围</b><span>请按现场要求调整；下列默认值不是标准限度</span></div>
             ${record ? '<span>本月范围已随数据锁定</span>' : '<span>每天自动生成自然小幅波动</span>'}
@@ -414,6 +504,7 @@
           <div class="env-fixed-summary">
             <div><span>${esc(monthLabel(record.month))}</span><b>${workdayCount} 个记录日</b></div>
             <div><span>已跳过</span><b>${sundayCount} 个星期日</b></div>
+            <div><span>生成模型</span><b>${season.legacy ? '旧版固定数据' : `${season.label} · 空调室内`}</b></div>
             <div><span>房间</span><b>2 间 × 每天 2 次</b></div>
             <div class="env-summary-lock"><span aria-hidden="true">◆</span><b>只读固定数据</b></div>
           </div>
@@ -512,7 +603,8 @@
       }
       const settings = numericSettings(state.draft);
       state.months[state.selectedMonth] = generateMonth(state.selectedMonth, settings);
-      flash = { type: 'success', message: `${monthLabel(state.selectedMonth)}已生成并固定保存。` };
+      const season = state.months[state.selectedMonth].season;
+      flash = { type: 'success', message: `${monthLabel(state.selectedMonth)}已按${season.label}空调室内模型生成并固定保存。` };
       saveState();
       refresh();
       return;

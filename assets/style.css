@@ -377,6 +377,37 @@ td.spanall{background:#fdfdfd}
 .env-month-state.fixed b{color:#176344}
 .env-month-state.draft b{color:#9a681c}
 
+.env-season-card{
+  display:flex; align-items:center; gap:12px;
+  margin-top:18px; padding:12px 14px;
+  border:1px solid #cbded8; border-radius:10px;
+  color:#285148; background:linear-gradient(110deg,#eef8f5,#f8fbfa);
+}
+.env-season-glyph{
+  flex:0 0 auto; display:grid; place-items:center;
+  width:36px; height:36px; border-radius:50%;
+  color:#fff; background:#3e8b78; font:700 16px/1 "SimHei","黑体",sans-serif;
+}
+.env-season-card > div{display:grid; gap:2px; min-width:0}
+.env-season-card b{font-size:13px}
+.env-season-card > div span{color:#657d77; font-size:11px; line-height:1.55}
+.env-season-card em{
+  flex:0 0 auto; margin-left:auto; padding:4px 9px;
+  border-radius:999px; color:#397161; background:rgba(255,255,255,.72);
+  font-size:10px; font-style:normal; white-space:nowrap;
+}
+.env-season-card.summer{border-color:#e5d4a9; color:#79591e; background:linear-gradient(110deg,#fff8e7,#fffdf8)}
+.env-season-card.summer .env-season-glyph{background:#d19135}
+.env-season-card.summer > div span{color:#816f4f}
+.env-season-card.summer em{color:#85601e}
+.env-season-card.autumn{border-color:#e2cbbb; color:#704a32; background:linear-gradient(110deg,#fff4ec,#fffaf7)}
+.env-season-card.autumn .env-season-glyph{background:#b66b3f}
+.env-season-card.winter{border-color:#cbdbea; color:#355e79; background:linear-gradient(110deg,#edf6fb,#f9fcfe)}
+.env-season-card.winter .env-season-glyph{background:#5184a5}
+.env-season-card.legacy{border-style:dashed; color:#5e6765; background:#f5f6f6}
+.env-season-card.legacy .env-season-glyph{background:#7c8885}
+.env-season-card.legacy em{color:#646e6b; background:#e7ebea}
+
 .env-config-intro{
   display:flex; align-items:baseline; justify-content:space-between; gap:16px;
   margin:21px 0 10px; color:#75817e; font-size:11px;
@@ -426,7 +457,7 @@ td.spanall{background:#fdfdfd}
 .env-danger:hover,.env-danger:focus{background:#fff0ee; outline:none}
 
 .env-fixed-summary{
-  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  display:grid; grid-template-columns:repeat(5,1fr); gap:1px;
   margin:20px 34px 0; overflow:hidden;
   border:1px solid #d7e1de; border-radius:9px; background:#d7e1de;
 }
@@ -494,6 +525,8 @@ td.spanall{background:#fdfdfd}
   .env-panel{padding:18px 14px}
   .env-month-bar{align-items:flex-start; flex-direction:column}
   .env-month-state{justify-items:start; text-align:left}
+  .env-season-card{align-items:flex-start; flex-wrap:wrap}
+  .env-season-card em{margin-left:48px}
   .env-config-intro{align-items:flex-start; flex-direction:column; gap:3px}
   .env-room-configs{grid-template-columns:1fr}
   .env-range-grid{grid-template-columns:repeat(2,1fr)}
