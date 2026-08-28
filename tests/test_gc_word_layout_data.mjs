@@ -206,21 +206,40 @@ if (requireBuilder) {
   const unsupportedMath = normalizeOfficeMath('<m:oMath xmlns:m="urn:m"><m:rad><m:e><m:r><m:t>x</m:t></m:r></m:e></m:rad></m:oMath>');
   assert.deepEqual(unsupportedMath.unresolved, ['rad']);
 
-  const extract = JSON.parse(fs.readFileSync(extractPath, 'utf8'));
-  const manifestById = new Map(entries.map(entry => [entry.templateId, entry]));
-  for (const templateId of ['clove-eugenol', 'patchouli-patchoulol']) {
-    const rawTemplate = extract.templates.find(template => template.templateId === templateId);
-    const meta = manifestById.get(templateId);
-    const table = normalizeWordTable(rawTemplate.referenceTable,
-      { templateId, tableRole: 'reference' });
-    const bindingResult = buildBindings(table, 'reference', meta);
-    assert.deepEqual(bindingResult.unresolved, []);
-    assert.equal(new Set(bindingResult.bindings.map(({ field }) => field)).size,
-      bindingResult.bindings.length, `${templateId} fields must be unique`);
-    assert.ok(bindingResult.bindings.some(({ field }) => field === 'assay.refBatch'));
-    assert.ok(bindingResult.bindings.some(({ field }) => field === 'assay.out.Aref'));
-    assert.equal(bindingResult.bindings.filter(({ field }) => /^assay\.refA\.\d+$/.test(field)).length, 5);
-  }
+  const bindingRows = [
+    ['对照品批号', false],
+    ['对照品浓度C对（mg/ml）', false],
+    ['对照品峰面积A对', true],
+    ['对照品平均峰面积', false],
+    ['RSD (%)', false],
+  ];
+  const rawBindingTable = {
+    role: 'reference', sourceTableIndex: 9, widthPt: 60, gridPt: [10, 10, 10, 10, 10, 10],
+    tableProperties: {}, sourceOoxmlHash: 'b'.repeat(64),
+    rows: bindingRows.map((_, index) => ({ rowIndex: index + 1, heightPt: 12, heightRule: 'atLeast' })),
+    cells: bindingRows.flatMap(([label, isGroup], index) => {
+      const rowIndex = index + 1;
+      const labelCell = { rowIndex, cellIndex: 1, gridColumnIndex: 1, gridSpan: 1,
+        verticalMerge: null, text: label, paragraphs: [] };
+      if (!isGroup) {
+        return [labelCell, { rowIndex, cellIndex: 2, gridColumnIndex: 2, gridSpan: 5,
+          verticalMerge: null, text: '', paragraphs: [] }];
+      }
+      return [labelCell, ...Array.from({ length: 5 }, (_, targetIndex) => ({
+        rowIndex, cellIndex: targetIndex + 2, gridColumnIndex: targetIndex + 2, gridSpan: 1,
+        verticalMerge: null, text: '', paragraphs: [],
+      }))];
+    }),
+  };
+  const bindingTable = normalizeWordTable(rawBindingTable,
+    { templateId: 'fixture-bindings', tableRole: 'reference' });
+  const bindingResult = buildBindings(bindingTable, 'reference', { templateId: 'fixture-bindings' });
+  assert.deepEqual(bindingResult.unresolved, []);
+  assert.equal(new Set(bindingResult.bindings.map(({ field }) => field)).size,
+    bindingResult.bindings.length, 'fixture fields must be unique');
+  assert.ok(bindingResult.bindings.some(({ field }) => field === 'assay.refBatch'));
+  assert.ok(bindingResult.bindings.some(({ field }) => field === 'assay.out.Aref'));
+  assert.equal(bindingResult.bindings.filter(({ field }) => /^assay\.refA\.\d+$/.test(field)).length, 5);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-word-layout-test-'));
   try {
@@ -237,8 +256,64 @@ if (requireBuilder) {
     vm.runInNewContext(`${emitted}\n;this.value = GC_WORD_TABLE_LAYOUTS;`, emittedContext);
     assert.equal(emittedContext.value.fixture.templateId, 'fixture');
 
-    const approvedAudit = JSON.parse(fs.readFileSync(
-      path.join(here, '..', 'output', 'gc-word-layout-audit', 'field-map-report.json'), 'utf8'));
+    const makeCliTable = (role, sourceTableIndex, sourceOoxmlHash) => role === 'reference'
+      ? {
+        role, sourceTableIndex, widthPt: 20, indentPt: 0, gridPt: [10, 10], tableProperties: {}, sourceOoxmlHash,
+        rows: [{ rowIndex: 1, heightPt: 10, heightRule: 'atLeast' }],
+        cells: [
+          { rowIndex: 1, cellIndex: 1, gridColumnIndex: 1, gridSpan: 1,
+            verticalMerge: null, text: '对照品批号', paragraphs: [] },
+          { rowIndex: 1, cellIndex: 2, gridColumnIndex: 2, gridSpan: 1,
+            verticalMerge: null, text: '', paragraphs: [] },
+        ],
+      }
+      : {
+        role, sourceTableIndex, widthPt: 10, indentPt: 0, gridPt: [10], tableProperties: {}, sourceOoxmlHash,
+        rows: [{ rowIndex: 1, heightPt: 10, heightRule: 'atLeast' }],
+        cells: [{ rowIndex: 1, cellIndex: 1, gridColumnIndex: 1, gridSpan: 1,
+          verticalMerge: null, text: '1', paragraphs: [] }],
+      };
+    const fixtureEntries = Array.from({ length: 33 }, (_, index) => {
+      const templateId = `cli-fixture-${index + 1}`;
+      return {
+        manifest: {
+          templateId, recordKey: `record-${index + 1}`, sourceFile: `fixture-${index + 1}.docx`,
+          referenceTableIndex: 1, sampleTableIndex: 2,
+        },
+        extract: {
+          templateId, sourceFile: `fixture-${index + 1}.docx`,
+          referenceTable: makeCliTable('reference', 1, `${index}`.padStart(64, 'a')),
+          sampleTable: makeCliTable('sample', 2, `${index}`.padStart(64, 'b')),
+        },
+      };
+    });
+    const fixtureManifestPath = path.join(tempDir, 'manifest.json');
+    const fixtureExtractPath = path.join(tempDir, 'extract.json');
+    const fixtureAuditPath = path.join(tempDir, 'approved-audit.json');
+    const positiveOutput = path.join(tempDir, 'approved-asset.js');
+    fs.writeFileSync(fixtureManifestPath, JSON.stringify({ entries: fixtureEntries.map(({ manifest }) => manifest) }), 'utf8');
+    fs.writeFileSync(fixtureExtractPath, JSON.stringify({ errors: [], templates: fixtureEntries.map(({ extract }) => extract) }), 'utf8');
+    const auditResult = spawnSync(process.execPath, [builderPath,
+      '--input', fixtureExtractPath,
+      '--manifest', fixtureManifestPath,
+      '--audit-only', fixtureAuditPath,
+    ], { encoding: 'utf8' });
+    assert.equal(auditResult.status, 0, `${auditResult.stdout}${auditResult.stderr}`);
+    assert.match(`${auditResult.stdout}${auditResult.stderr}`, /AUDIT: 33 templates; 0 reviewed; 0 unresolved/);
+    const approvedAudit = JSON.parse(fs.readFileSync(fixtureAuditPath, 'utf8'));
+    const originalDigests = approvedAudit.templates.map(({ auditDigest }) => auditDigest);
+    approvedAudit.templates.forEach(entry => { entry.reviewed = true; });
+    assert.deepEqual(approvedAudit.templates.map(({ auditDigest }) => auditDigest), originalDigests,
+      'approval must preserve builder-produced audit digests');
+    fs.writeFileSync(fixtureAuditPath, JSON.stringify(approvedAudit), 'utf8');
+    const positiveResult = spawnSync(process.execPath, [builderPath,
+      '--input', fixtureExtractPath,
+      '--manifest', fixtureManifestPath,
+      '--approved-audit', fixtureAuditPath,
+      '--output', positiveOutput,
+    ], { encoding: 'utf8' });
+    assert.equal(positiveResult.status, 0, `${positiveResult.stdout}${positiveResult.stderr}`);
+    assert.ok(fs.existsSync(positiveOutput), 'reviewed temporary audit must emit an asset');
     const rejectedApprovals = [
       ['unreviewed', /is not reviewed/, audit => { audit.templates[0].reviewed = false; }],
       ['source-hash', /source OOXML hash changed/, audit => {
@@ -258,8 +333,8 @@ if (requireBuilder) {
       mutate(audit);
       fs.writeFileSync(auditPath, JSON.stringify(audit), 'utf8');
       const result = spawnSync(process.execPath, [builderPath,
-        '--input', extractPath,
-        '--manifest', manifestPath,
+        '--input', fixtureExtractPath,
+        '--manifest', fixtureManifestPath,
         '--approved-audit', auditPath,
         '--output', rejectedOutput,
       ], { encoding: 'utf8' });
