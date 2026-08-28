@@ -5,8 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const manifestPath = path.join(here, '..', 'tools', 'gc-word-table-manifest.json');
+const extractPath = path.join(here, '..', 'tools', 'gc-word-table-extract.json');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const entries = manifest.entries;
+const requireExtract = process.argv.includes('--require-extract');
 
 const EXPECTED_TEMPLATE_IDS = [
   'patchouli-patchoulol','patchouli-patchoulol-finished',
@@ -48,4 +50,28 @@ for (const entry of entries) {
 }
 
 const totalTables = entries.reduce((sum, entry) => sum + 2, 0);
+
+if (requireExtract) {
+  assert.ok(fs.existsSync(extractPath), 'gc-word-table-extract.json is required');
+
+  const extract = JSON.parse(fs.readFileSync(extractPath, 'utf8'));
+  assert.equal(extract.templates.length, 33);
+  assert.deepEqual(extract.errors, []);
+
+  const tables = extract.templates.flatMap(({ referenceTable, sampleTable }) => [referenceTable, sampleTable]);
+  assert.equal(tables.length, 66);
+
+  for (const table of tables) {
+    assert.ok(Number.isFinite(table.widthPt) && table.widthPt > 0, `${table.role} widthPt must be finite and positive`);
+    assert.ok(Array.isArray(table.gridPt) && table.gridPt.length > 0, `${table.role} gridPt must not be empty`);
+    assert.ok(Array.isArray(table.rows) && table.rows.length > 0, `${table.role} rows must not be empty`);
+    assert.ok(Array.isArray(table.cells) && table.cells.length > 0, `${table.role} cells must not be empty`);
+    assert.match(table.sourceOoxmlHash, /^[a-f0-9]{64}$/i, `${table.role} sourceOoxmlHash must be SHA-256`);
+
+    for (const row of table.rows) {
+      assert.ok(Number.isFinite(row.heightPt) && row.heightPt > 0, `${table.role} row heightPt must be finite and positive`);
+    }
+  }
+}
+
 console.log(`${entries.length} templates / ${new Set(entries.map(({ recordKey }) => recordKey)).size} records / ${totalTables} tables`);
