@@ -308,26 +308,30 @@ function Convert-Paragraph {
   )
 
   $runs = [Collections.Generic.List[object]]::new()
-  foreach ($runNode in @($ParagraphNode.SelectNodes('.//w:r[not(ancestor::m:oMath) and not(ancestor::m:oMathPara)]', $NamespaceManager))) {
-    $runs.Add([pscustomobject]@{
-      runIndex = $runs.Count + 1
-      kind = 'text'
-      text = Get-RunText $runNode $NamespaceManager
-      properties = Convert-RunProperties ($runNode.SelectSingleNode('w:rPr', $NamespaceManager)) $NamespaceManager
-      ooxml = $runNode.OuterXml
-      mathOoxml = $null
-    })
-  }
-
-  foreach ($mathNode in @($ParagraphNode.SelectNodes('.//*[self::m:oMathPara or self::m:oMath][not(ancestor::m:oMathPara or ancestor::m:oMath)]', $NamespaceManager))) {
-    $runs.Add([pscustomobject]@{
-      runIndex = $runs.Count + 1
-      kind = 'math'
-      text = [string]$mathNode.InnerText
-      properties = $null
-      ooxml = $null
-      mathOoxml = $mathNode.OuterXml
-    })
+  $contentNodes = $ParagraphNode.SelectNodes(
+    './/w:r[not(ancestor::m:oMath) and not(ancestor::m:oMathPara)] | .//*[self::m:oMathPara or self::m:oMath][not(ancestor::m:oMathPara or ancestor::m:oMath)]',
+    $NamespaceManager
+  )
+  foreach ($contentNode in @($contentNodes)) {
+    if ($contentNode.NamespaceURI -eq $script:mNs) {
+      $runs.Add([pscustomobject]@{
+        runIndex = $runs.Count + 1
+        kind = 'math'
+        text = [string]$contentNode.InnerText
+        properties = $null
+        ooxml = $null
+        mathOoxml = $contentNode.OuterXml
+      })
+    } else {
+      $runs.Add([pscustomobject]@{
+        runIndex = $runs.Count + 1
+        kind = 'text'
+        text = Get-RunText $contentNode $NamespaceManager
+        properties = Convert-RunProperties ($contentNode.SelectSingleNode('w:rPr', $NamespaceManager)) $NamespaceManager
+        ooxml = $contentNode.OuterXml
+        mathOoxml = $null
+      })
+    }
   }
 
   return [pscustomobject]@{
@@ -358,24 +362,25 @@ function Convert-Cell {
   } else { $null }
 
   $paragraphs = [Collections.Generic.List[object]]::new()
-  foreach ($paragraphNode in @($CellNode.SelectNodes('w:p', $NamespaceManager))) {
-    $paragraphs.Add((Convert-Paragraph $paragraphNode $NamespaceManager ($paragraphs.Count + 1)))
-  }
-  foreach ($mathNode in @($CellNode.SelectNodes('./m:oMathPara | ./m:oMath', $NamespaceManager))) {
-    $paragraphs.Add([pscustomobject]@{
-      paragraphIndex = $paragraphs.Count + 1
-      text = [string]$mathNode.InnerText
-      properties = $null
-      runs = @([pscustomobject]@{
-        runIndex = 1
-        kind = 'math'
-        text = [string]$mathNode.InnerText
+  foreach ($contentNode in @($CellNode.SelectNodes('./w:p | ./m:oMathPara | ./m:oMath', $NamespaceManager))) {
+    if ($contentNode.NamespaceURI -eq $script:wNs) {
+      $paragraphs.Add((Convert-Paragraph $contentNode $NamespaceManager ($paragraphs.Count + 1)))
+    } else {
+      $paragraphs.Add([pscustomobject]@{
+        paragraphIndex = $paragraphs.Count + 1
+        text = [string]$contentNode.InnerText
         properties = $null
-        ooxml = $null
-        mathOoxml = $mathNode.OuterXml
+        runs = @([pscustomobject]@{
+          runIndex = 1
+          kind = 'math'
+          text = [string]$contentNode.InnerText
+          properties = $null
+          ooxml = $null
+          mathOoxml = $contentNode.OuterXml
+        })
+        ooxml = $contentNode.OuterXml
       })
-      ooxml = $mathNode.OuterXml
-    })
+    }
   }
 
   return [pscustomobject]@{
