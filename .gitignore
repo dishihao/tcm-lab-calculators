@@ -10,3 +10,5 @@ tools/*quality-template*-extract.json
 tools/hplc-template-extract.json
 tools/sulfur-dioxide-template-extract.json
 tools/identification-template-extract*.json
+tools/gc-word-table-extract.json
+output/gc-word-layout-audit/
