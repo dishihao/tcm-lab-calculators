@@ -198,6 +198,13 @@ export function normalizeWordTable(rawTable, context = {}) {
     const row = rawCell.rowIndex - 1;
     const column = rawCell.gridColumnIndex - 1;
     const colSpan = rawCell.gridSpan ?? 1;
+    const id = `${tableRole}-r${rawCell.rowIndex}c${rawCell.gridColumnIndex}`;
+    if (!Number.isInteger(row) || !Number.isInteger(column) || !Number.isInteger(colSpan) || colSpan < 1) {
+      throw new Error(`templateId=${templateId} tableRole=${tableRole} cellId=${id} has invalid coordinates or span`);
+    }
+    if (row < 0 || column < 0 || row >= rowCount || column + colSpan > columnCount) {
+      throw new Error(`templateId=${templateId} tableRole=${tableRole} cellId=${id} exceeds source table bounds`);
+    }
     const mergeKey = `${column}:${colSpan}`;
     if (rawCell.verticalMerge === 'continue') {
       const owner = verticalOwners.get(mergeKey);
@@ -208,7 +215,6 @@ export function normalizeWordTable(rawTable, context = {}) {
       continue;
     }
 
-    const id = `${tableRole}-r${rawCell.rowIndex}c${rawCell.gridColumnIndex}`;
     const cell = {
       id, row, column, rowSpan: 1, colSpan,
       widthPt: rawCell.width?.valuePt ?? rawTable.gridPt.slice(column, column + colSpan).reduce((a, b) => a + b, 0),

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,6 +35,51 @@ const EXPECTED_TEMPLATE_IDS = [
   'elsholtzia-thymol-finished','elsholtzia-carvacrol-finished',
   'pine-alpha-pinene'
 ];
+
+// This source-authoritative map is deliberately independent from the builder's
+// label rules. It locks each browser layout's expected injection-slot shape.
+const EXPECTED_NEEDLE_SLOT_COUNTS = Object.freeze({
+  'patchouli-patchoulol': { refA: 5, refIS: 5, smpA: [3, 3], smpIS: [2, 2] },
+  'patchouli-patchoulol-finished': { refA: 5, refIS: 5, smpA: [3, 3], smpIS: [2, 2] },
+  'mugwort-eucalyptol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'mugwort-borneol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'mugwort-eucalyptol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'mugwort-borneol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'star-anise-anethole': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'star-anise-anethole-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'mint-menthol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'mint-menthol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'clove-eugenol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'clove-eugenol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'cardamom-eucalyptol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'cardamom-eucalyptol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'dendrobium-dendrobine': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'homalomena-linalool': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'homalomena-linalool-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'amomum-bornyl-acetate': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'amomum-bornyl-acetate-finished-national': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'amomum-bornyl-acetate-finished-shanghai': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'amomum-bornyl-acetate-finished-beijing': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'fennel-anethole': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'fennel-anethole-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'fennel-anethole-salted-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'brucea-oleic': { refA: 5, refIS: 5, smpA: [3, 3], smpIS: [2, 2] },
+  'brucea-oleic-finished': { refA: 5, refIS: 5, smpA: [3, 3], smpIS: [2, 2] },
+  'flax-linoleic': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'flax-linolenic': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'elsholtzia-thymol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'elsholtzia-carvacrol': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'elsholtzia-thymol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'elsholtzia-carvacrol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'pine-alpha-pinene': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+});
+
+const EXPECTED_UNBOUND_NON_GAP_BLANKS = Object.freeze({
+  'patchouli-patchoulol': ['reference-r10c1', 'reference-r10c2'],
+  'patchouli-patchoulol-finished': ['reference-r10c1', 'reference-r10c2'],
+  'brucea-oleic': ['reference-r10c1', 'reference-r10c2'],
+  'brucea-oleic-finished': ['reference-r10c1', 'reference-r10c2'],
+});
 
 assert.ok(Array.isArray(entries), 'manifest.entries must be an array');
 assert.equal(entries.length, EXPECTED_TEMPLATE_IDS.length);
@@ -125,6 +171,18 @@ if (requireBuilder) {
     { templateId: 'fixture', tableRole: 'reference' }),
   /templateId=fixture tableRole=reference cellId=table .*grid width/);
 
+  const rawBadRow = structuredClone(rawTable);
+  rawBadRow.cells[0].rowIndex = 0;
+  assert.throws(() => normalizeWordTable(rawBadRow,
+    { templateId: 'fixture', tableRole: 'reference' }),
+  /templateId=fixture tableRole=reference cellId=reference-r0c1 .*bounds/);
+
+  const rawBadColumn = structuredClone(rawTable);
+  rawBadColumn.cells[0].gridColumnIndex = 0;
+  assert.throws(() => normalizeWordTable(rawBadColumn,
+    { templateId: 'fixture', tableRole: 'reference' }),
+  /templateId=fixture tableRole=reference cellId=reference-r1c0 .*bounds/);
+
   const overlapping = structuredClone(normalized);
   overlapping.cells[2].column = 1;
   assert.throws(() => validateTableGeometry(overlapping),
@@ -178,6 +236,37 @@ if (requireBuilder) {
     const emittedContext = Object.create(null);
     vm.runInNewContext(`${emitted}\n;this.value = GC_WORD_TABLE_LAYOUTS;`, emittedContext);
     assert.equal(emittedContext.value.fixture.templateId, 'fixture');
+
+    const approvedAudit = JSON.parse(fs.readFileSync(
+      path.join(here, '..', 'output', 'gc-word-layout-audit', 'field-map-report.json'), 'utf8'));
+    const rejectedApprovals = [
+      ['unreviewed', /is not reviewed/, audit => { audit.templates[0].reviewed = false; }],
+      ['source-hash', /source OOXML hash changed/, audit => {
+        audit.templates[0].sourceOoxmlHashes.reference = '0'.repeat(64);
+      }],
+      ['unresolved', /has unresolved audit items/, audit => {
+        audit.templates[0].unresolved.push({ type: 'test-unresolved' });
+      }],
+      ['digest-tamper', /approved audit content changed/, audit => {
+        audit.templates[0].inputFields[0].field = 'assay.testTamper';
+      }],
+    ];
+    for (const [name, expectedError, mutate] of rejectedApprovals) {
+      const auditPath = path.join(tempDir, `${name}.json`);
+      const rejectedOutput = path.join(tempDir, `${name}.js`);
+      const audit = structuredClone(approvedAudit);
+      mutate(audit);
+      fs.writeFileSync(auditPath, JSON.stringify(audit), 'utf8');
+      const result = spawnSync(process.execPath, [builderPath,
+        '--input', extractPath,
+        '--manifest', manifestPath,
+        '--approved-audit', auditPath,
+        '--output', rejectedOutput,
+      ], { encoding: 'utf8' });
+      assert.notEqual(result.status, 0, `${name} approval must fail`);
+      assert.match(`${result.stdout}${result.stderr}`, expectedError);
+      assert.ok(!fs.existsSync(rejectedOutput), `${name} approval must not emit an asset`);
+    }
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -195,20 +284,25 @@ if (requireAsset) {
 
   assert.deepEqual(Object.keys(layouts), EXPECTED_TEMPLATE_IDS);
   assert.equal(Object.keys(layouts).length, 33);
+  assert.deepEqual(Object.keys(EXPECTED_NEEDLE_SLOT_COUNTS), EXPECTED_TEMPLATE_IDS);
 
   let unresolvedCount = 0;
+  let gridGapCount = 0;
   for (const templateId of EXPECTED_TEMPLATE_IDS) {
     const layout = layouts[templateId];
     assert.equal(layout.templateId, templateId, `${templateId} must remain the sole runtime key`);
     assert.ok(layout.referenceTable, `${templateId} referenceTable missing`);
     assert.ok(layout.sampleTable, `${templateId} sampleTable missing`);
-    assert.ok(layout.bindings && typeof layout.bindings === 'object', `${templateId} bindings missing`);
+    assert.ok(Array.isArray(layout.bindings), `${templateId} bindings missing`);
     unresolvedCount += layout.unresolved?.length ?? 0;
 
-    for (const [tableRole, table] of [
+    const tables = [
       ['reference', layout.referenceTable],
       ['sample', layout.sampleTable],
-    ]) {
+    ];
+    const gapIds = new Set();
+    const unboundNonGapBlankIds = [];
+    for (const [tableRole, table] of tables) {
       const gridWidth = table.gridPt.reduce((sum, width) => sum + width, 0);
       assert.ok(
         Math.abs(gridWidth - table.widthPt) <= 0.05,
@@ -238,10 +332,43 @@ if (requireAsset) {
             `${templateId}/${tableRole} has a hole at ${row},${column}`);
         }
       }
+
+      for (const cell of table.cells) {
+        if (cell.isGridGap) {
+          gridGapCount += 1;
+          gapIds.add(cell.id);
+          assert.equal(cell.borders, null, `${templateId}/${tableRole}/${cell.id} grid gap must be borderless`);
+        }
+      }
+      const boundCellIds = new Set(layout.bindings.map(({ cellId }) => cellId));
+      for (const cell of table.cells) {
+        if (!cell.isGridGap && !String(cell.text ?? '').trim() && !boundCellIds.has(cell.id)) {
+          unboundNonGapBlankIds.push(cell.id);
+        }
+      }
     }
+
+    for (const binding of layout.bindings) {
+      assert.ok(!gapIds.has(binding.cellId), `${templateId}/${binding.cellId} binding must not target a grid gap`);
+    }
+    assert.deepEqual(unboundNonGapBlankIds.sort(),
+      [...(EXPECTED_UNBOUND_NON_GAP_BLANKS[templateId] ?? [])].sort(),
+      `${templateId} unbound non-gap blanks changed`);
+
+    const expectedSlots = EXPECTED_NEEDLE_SLOT_COUNTS[templateId];
+    const countSlots = expression => layout.bindings.filter(({ field }) => expression.test(field)).length;
+    assert.equal(countSlots(/^assay\.refA\.\d+$/), expectedSlots.refA,
+      `${templateId} reference analyte injection slots changed`);
+    assert.equal(countSlots(/^assay\.refIS\.\d+$/), expectedSlots.refIS,
+      `${templateId} reference internal-standard injection slots changed`);
+    assert.deepEqual([1, 2].map(sample => countSlots(new RegExp(`^assay\\.smpA\\.${sample}\\.\\d+$`))),
+      expectedSlots.smpA, `${templateId} sample analyte injection slots changed`);
+    assert.deepEqual([1, 2].map(sample => countSlots(new RegExp(`^assay\\.smpIS\\.${sample}\\.\\d+$`))),
+      expectedSlots.smpIS, `${templateId} sample internal-standard injection slots changed`);
   }
 
   assert.equal(unresolvedCount, 0);
+  assert.equal(gridGapCount, 44, 'whole asset must preserve 44 borderless structural grid gaps');
   console.log(`${EXPECTED_TEMPLATE_IDS.length} precise layouts; ${unresolvedCount} unresolved bindings`);
 }
 
