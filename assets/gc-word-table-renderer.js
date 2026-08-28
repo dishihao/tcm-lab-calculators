@@ -105,12 +105,12 @@
   }
 
   function renderParagraphStyle(properties, table, cellId) {
-    if (!properties) return '';
+    if (!properties) return 'margin:0';
     ensureKnownObjectKeys(properties, new Set([
       'styleId', 'alignment', 'keepNext', 'keepLines', 'pageBreakBefore', 'widowControl', 'bidirectional',
       'indentation', 'spacing', 'tabs', 'borders', 'shading', 'defaultRunProperties',
     ]), table, cellId, 'paragraph properties');
-    const styles = [];
+    const styles = ['margin:0'];
     if (properties.styleId != null && typeof properties.styleId !== 'string') fail(table, cellId, 'invalid paragraph styleId');
     if (properties.alignment != null) {
       if (!ALIGNMENTS.has(properties.alignment)) fail(table, cellId, 'unsupported paragraph alignment');
@@ -221,6 +221,26 @@
     return span;
   }
 
+  function mergeRunProperties(defaults, overrides) {
+    const merged = {};
+    const defaultProperties = defaults && typeof defaults === 'object' ? defaults : {};
+    const overrideProperties = overrides && typeof overrides === 'object' ? overrides : {};
+    const nestedProperties = new Set(['fonts', 'color', 'language', 'border', 'shading']);
+    for (const key of new Set([...Object.keys(defaultProperties), ...Object.keys(overrideProperties)])) {
+      const defaultValue = defaultProperties[key];
+      const overrideValue = overrideProperties[key];
+      if (nestedProperties.has(key) && defaultValue && overrideValue && typeof defaultValue === 'object' && typeof overrideValue === 'object') {
+        merged[key] = {};
+        for (const nestedKey of new Set([...Object.keys(defaultValue), ...Object.keys(overrideValue)])) {
+          merged[key][nestedKey] = overrideValue[nestedKey] ?? defaultValue[nestedKey];
+        }
+      } else {
+        merged[key] = overrideValue ?? defaultValue;
+      }
+    }
+    return merged;
+  }
+
   function renderMath(node, table, cellId) {
     if (!node || typeof node !== 'object' || Array.isArray(node)) fail(table, cellId, 'invalid math node');
     switch (node.type) {
@@ -232,7 +252,7 @@
         if (typeof node.text !== 'string') fail(table, cellId, 'invalid math text');
         return `<span class="word-math-text">${escapeHtml(node.text)}</span>`;
       case 'fraction':
-        return `<span class="word-math-fraction"><span class="word-math-numerator">${renderMath(node.numerator, table, cellId)}</span><span class="word-math-denominator">${renderMath(node.denominator, table, cellId)}</span></span>`;
+        return `<span class="word-math-fraction" style="display:inline-flex;flex-direction:column;vertical-align:middle;line-height:1;text-align:center"><span class="word-math-numerator" style="display:block;padding:0 0.15em">${renderMath(node.numerator, table, cellId)}</span><span class="word-math-denominator" style="display:block;border-top:1px solid currentColor;padding:0 0.15em">${renderMath(node.denominator, table, cellId)}</span></span>`;
       case 'subscript':
         return `${renderMath(node.base, table, cellId)}<sub>${renderMath(node.subscript, table, cellId)}</sub>`;
       case 'superscript':
@@ -251,13 +271,24 @@
     if (!paragraph || typeof paragraph !== 'object' || Array.isArray(paragraph)) fail(table, cellId, 'invalid paragraph');
     if (!Array.isArray(paragraph.runs)) fail(table, cellId, 'paragraph runs must be an array');
     const style = renderParagraphStyle(paragraph.properties, table, cellId);
+    const defaultRunProperties = paragraph.properties?.defaultRunProperties;
+    if (defaultRunProperties != null) renderRunStyle(defaultRunProperties, table, cellId);
     const content = paragraph.runs.map(run => {
       if (!run || typeof run !== 'object') fail(table, cellId, 'invalid paragraph run');
-      if (run.kind === 'text') return renderTextRun(run, table, cellId);
+      if (run.kind === 'text') return renderTextRun({ ...run,
+        properties: mergeRunProperties(defaultRunProperties, run.properties) }, table, cellId);
       if (run.kind === 'math') return renderMath(run.math, table, cellId);
       fail(table, cellId, `unsupported run kind ${String(run.kind)}`);
     }).join('');
-    return style ? `<p style="${style}">${content}</p>` : `<p>${content}</p>`;
+    return `<p style="${style}">${content}</p>`;
+  }
+
+  function renderRowContentStyle(row, table, rowIndex) {
+    const heightRule = row.heightRule ?? 'auto';
+    if (heightRule === 'auto' || row.heightPt == null) return '';
+    const height = pt(row.heightPt, table, `row-${rowIndex + 1}`, 'heightPt', { nonNegative: true });
+    if (heightRule === 'exact') return `height:${height};max-height:${height};overflow:hidden;box-sizing:border-box`;
+    return `min-height:${height};box-sizing:border-box`;
   }
 
   function validate(table) {
@@ -322,7 +353,8 @@
     ].filter(Boolean).join(';');
     const colgroup = `<colgroup>${table.gridPt.map(width => `<col style="width:${pt(width, table, 'table', 'gridPt item', { nonNegative: true })}">`).join('')}</colgroup>`;
     const rows = table.rows.map((row, rowIndex) => {
-      const rowStyle = row.heightPt == null ? '' : ` style="height:${pt(row.heightPt, table, `row-${rowIndex + 1}`, 'heightPt', { nonNegative: true })}"`;
+      const heightRule = row.heightRule ?? 'auto';
+      const rowContentStyle = renderRowContentStyle(row, table, rowIndex);
       const cells = table.cells.filter(cell => cell.row === rowIndex).map(cell => {
         if (cell.isGridGap) {
           return `<td class="word-grid-gap"${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''} style="border:0;padding:0;background:transparent" aria-hidden="true"></td>`;
@@ -337,10 +369,11 @@
         } else {
           content = (cell.paragraphs ?? []).map(paragraph => renderParagraph(paragraph, table, cell.id)).join('');
         }
+        if (rowContentStyle) content = `<div class="word-row-content" style="${rowContentStyle}">${content}</div>`;
         const style = renderCellStyle(cell, table);
         return `<td${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
       }).join('');
-      return `<tr${rowStyle}>${cells}</tr>`;
+      return `<tr data-word-row-height-rule="${heightRule}">${cells}</tr>`;
     }).join('');
     return `<table class="word-record-table" data-word-table-role="${escapeHtml(table.tableRole)}" data-source-table-index="${table.sourceTableIndex}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
   }

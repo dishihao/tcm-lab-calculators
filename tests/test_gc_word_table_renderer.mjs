@@ -50,10 +50,13 @@ const fixture = Object.freeze({
       },
       verticalAlign: 'center', textDirection: null, noWrap: null, fitText: null,
       paragraphs: [{
-        properties: { alignment: 'center', spacing: { beforePt: 1, afterPt: 2, line: '240', lineRule: 'auto' } },
+        properties: {
+          alignment: 'center', spacing: { beforePt: 1, afterPt: 2, line: '240', lineRule: 'auto' },
+          defaultRunProperties: { fonts: { highAnsi: 'SimSun' }, fontSizePt: 10.5, characterSpacingPt: 0.25 },
+        },
         runs: [
-          { kind: 'text', text: 'A < B & C', properties: runProperties },
-          { kind: 'text', text: '2', properties: { ...runProperties, verticalAlign: 'subscript' } },
+          { kind: 'text', text: 'A < B & C', properties: {} },
+          { kind: 'text', text: '2', properties: { verticalAlign: 'subscript' } },
         ],
       }],
     },
@@ -92,13 +95,25 @@ assert.match(html, /data-word-table-role="reference"/);
 assert.match(html, /data-source-table-index="7"/);
 assert.match(html, /<col style="width:120pt">/);
 assert.match(html, /<td rowspan="2" colspan="2"/);
-assert.match(html, /<span style="font-family:SimSun;font-size:10.5pt">A &lt; B &amp; C<\/span><sub/);
-assert.match(html, /<span class="word-math-fraction">/);
+assert.match(html, /<p style="margin:0;text-align:center;margin-top:1pt;margin-bottom:2pt;line-height:1">/);
+assert.match(html, /<span style="font-family:SimSun;font-size:10.5pt;letter-spacing:0.25pt">A &lt; B &amp; C<\/span><sub/);
+assert.match(html, /<sub><span style="font-family:SimSun;font-size:10.5pt;letter-spacing:0.25pt">2<\/span><\/sub>/);
+assert.match(html, /<p style="margin:0"><span class="word-math-fraction" style="display:inline-flex;flex-direction:column;vertical-align:middle;line-height:1;text-align:center">/);
+assert.match(html, /class="word-math-numerator" style="display:block;padding:0 0.15em">/);
+assert.match(html, /class="word-math-denominator" style="display:block;border-top:1px solid currentColor;padding:0 0.15em">/);
 assert.match(html, /<sub><span class="word-math-text">s<\/span><\/sub>/);
 assert.match(html, /<input data-k="assay.Cref">/);
 assert.match(html, /class="word-grid-gap"/);
 assert.match(html, /class="word-grid-gap"[^>]*style="border:0/);
 assert.doesNotMatch(html, /A < B & C/);
+assert.match(html, /<tr data-word-row-height-rule="exact"><td rowspan="2" colspan="2"[^>]*><div class="word-row-content" style="height:22pt;max-height:22pt;overflow:hidden;box-sizing:border-box">/);
+assert.match(html, /<tr data-word-row-height-rule="atLeast"><td[^>]*><div class="word-row-content" style="min-height:18pt;box-sizing:border-box"><input data-k="assay.Cref"><\/div><\/td><\/tr>/);
+assert.match(html, /<tr data-word-row-height-rule="exact"><td class="word-grid-gap"/);
+
+const autoHeightHtml = renderer.render({ ...fixture, rows: fixture.rows.map((row, index) => index === 2 ? { ...row, heightRule: 'auto' } : row) }, {
+  input: () => '<input>', output: () => '<output>',
+});
+assert.match(autoHeightHtml, /<tr data-word-row-height-rule="auto"><td class="word-grid-gap"/);
 
 assert.throws(() => renderer.render({
   ...fixture,
@@ -114,6 +129,18 @@ assert.throws(() => renderer.render({
   cells: fixture.cells.map(cell => cell.id === 'reference-r1c1' ? {
     ...cell,
     paragraphs: [{ properties: {}, runs: [{ kind: 'text', text: 'x', properties: { fonts: { highAnsi: 'evil; color:red' } } }] }],
+  } : cell),
+}, { input: () => '', output: () => '' }),
+/templateId=renderer-fixture tableRole=reference cellId=reference-r1c1 unsupported font family/);
+
+assert.throws(() => renderer.render({
+  ...fixture,
+  cells: fixture.cells.map(cell => cell.id === 'reference-r1c1' ? {
+    ...cell,
+    paragraphs: [{
+      properties: { defaultRunProperties: { fonts: { highAnsi: 'evil; color:red' } } },
+      runs: [{ kind: 'text', text: 'x', properties: { fonts: { highAnsi: 'SimSun' } } }],
+    }],
   } : cell),
 }, { input: () => '', output: () => '' }),
 /templateId=renderer-fixture tableRole=reference cellId=reference-r1c1 unsupported font family/);
