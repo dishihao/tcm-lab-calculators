@@ -53,6 +53,8 @@ const audit = await page.evaluate(() => ({
   hplcProducts: new Set(HPLC_TEMPLATES.map(t => t.product)).size,
   gcIds: GC_TEMPLATES.map(t => t.id),
   gcRecords: new Set(GC_TEMPLATES.map(t => t.recordKey)).size,
+  gcRawRecords: new Set(GC_TEMPLATES.filter(t => t.kind === '原料').map(t => t.recordKey)).size,
+  gcFinishedRecords: new Set(GC_TEMPLATES.filter(t => t.kind === '成品').map(t => t.recordKey)).size,
   invalidTech: ASSAY_TEMPLATES.filter(t => !['hplc', 'gc'].includes(t.tech)).map(t => t.id),
 }));
 assert(audit.hplc.records === 603, '液相记录总数错误');
@@ -64,6 +66,8 @@ assert(audit.hplcProducts === audit.hplc.products, '液相品名统计不一致'
 assert(new Set(audit.hplcIds).size === audit.hplcIds.length, '液相模板 ID 不唯一');
 assert(audit.gcIds.length === 33, '气相成分模板数量不正确');
 assert(audit.gcRecords === 28, '气相原料/成品记录数量不正确');
+assert(audit.gcRawRecords === 14, '气相原料记录数量不正确');
+assert(audit.gcFinishedRecords === 14, '气相成品记录数量不正确');
 assert(audit.invalidTech.length === 0, '存在未区分液相/气相的模板');
 
 // 默认液相：先选品名，再显示该品名的原料/成品及成分模板。
@@ -114,6 +118,44 @@ await chooseTemplate(page, 'mint-menthol');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.20%'), '薄荷原料标准错误');
 await chooseTemplate(page, 'mint-menthol-finished');
 assert((await page.locator('.standard-quote').innerText()).includes('不得少于0.13%'), '薄荷成品标准错误');
+
+// 对照品和供试品表格必须按每份气相记录切换，不能继续共用固定布局。
+await chooseTemplate(page, 'clove-eugenol');
+assert((await page.locator('[data-assay-reference-table]').innerText()).includes('对照品批号'),
+  '丁香原料对照品表缺少记录中的批号行');
+assert((await page.locator('[data-assay-reference-table]').innerText()).includes('对照品进样量'),
+  '丁香原料对照品表缺少记录中的进样量行');
+assert(await page.locator('[data-assay-sample-table] [data-assay-layout-row="water"]').count() === 0,
+  '丁香原料供试品表不应显示水分行');
+assert(await field(page, 'assay.sampleInjection.1').count() === 1,
+  '丁香原料供试品表缺少第一份样品进样量');
+
+await chooseTemplate(page, 'clove-eugenol-finished');
+assert(await field(page, 'assay.dryBasis').isChecked() === false,
+  '丁香成品计算口径不应被表格布局改写');
+assert(await page.locator('[data-assay-sample-table] [data-assay-layout-row="water"]').count() === 1,
+  '丁香成品记录的供试品表应显示水分行');
+
+await chooseTemplate(page, 'patchouli-patchoulol');
+const patchouliReferenceTable = await page.locator('[data-assay-reference-table]').innerText();
+assert(patchouliReferenceTable.includes('正十八烷批号') && patchouliReferenceTable.includes('百秋李醇批号'),
+  '广藿香内标法对照品表没有按记录显示两种物质的批号');
+assert(patchouliReferenceTable.includes('正十八烷来源') && patchouliReferenceTable.includes('百秋李醇来源'),
+  '广藿香内标法对照品表没有按记录显示两种物质的来源');
+await field(page, 'assay.internalBatch').fill('IS-PATCHOULI');
+await field(page, 'assay.sampleInjection.1').fill('1.0');
+
+await chooseTemplate(page, 'brucea-oleic');
+const bruceaReferenceTable = await page.locator('[data-assay-reference-table]').innerText();
+assert(bruceaReferenceTable.includes('苯甲酸苯酯批号') && bruceaReferenceTable.includes('油酸批号'),
+  '鸦胆子内标法对照品表没有切换为本记录物质名称');
+await field(page, 'assay.internalBatch').fill('IS-BRUCEA');
+await field(page, 'assay.sampleInjection.1').fill('2.0');
+await chooseTemplate(page, 'patchouli-patchoulol');
+assert(await field(page, 'assay.internalBatch').inputValue() === 'IS-PATCHOULI',
+  '切回广藿香后没有恢复其对照品表数据');
+assert(await field(page, 'assay.sampleInjection.1').inputValue() === '1.0',
+  '切回广藿香后没有恢复其供试品表数据');
 
 // 任意输入一个未预置品种，也应保留为当前方法的自定义品种。
 await page.locator('[data-assay-product]').fill('自定义品种');
