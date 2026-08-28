@@ -1,0 +1,143 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const rendererPath = path.join(here, '..', 'assets', 'gc-word-table-renderer.js');
+const context = Object.create(null);
+context.window = context;
+const rendererSource = fs.existsSync(rendererPath) ? fs.readFileSync(rendererPath, 'utf8') : '';
+vm.runInNewContext(`${rendererSource}\n;this.renderer = GcWordTableRenderer;`, context, {
+  filename: rendererPath,
+});
+const { renderer } = context;
+
+const runProperties = Object.freeze({
+  fonts: { highAnsi: 'SimSun' },
+  fontSizePt: 10.5,
+  verticalAlign: null,
+});
+
+const fixture = Object.freeze({
+  templateId: 'renderer-fixture',
+  tableRole: 'reference',
+  sourceTableIndex: 7,
+  widthPt: 300,
+  indentPt: 5,
+  paddingPt: { top: 1, right: 2, bottom: 3, left: 4 },
+  gridPt: [120, 80, 100],
+  rowCount: 3,
+  columnCount: 3,
+  rows: [
+    { heightPt: 22, heightRule: 'exact' },
+    { heightPt: 18, heightRule: 'atLeast' },
+    { heightPt: 12, heightRule: 'exact' },
+  ],
+  bindings: [
+    { cellId: 'reference-r2c3', role: 'input', field: 'assay.Cref', inputMode: 'decimal' },
+  ],
+  cells: [
+    {
+      id: 'reference-r1c1', row: 0, column: 0, rowSpan: 2, colSpan: 2, widthPt: 200,
+      margins: { top: 1, right: 2, bottom: 3, left: 4 },
+      borders: {
+        top: { value: 'single', sizePt: 0.5, color: '000000' },
+        right: { value: 'double', sizePt: 1, color: 'FF0000' },
+        bottom: { value: 'dashed', sizePt: 0.5, color: '00AA00' },
+        left: { value: 'dotted', sizePt: 0.5, color: '0000FF' },
+      },
+      verticalAlign: 'center', textDirection: null, noWrap: null, fitText: null,
+      paragraphs: [{
+        properties: { alignment: 'center', spacing: { beforePt: 1, afterPt: 2, line: '240', lineRule: 'auto' } },
+        runs: [
+          { kind: 'text', text: 'A < B & C', properties: runProperties },
+          { kind: 'text', text: '2', properties: { ...runProperties, verticalAlign: 'subscript' } },
+        ],
+      }],
+    },
+    {
+      id: 'reference-r1c3', row: 0, column: 2, rowSpan: 1, colSpan: 1, widthPt: 100,
+      margins: null, borders: null, verticalAlign: 'top', textDirection: null, noWrap: null, fitText: null,
+      paragraphs: [{ properties: {}, runs: [{ kind: 'math', math: {
+        type: 'fraction',
+        numerator: { type: 'sequence', children: [{ type: 'text', text: 'x' }] },
+        denominator: { type: 'sequence', children: [{ type: 'subscript', base: { type: 'text', text: 'C' }, subscript: { type: 'text', text: 's' } }] },
+      } }] }],
+    },
+    {
+      id: 'reference-r2c3', row: 1, column: 2, rowSpan: 1, colSpan: 1, widthPt: 100,
+      margins: null, borders: null, verticalAlign: 'bottom', textDirection: null, noWrap: true, fitText: null,
+      paragraphs: [],
+    },
+    {
+      id: 'reference-r3gap1', row: 2, column: 0, rowSpan: 1, colSpan: 3, widthPt: 300,
+      margins: null, borders: null, verticalAlign: null, textDirection: null, noWrap: null, fitText: null,
+      paragraphs: [], isGridGap: true,
+    },
+  ],
+});
+
+const html = renderer.render(fixture, {
+  input(binding) {
+    assert.equal(binding.field, 'assay.Cref');
+    return '<input data-k="assay.Cref">';
+  },
+  output() { return '<output></output>'; },
+});
+
+assert.match(html, /^<table class="word-record-table"/);
+assert.match(html, /data-word-table-role="reference"/);
+assert.match(html, /data-source-table-index="7"/);
+assert.match(html, /<col style="width:120pt">/);
+assert.match(html, /<td rowspan="2" colspan="2"/);
+assert.match(html, /<span style="font-family:SimSun;font-size:10.5pt">A &lt; B &amp; C<\/span><sub/);
+assert.match(html, /<span class="word-math-fraction">/);
+assert.match(html, /<sub><span class="word-math-text">s<\/span><\/sub>/);
+assert.match(html, /<input data-k="assay.Cref">/);
+assert.match(html, /class="word-grid-gap"/);
+assert.match(html, /class="word-grid-gap"[^>]*style="border:0/);
+assert.doesNotMatch(html, /A < B & C/);
+
+assert.throws(() => renderer.render({
+  ...fixture,
+  cells: fixture.cells.map(cell => cell.id === 'reference-r1c3' ? {
+    ...cell,
+    paragraphs: [{ properties: {}, runs: [{ kind: 'math', math: { type: 'radical', value: { type: 'text', text: 'x' } } }] }],
+  } : cell),
+}, { input: () => '', output: () => '' }),
+/templateId=renderer-fixture tableRole=reference cellId=reference-r1c3 unsupported math node radical/);
+
+assert.throws(() => renderer.render({
+  ...fixture,
+  cells: fixture.cells.map(cell => cell.id === 'reference-r1c1' ? {
+    ...cell,
+    paragraphs: [{ properties: {}, runs: [{ kind: 'text', text: 'x', properties: { fonts: { highAnsi: 'evil; color:red' } } }] }],
+  } : cell),
+}, { input: () => '', output: () => '' }),
+/templateId=renderer-fixture tableRole=reference cellId=reference-r1c1 unsupported font family/);
+
+assert.throws(() => renderer.validate({ ...fixture, gridPt: [120, 80] }),
+/templateId=renderer-fixture tableRole=reference cellId=table grid column count/);
+
+const layoutsPath = path.join(here, '..', 'assets', 'gc-record-table-layouts.js');
+const layoutsContext = Object.create(null);
+vm.runInNewContext(`${fs.readFileSync(layoutsPath, 'utf8')}\n;this.layouts = GC_WORD_TABLE_LAYOUTS;`, layoutsContext, {
+  filename: layoutsPath,
+});
+for (const layout of Object.values(layoutsContext.layouts)) {
+  for (const sourceTable of [layout.referenceTable, layout.sampleTable]) {
+    const table = structuredClone(sourceTable);
+    table.bindings = layout.bindings.filter(binding => table.cells.some(cell => cell.id === binding.cellId));
+    const rendered = renderer.render(table, {
+      input: binding => `<input data-bound="${binding.field}">`,
+      output: binding => `<output data-bound="${binding.field}"></output>`,
+    });
+    assert.match(rendered, new RegExp(`data-word-table-role="${sourceTable.tableRole}"`));
+    assert.match(rendered, new RegExp(`data-source-table-index="${sourceTable.sourceTableIndex}"`));
+    assert.doesNotMatch(rendered, /undefined|null/);
+  }
+}
+
+console.log('PASS: pure GC Word-table renderer: geometry, runs, math, bindings, escaping, and fail-closed styles');
