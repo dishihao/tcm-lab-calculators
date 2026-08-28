@@ -106,7 +106,8 @@ assert.match(html, /<input data-k="assay.Cref">/);
 assert.match(html, /class="word-grid-gap"/);
 assert.match(html, /class="word-grid-gap"[^>]*style="border:0/);
 assert.doesNotMatch(html, /A < B & C/);
-assert.match(html, /<tr data-word-row-height-rule="exact"><td rowspan="2" colspan="2"[^>]*><div class="word-row-content" style="height:22pt;max-height:22pt;overflow:hidden;box-sizing:border-box">/);
+assert.match(html, /<tr data-word-row-height-rule="exact"><td rowspan="2" colspan="2"[^>]*><div class="word-row-content" style="min-height:40pt;box-sizing:border-box">/);
+assert.doesNotMatch(html, /<td rowspan="2" colspan="2"[^>]*><div class="word-row-content" style="height:22pt;max-height:22pt/);
 assert.match(html, /<tr data-word-row-height-rule="atLeast"><td[^>]*><div class="word-row-content" style="min-height:18pt;box-sizing:border-box"><input data-k="assay.Cref"><\/div><\/td><\/tr>/);
 assert.match(html, /<tr data-word-row-height-rule="exact"><td class="word-grid-gap"/);
 
@@ -166,5 +167,15 @@ for (const layout of Object.values(layoutsContext.layouts)) {
     assert.doesNotMatch(rendered, /undefined|null/);
   }
 }
+
+const realLayout = Object.values(layoutsContext.layouts)[0];
+const realTable = structuredClone(realLayout.referenceTable);
+realTable.bindings = realLayout.bindings.filter(binding => realTable.cells.some(cell => cell.id === binding.cellId));
+const realRow = realTable.rows[0];
+assert.equal(realRow.heightRule, null, 'approved source row must reproduce null hRule');
+const realHtml = renderer.render(realTable, {
+  input: () => '<input>', output: () => '<output>',
+});
+assert.match(realHtml, new RegExp(`<tr data-word-row-height-rule="atLeast">[^]*?<div class="word-row-content" style="min-height:${realRow.heightPt}pt;box-sizing:border-box">`));
 
 console.log('PASS: pure GC Word-table renderer: geometry, runs, math, bindings, escaping, and fail-closed styles');

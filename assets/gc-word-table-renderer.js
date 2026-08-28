@@ -283,10 +283,23 @@
     return `<p style="${style}">${content}</p>`;
   }
 
-  function renderRowContentStyle(row, table, rowIndex) {
-    const heightRule = row.heightRule ?? 'auto';
+  function effectiveHeightRule(row) {
+    if (row.heightRule != null) return row.heightRule;
+    return row.heightPt == null ? 'auto' : 'atLeast';
+  }
+
+  function renderRowContentStyle(row, table, rowIndex, cell) {
+    const heightRule = effectiveHeightRule(row);
     if (heightRule === 'auto' || row.heightPt == null) return '';
     const height = pt(row.heightPt, table, `row-${rowIndex + 1}`, 'heightPt', { nonNegative: true });
+    if (cell.rowSpan > 1) {
+      const spannedRows = table.rows.slice(rowIndex, rowIndex + cell.rowSpan);
+      if (spannedRows.every(spannedRow => Number.isFinite(spannedRow.heightPt))) {
+        const combinedHeight = spannedRows.reduce((total, spannedRow) => total + spannedRow.heightPt, 0);
+        return `min-height:${pt(combinedHeight, table, cell.id, 'spanned row height', { nonNegative: true })};box-sizing:border-box`;
+      }
+      return `min-height:${height};box-sizing:border-box`;
+    }
     if (heightRule === 'exact') return `height:${height};max-height:${height};overflow:hidden;box-sizing:border-box`;
     return `min-height:${height};box-sizing:border-box`;
   }
@@ -353,8 +366,7 @@
     ].filter(Boolean).join(';');
     const colgroup = `<colgroup>${table.gridPt.map(width => `<col style="width:${pt(width, table, 'table', 'gridPt item', { nonNegative: true })}">`).join('')}</colgroup>`;
     const rows = table.rows.map((row, rowIndex) => {
-      const heightRule = row.heightRule ?? 'auto';
-      const rowContentStyle = renderRowContentStyle(row, table, rowIndex);
+      const heightRule = effectiveHeightRule(row);
       const cells = table.cells.filter(cell => cell.row === rowIndex).map(cell => {
         if (cell.isGridGap) {
           return `<td class="word-grid-gap"${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''} style="border:0;padding:0;background:transparent" aria-hidden="true"></td>`;
@@ -369,6 +381,7 @@
         } else {
           content = (cell.paragraphs ?? []).map(paragraph => renderParagraph(paragraph, table, cell.id)).join('');
         }
+        const rowContentStyle = renderRowContentStyle(row, table, rowIndex, cell);
         if (rowContentStyle) content = `<div class="word-row-content" style="${rowContentStyle}">${content}</div>`;
         const style = renderCellStyle(cell, table);
         return `<td${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
