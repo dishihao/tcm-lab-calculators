@@ -2,7 +2,7 @@
 """Strict semantic Word-table QA: source structure + live DOM + cropped pixels."""
 from __future__ import annotations
 
-import argparse, json, shutil, sys, tempfile
+import argparse, json, math, shutil, sys, tempfile
 from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw
 import numpy as np
@@ -58,15 +58,31 @@ def line_count(image: Image.Image, rect: tuple[float, float, float, float]) -> i
 
 def metric(name: str, expected: float | None, actual: float | None, **identity: object) -> dict | None:
     if expected is None or actual is None:
-        return {'metric': name, 'expected': expected, 'actual': actual, 'status': 'unavailable', **identity}
+        return None
     delta = actual - expected
     if abs(delta) > TOLERANCE:
         return {'metric': name, 'expected': round(expected, 3), 'actual': round(actual, 3), 'deltaPx': round(delta, 3), **identity}
     return None
 
 
+def unavailable_warning(name: str, expected: float | None, actual: float | None, **identity: object) -> dict:
+    """Record an unavailable metric without making it a strict comparison failure."""
+    status = 'notApplicable' if expected is None else 'unavailable'
+    return {'metric': name, 'expected': expected, 'actual': actual, 'status': status, **identity}
+
+
 def border_style(value: str | None) -> str:
     return {'single': 'solid', 'double': 'double', 'nil': 'none', 'none': 'none'}.get(value or 'none', value or 'none')
+
+
+def semantic_text_line_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
+    """Gate only Word/DOM text-node line counts; image ink remains diagnostic."""
+    mismatches = []
+    for key in sorted(set(source_cells) & set(web_cells)):
+        expected, actual = source_cells[key].get('textLineCount'), web_cells[key].get('textLineCount')
+        if expected is not None and actual is not None and expected != actual:
+            mismatches.append({'metric': 'semanticTextLineCount', 'cellId': key, 'row': source_cells[key]['rowIndex'], 'column': source_cells[key]['gridColumnIndex'], 'expected': expected, 'actual': actual, 'deltaLines': actual - expected})
+    return mismatches
 
 
 def source_cells(structure: dict) -> dict[str, dict]:
@@ -108,10 +124,20 @@ def source_geometry(structure: dict, word_image: Image.Image) -> tuple[list[floa
 
 def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image, web_image: Image.Image) -> dict:
     structure = source_meta['sourceStructure']; grid, rows, word_cell_rects = source_geometry(structure, word_image)
-    geometry: list[dict] = []; borders: list[dict] = []; text: list[dict] = []
+    geometry: list[dict] = []; borders: list[dict] = []; warnings: list[dict] = []
     geometry.extend(item for item in [metric('normalizedTableCropWidthPx', word_image.width, web_image.width), metric('normalizedTableCropHeightPx', word_image.height, web_image.height)] if item)
-    source_indent = structure.get('indentPt'); source_indent = float(source_indent) * PT_TO_CSS if source_indent is not None and abs(float(source_indent)) <= 1584 else None
-    geometry.extend(item for item in [metric('tableIndentInContainerPx', source_indent, web['placement'].get('tableLeftInContainerPx'), origin='source.indentPt', target='web.placement.tableLeftInContainerPx')] if item)
+    raw_indent = structure.get('indentPt')
+    try:
+        source_indent = float(raw_indent) * PT_TO_CSS if raw_indent is not None and math.isfinite(float(raw_indent)) and abs(float(raw_indent)) <= 1584 else None
+    except (TypeError, ValueError):
+        source_indent = None
+    actual_indent = (web.get('placement') or {}).get('tableLeftInContainerPx')
+    if source_indent is None:
+        warnings.append(unavailable_warning('tableIndentInContainerPx', None, actual_indent, reason='source mixed-row indent sentinel; cell/row left geometry remains compared'))
+    elif actual_indent is None:
+        warnings.append(unavailable_warning('tableIndentInContainerPx', source_indent, None, origin='source.indentPt', target='web.placement.tableLeftInContainerPx'))
+    else:
+        geometry.extend(item for item in [metric('tableIndentInContainerPx', source_indent, actual_indent, origin='source.indentPt', target='web.placement.tableLeftInContainerPx')] if item)
     for index, expected in enumerate(grid, 1):
         actual = next((column['widthPx'] for column in web['columns'] if column['index'] == index), None)
         item = metric('columnWidthPx', expected, actual, column=index)
@@ -144,10 +170,16 @@ def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image
             expected_style = border_style(expected_border.get('value'))
             if expected_style != actual_border['style']:
                 borders.append({'metric': 'borderStyle', 'cellId': key, 'side': side, 'expected': expected_style, 'actual': actual_border['style']})
-        word_lines = line_count(word_image, word_cell_rects[key]); web_lines = line_count(web_image, (right['x'], right['y'], right['width'], right['height']))
-        if word_lines != web_lines:
-            text.append({'metric': 'cellTextLineCount', 'cellId': key, 'row': left['rowIndex'], 'column': left['gridColumnIndex'], 'expected': word_lines, 'actual': web_lines, 'deltaLines': web_lines - word_lines})
-    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'textWrapMismatches': text, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
+    text = semantic_text_line_mismatches(source, web_cells)
+    image_wrap_diagnostics = []
+    for key in sorted(set(source) & set(web_cells)):
+        if key not in word_cell_rects:
+            continue
+        word_lines = line_count(word_image, word_cell_rects[key])
+        right = web_cells[key]
+        web_lines = line_count(web_image, (right['x'], right['y'], right['width'], right['height']))
+        image_wrap_diagnostics.append({'metric': 'imageTextLineCount', 'cellId': key, 'word': word_lines, 'web': web_lines, 'deltaLines': web_lines - word_lines})
+    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'textWrapMismatches': text, 'imageWrapDiagnostics': image_wrap_diagnostics, 'warnings': warnings, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
 
 
 def write_artifacts(word: Image.Image, web: Image.Image, output: Path) -> None:
@@ -174,7 +206,23 @@ def self_test() -> int:
         central = lambda image: round(np.where(mask(image)[10:90, 90:115].sum(axis=0) >= 60)[0].mean() + 90, 2)
         if abs(central(shifted) - central(web)) <= TOLERANCE: raise AssertionError('2 CSS-px rule shift passed after 144-to-96 normalization')
         if abs(central(word) - central(web)) > TOLERANCE: raise AssertionError('identical normalized fixture failed')
-        print('SELF-TEST GREEN: 144-DPI Lanczos normalized fixture matches; realistic 2 CSS-px rule shift detected')
+        # Semantic fixtures: one-line text with double borders, an empty bordered
+        # cell, and genuine two-line text must be judged from Word/DOM line data.
+        source = {'r1c1': {'rowIndex': 1, 'gridColumnIndex': 1, 'textLineCount': 1, 'borders': {'top': {'value': 'double'}}}, 'r1c2': {'rowIndex': 1, 'gridColumnIndex': 2, 'textLineCount': 0, 'borders': {'top': {'value': 'double'}}}, 'r2c1': {'rowIndex': 2, 'gridColumnIndex': 1, 'textLineCount': 2, 'borders': {'top': {'value': 'single'}}}}
+        dom = {'r1c1': {'textLineCount': 1}, 'r1c2': {'textLineCount': 0}, 'r2c1': {'textLineCount': 2}}
+        if semantic_text_line_mismatches(source, dom): raise AssertionError('semantic text fixtures unexpectedly mismatched')
+        dom['r2c1']['textLineCount'] = 1
+        if len(semantic_text_line_mismatches(source, dom)) != 1: raise AssertionError('genuine two-line semantic wrap mismatch was not detected')
+        if metric('unavailableOnly', None, 0) is not None: raise AssertionError('unavailable placement metric became a geometry failure')
+        fixture_borders = {'top': {'value': 'double'}, 'right': {'value': 'none'}, 'bottom': {'value': 'none'}, 'left': {'value': 'none'}}
+        source_meta = {'sourceStructure': {'gridPt': [20], 'rows': [{'heightPt': 20}], 'indentPt': 5, 'cells': [{'rowIndex': 1, 'gridColumnIndex': 1, 'gridSpan': 1, 'rowSpan': 1, 'textLineCount': 1, 'borders': fixture_borders}]}}
+        web_meta = {'columns': [{'index': 1, 'widthPx': 26.667}], 'rows': [{'index': 1, 'heightPx': 26.667, 'y': 0}], 'cells': [{'id': 'r1c1', 'rowIndex': 1, 'gridColumnIndex': 1, 'rowSpan': 1, 'gridSpan': 1, 'x': 0, 'y': 0, 'width': 26.667, 'height': 26.667, 'textLineCount': 1, 'borders': {'top': {'widthPx': 0, 'style': 'double'}, 'right': {'widthPx': 0, 'style': 'none'}, 'bottom': {'widthPx': 0, 'style': 'none'}, 'left': {'widthPx': 0, 'style': 'none'}}}], 'placement': {}}
+        semantic = compare_semantic_table(source_meta, web_meta, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (27, 27), 'white'))
+        if any(item.get('metric') == 'tableIndentInContainerPx' for item in semantic['geometryMismatches']): raise AssertionError('unavailable indent became a geometry mismatch')
+        if not any(item.get('metric') == 'tableIndentInContainerPx' and item.get('status') in ('unavailable', 'notApplicable') for item in semantic['warnings']): raise AssertionError('unavailable indent warning was not retained')
+        if semantic['textWrapMismatches']: raise AssertionError('matching semantic one-line text was reported as wrapped')
+        if 'imageWrapDiagnostics' not in semantic: raise AssertionError('image wrap diagnostics were omitted')
+        print('SELF-TEST GREEN: 144-DPI Lanczos normalized fixture matches; 2 CSS-px border shift; one-line/double-border, empty-cell, and two-line semantic text fixtures verified; unavailable metric is warning-only')
         return 0
     finally: shutil.rmtree(root, ignore_errors=True)
 

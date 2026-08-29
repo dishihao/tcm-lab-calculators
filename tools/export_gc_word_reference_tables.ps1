@@ -25,8 +25,19 @@ function Open-SourceReadOnly($word, $sourcePath) {
   try { return @{ Document = $word.Documents.Open($sourcePath, $false, $true, $false); TempPath = $null } }
   catch { $copy = Join-Path $env:TEMP ("tcm-gc-word-source-{0}.doc" -f [guid]::NewGuid().ToString('N')); Copy-Item -LiteralPath $sourcePath -Destination $copy; try { return @{ Document = $word.Documents.Open($copy, $false, $true, $false); TempPath = $copy } } catch { if (Test-Path -LiteralPath $copy) { Remove-Item -LiteralPath $copy -Force }; throw } }
 }
-function Select-SourceStructure($table) {
-  [pscustomobject]@{ sourceTableIndex = $table.sourceTableIndex; widthPt = $table.widthPt; indentPt = $table.indentPt; gridPt = @($table.gridPt); rows = @($table.rows | ForEach-Object { [pscustomobject]@{ rowIndex = $_.rowIndex; heightPt = $_.heightPt; heightRule = $_.heightRule } }); cells = @($table.cells | ForEach-Object { [pscustomobject]@{ rowIndex = $_.rowIndex; cellIndex = $_.cellIndex; gridColumnIndex = $_.gridColumnIndex; gridSpan = $_.gridSpan; verticalMerge = $_.verticalMerge; borders = $_.borders; text = $_.text; paragraphCount = @($_.paragraphs).Count } }) }
+function Get-WordCellTextLineCount($wordTable, $cellMetric) {
+  $cell = $null; $range = $null
+  try {
+    $cell = $wordTable.Rows.Item([int]$cellMetric.rowIndex).Cells.Item([int]$cellMetric.cellIndex)
+    $end = $cell.Range.End - 1 # exclude Word's end-of-cell marker
+    $range = $cell.Range.Duplicate; $range.End = $end
+    $text = ($range.Text -replace "[`r`n`a`t]", '').Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return 0 }
+    return [int]$range.ComputeStatistics(1) # wdStatisticLines
+  } finally { if ($range) { Release-Com $range }; if ($cell) { Release-Com $cell } }
+}
+function Select-SourceStructure($table, $wordTable) {
+  [pscustomobject]@{ sourceTableIndex = $table.sourceTableIndex; widthPt = $table.widthPt; indentPt = $table.indentPt; gridPt = @($table.gridPt); rows = @($table.rows | ForEach-Object { [pscustomobject]@{ rowIndex = $_.rowIndex; heightPt = $_.heightPt; heightRule = $_.heightRule } }); cells = @($table.cells | ForEach-Object { [pscustomobject]@{ rowIndex = $_.rowIndex; cellIndex = $_.cellIndex; gridColumnIndex = $_.gridColumnIndex; gridSpan = $_.gridSpan; verticalMerge = $_.verticalMerge; borders = $_.borders; text = $_.text; paragraphCount = @($_.paragraphs).Count; textLineCount = (Get-WordCellTextLineCount $wordTable $_) } }) }
 }
 function Assert-OnlyIntendedTable($document, $table) {
   # FormattedText can include a following formula or secondary table.  The first
@@ -45,8 +56,9 @@ function Assert-OnlyIntendedTable($document, $table) {
   $after = $document.Range($intended.Range.End, $document.Content.End).Text
   # Word must retain one terminal paragraph mark; any other visible content is a leak.
   $visible = (($before + $after) -replace "[`r`n`a`t]", '')
-  if (-not [string]::IsNullOrWhiteSpace($visible)) { throw 'temporary document contains visible non-table content outside the intended outer border' }
-  return $intended
+  $visibleOutsideTable = -not [string]::IsNullOrWhiteSpace($visible)
+  if ($visibleOutsideTable) { throw 'temporary document contains visible non-table content outside the intended outer border' }
+  return [pscustomobject]@{ table = $intended; exactOneTable = ($document.Tables.Count -eq 1); visibleOutsideTable = $visibleOutsideTable; nonTableTextOutsideTable = $visibleOutsideTable; visibleOutsideTextLength = $visible.Length }
 }
 function Crop-VisibleTablePng([string]$sourcePng, [string]$destinationPng) {
   $bitmap = [Drawing.Bitmap]::new($sourcePng); $crop = $null
@@ -62,10 +74,10 @@ function Export-Table($word, $sourcePath, [int]$tableIndex, $role, $targetDir, $
   $source = $null; $opened = $null; $sourceTable = $null; $temporary = $null; $copiedTable = $null; $stage = 'hash-source'; $token = [guid]::NewGuid().ToString('N'); $tempDoc = Join-Path $env:TEMP "tcm-gc-word-export-$token.docx"; $tempPdf = Join-Path $env:TEMP "tcm-gc-word-export-$token.pdf"; $ppmBase = Join-Path $env:TEMP "tcm-gc-word-export-$token"
   try {
     $beforeHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash; $stage = 'open-source'; $opened = Open-SourceReadOnly $word $sourcePath; $source = $opened.Document; $stage = 'create-temporary-document'; $temporary = $word.Documents.Add(); Copy-PageSetup $source $temporary
-    $stage = 'read-source-table'; $sourceTable = $source.Tables.Item($tableIndex); $stage = 'copy-formatted-table-range'; $temporary.Content.FormattedText = $sourceTable.Range.FormattedText; $stage = 'assert-only-intended-table'; $copiedTable = $temporary.Tables.Item(1); $copiedTable = Assert-OnlyIntendedTable $temporary $copiedTable
+    $stage = 'read-source-table'; $sourceTable = $source.Tables.Item($tableIndex); $stage = 'copy-formatted-table-range'; $temporary.Content.FormattedText = $sourceTable.Range.FormattedText; $stage = 'assert-only-intended-table'; $copiedTable = $temporary.Tables.Item(1); $boundary = Assert-OnlyIntendedTable $temporary $copiedTable; $copiedTable = $boundary.table
     $stage = 'restore-table-indent'; $sourceIndent = [double]$sourceTable.Rows.LeftIndent; if ($sourceIndent -ge -1584 -and $sourceIndent -le 1584) { $copiedTable.Rows.LeftIndent = $sourceIndent }; $stage = 'save-temporary-document'; $temporary.SaveAs2($tempDoc, 16); $stage = 'export-temporary-pdf'; $temporary.ExportAsFixedFormat($tempPdf, 17, $false, 0, 0, 1, 1, 0, $true, $true, 1, $true, $false, $false)
     $stage = 'render-pdf-with-poppler'; & $PopplerPath -png -r 144 -singlefile $tempPdf $ppmBase; if ($LASTEXITCODE -ne 0) { throw "pdftoppm failed for source table $tableIndex" }; $png = "$ppmBase.png"; if (-not (Test-Path -LiteralPath $png)) { throw "pdftoppm did not make $png" }; $stage = 'crop-exact-table-ink'; $crop = Crop-VisibleTablePng $png (Join-Path $targetDir "$role-word.png")
-    $stage = 'verify-source-hash'; $afterHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash; if ($beforeHash -ne $afterHash) { throw "SOURCE MUTATED: $sourcePath" }; $meta = [pscustomobject]@{ dpi = 144; sourceFile = $sourcePath; sourceTableIndex = $tableIndex; sourceSha256Before = $beforeHash; sourceSha256After = $afterHash; sourceReadOnly = $true; exactOneTable = $true; visibleOutsideTable = $false; pageWidthPt = [double]$source.PageSetup.PageWidth; tableIndentPt = $sourceStructure.indentPt; crop = $crop; sourceStructure = (Select-SourceStructure $sourceStructure) }; $meta | ConvertTo-Json -Depth 20 | Set-Content -Encoding utf8 -LiteralPath (Join-Path $targetDir "$role-word.json"); return $meta
+    $stage = 'verify-source-hash'; $afterHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash; if ($beforeHash -ne $afterHash) { throw "SOURCE MUTATED: $sourcePath" }; $meta = [pscustomobject]@{ dpi = 144; sourceFile = $sourcePath; sourceTableIndex = $tableIndex; sourceSha256Before = $beforeHash; sourceSha256After = $afterHash; sourceReadOnly = $true; boundaryAssertions = [pscustomobject]@{ exactOneTable = $boundary.exactOneTable; visibleOutsideTable = $boundary.visibleOutsideTable; nonTableTextOutsideTable = $boundary.nonTableTextOutsideTable; visibleOutsideTextLength = $boundary.visibleOutsideTextLength }; pageWidthPt = [double]$source.PageSetup.PageWidth; tableIndentPt = $sourceStructure.indentPt; crop = $crop; sourceStructure = (Select-SourceStructure $sourceStructure $sourceTable) }; $meta | ConvertTo-Json -Depth 20 | Set-Content -Encoding utf8 -LiteralPath (Join-Path $targetDir "$role-word.json"); return $meta
   } catch { throw ("Export stage {0}: {1}" -f $stage, $_.Exception.Message) }
   finally { if ($copiedTable) { Release-Com $copiedTable }; if ($temporary) { try { $temporary.Close($false) } catch {}; Release-Com $temporary }; if ($sourceTable) { Release-Com $sourceTable }; if ($source) { try { $source.Close($false) } catch {}; Release-Com $source }; if ($opened -and $opened.TempPath -and (Test-Path -LiteralPath $opened.TempPath)) { Remove-Item -LiteralPath $opened.TempPath -Force }; foreach ($path in @($tempDoc, $tempPdf, "$ppmBase.png")) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } } }
 }
