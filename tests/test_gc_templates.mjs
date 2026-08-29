@@ -83,6 +83,8 @@ assert(await field(page, 'assay.name').inputValue() === chosenHplc.name, '液相
 assert(await field(page, 'assay.limval').inputValue() === chosenHplc.limit, '液相判定限度错误');
 assert((await page.locator('.standard-quote').innerText()).includes(chosenHplc.standardText),
   '液相标准规定原文错误');
+assert(await page.locator('.word-record-table').count() === 0,
+  '液相不应混入气相Word精确表');
 
 const rangeHplc = await page.evaluate(() => HPLC_TEMPLATES.find(t => t.limop === 'range' && t.upperLimit));
 await chooseTemplate(page, rangeHplc.id);
@@ -103,6 +105,10 @@ assert(visibleTechs.length > 0 && visibleTechs.every(tech => tech === 'gc'), '�
 
 for (const templateId of audit.gcIds) {
   const template = await chooseTemplate(page, templateId);
+  const expectedTables = await page.evaluate(id => {
+    const layout = GC_WORD_TABLE_LAYOUTS[id];
+    return [layout.referenceTable.sourceTableIndex, layout.sampleTable.sourceTableIndex];
+  }, templateId);
   assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
   assert(await field(page, 'assay.mode').inputValue() === template.mode, `${templateId}: 定量方法错误`);
@@ -111,6 +117,14 @@ for (const templateId of audit.gcIds) {
   assert(await field(page, 'assay.dryBasis').isChecked() === template.dry, `${templateId}: 干燥品口径错误`);
   assert((await page.locator('.standard-quote').innerText()).includes(template.standardText),
     `${templateId}: 标准规定原文错误`);
+  const exactTables = page.locator('.word-record-table');
+  assert(await exactTables.count() === 2, `${templateId}: 未渲染两张Word精确表`);
+  assert(await page.locator('.generic-assay-table').count() === 0,
+    `${templateId}: 气相混入通用含量表`);
+  assert(await exactTables.nth(0).getAttribute('data-source-table-index') === String(expectedTables[0]),
+    `${templateId}: 对照品源表索引错误`);
+  assert(await exactTables.nth(1).getAttribute('data-source-table-index') === String(expectedTables[1]),
+    `${templateId}: 供试品源表索引错误`);
 }
 
 // 同名气相原料/成品必须保持各自标准。
@@ -121,20 +135,45 @@ assert((await page.locator('.standard-quote').innerText()).includes('不得少�
 
 // 对照品和供试品表格必须按每份气相记录切换，不能继续共用固定布局。
 await chooseTemplate(page, 'clove-eugenol');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '6',
+  '丁香原料对照品源表不是索引6');
+assert(await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '7',
+  '丁香原料供试品源表不是索引7');
 assert((await page.locator('[data-assay-reference-table]').innerText()).includes('对照品批号'),
   '丁香原料对照品表缺少记录中的批号行');
 assert((await page.locator('[data-assay-reference-table]').innerText()).includes('对照品进样量'),
   '丁香原料对照品表缺少记录中的进样量行');
-assert(await page.locator('[data-assay-sample-table] [data-assay-layout-row="water"]').count() === 0,
+assert(!(await page.locator('[data-assay-sample-table]').innerText()).includes('水分Q'),
   '丁香原料供试品表不应显示水分行');
 assert(await field(page, 'assay.sampleInjection.1').count() === 1,
   '丁香原料供试品表缺少第一份样品进样量');
 
 await chooseTemplate(page, 'clove-eugenol-finished');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '6',
+  '丁香成品对照品源表不是索引6');
+assert(await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '7',
+  '丁香成品供试品源表不是索引7');
 assert(await field(page, 'assay.dryBasis').isChecked() === false,
   '丁香成品计算口径不应被表格布局改写');
-assert(await page.locator('[data-assay-sample-table] [data-assay-layout-row="water"]').count() === 1,
+assert((await page.locator('[data-assay-sample-table]').innerText()).includes('水分Q'),
   '丁香成品记录的供试品表应显示水分行');
+
+await chooseTemplate(page, 'mugwort-eucalyptol');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '7'
+  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '8',
+  '艾叶桉油精没有显示源表7/8');
+await chooseTemplate(page, 'mugwort-borneol');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '9'
+  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '10',
+  '艾叶龙脑没有显示源表9/10');
+await chooseTemplate(page, 'flax-linoleic');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '3'
+  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '4',
+  '亚麻子亚油酸没有显示源表3/4');
+await chooseTemplate(page, 'flax-linolenic');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '5'
+  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '6',
+  '亚麻子亚麻酸没有显示源表5/6');
 
 await chooseTemplate(page, 'patchouli-patchoulol');
 const patchouliReferenceTable = await page.locator('[data-assay-reference-table]').innerText();
@@ -157,11 +196,21 @@ assert(await field(page, 'assay.internalBatch').inputValue() === 'IS-PATCHOULI',
 assert(await field(page, 'assay.sampleInjection.1').inputValue() === '1.0',
   '切回广藿香后没有恢复其供试品表数据');
 
+// 手动改变定量方法时是自定义路径，恢复模板方法后重新使用精确表。
+await field(page, 'assay.mode').selectOption('external');
+assert(await page.locator('.generic-assay-table').count() === 2 && await page.locator('.word-record-table').count() === 0,
+  '手动改变气相定量方法后没有进入通用表路径');
+await field(page, 'assay.mode').selectOption('internal');
+assert(await page.locator('.word-record-table').count() === 2 && await page.locator('.generic-assay-table').count() === 0,
+  '恢复气相模板定量方法后没有恢复精确表');
+
 // 任意输入一个未预置品种，也应保留为当前方法的自定义品种。
 await page.locator('[data-assay-product]').fill('自定义品种');
 await page.locator('[data-assay-product]').press('Enter');
 assert(await page.locator('[data-assay-product]').inputValue() === '自定义品种', '自定义品种输入未保留');
 assert(await field(page, 'assay.tech').inputValue() === 'gc', '自定义品种改变了色谱方法');
+assert(await page.locator('.generic-assay-table').count() === 2 && await page.locator('.word-record-table').count() === 0,
+  '自定义气相品种没有使用通用表路径');
 
 // 外标法、非干燥品口径：不要求 Q。
 await chooseTemplate(page, 'star-anise-anethole');
@@ -176,6 +225,15 @@ assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '0.5', '外标�
 
 // 内标法：f=(A内×C对)/(A对×C内)=4，两个样品含量均为 2.00%。
 await chooseTemplate(page, 'patchouli-patchoulol');
+assert(await field(page, 'assay.refA').count() === 0, '峰面积输入不应使用无编号字段');
+assert(await page.locator('[data-k^="assay.refA."]').count() === 5,
+  '广藿香对照品针数没有按布局绑定保留为5');
+assert(await page.locator('[data-k^="assay.smpA.1."]').count() === 3
+  && await page.locator('[data-k^="assay.smpA.2."]').count() === 3,
+  '广藿香待测物每份三针没有全部保留');
+assert(await page.locator('[data-k^="assay.smpIS.1."]').count() === 2
+  && await page.locator('[data-k^="assay.smpIS.2."]').count() === 2,
+  '广藿香内标物每份两针没有全部保留');
 await fillPeaks(page, 'assay.refIS', [200, 200, 200, 200, 200]);
 await fillPeaks(page, 'assay.refA', [100, 100, 100, 100, 100]);
 await field(page, 'assay.Cis').fill('1');
@@ -185,10 +243,13 @@ for (const sample of [1, 2]) {
   await field(page, `assay.Ws.${sample}`).fill('1');
   await field(page, `assay.f.${sample}`).fill('10');
   await fillPeaks(page, `assay.smpIS.${sample}`, [200, 200]);
-  await fillPeaks(page, `assay.smpA.${sample}`, [100, 100]);
+  await fillPeaks(page, `assay.smpA.${sample}`, [50, 50, 200]);
 }
 assert(await page.locator('#assay\\.out\\.factor').innerText() === '4', '校正因子错误');
 assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '2.00', '内标法计算错误');
+assert(await page.locator('#assay\\.out\\.A\\.1').innerText() === '100'
+  && await page.locator('#assay\\.out\\.A\\.2').innerText() === '100',
+  '内标法没有使用布局中全部三针计算样品平均峰面积');
 
 // 不同模板的数据应隔离保存。
 await field(page, 'assay.Cref').fill('9');
@@ -212,6 +273,23 @@ for (const sample of [1, 2]) {
 await field(page, 'assay.partnerMean').fill('13');
 assert(await page.locator('#assay\\.out\\.TOTAL').innerText() === '13.1', '双成分总量错误');
 assert(await page.locator('#assay\\.judge').innerText() === '符合规定', '双成分总量判定错误');
+
+const missingLayoutError = await page.evaluate(() => {
+  try {
+    preciseGcLayout({ id:'missing-gc-layout', tech:'gc' });
+    return '';
+  } catch (error) {
+    return String(error.message || error);
+  }
+});
+assert(missingLayoutError === '气相模板 missing-gc-layout 缺少Word精确布局',
+  '气相模板缺少精确布局时没有按模板ID硬失败');
+
+await chooseTemplate(page, hplcComplete.id);
+assert(await page.locator('.generic-assay-table').count() === 2,
+  '液相没有继续使用两张通用含量表');
+assert(await page.locator('.word-record-table').count() === 0,
+  '液相不应混入气相Word精确表');
 
 await page.screenshot({ path: 'C:/tmp/assay-templates.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);

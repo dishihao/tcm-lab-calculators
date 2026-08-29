@@ -107,46 +107,10 @@ const AP = 'assay.';
  * 气相含量测定模板。一个 recordKey 对应一份原料或成品检验记录；
  * 同名品种的原料、成品标准不得合并。standardText 保留记录中的标准规定原文。
  */
-const GC_TABLE_LAYOUT_BY_RECORD = Object.freeze({
-  'patchouli-raw':'internal-water',
-  'patchouli-finished':'internal-water',
-  'mugwort-raw':'external-water',
-  'mugwort-finished':'external-water',
-  'star-anise-raw':'external-plain',
-  'star-anise-finished':'external-plain',
-  'mint-raw':'external-water',
-  'mint-finished':'external-water',
-  'clove-raw':'external-plain',
-  'clove-finished':'external-water',
-  'cardamom-raw':'external-water',
-  'cardamom-finished':'external-water',
-  'dendrobium-raw':'external-plain',
-  'homalomena-raw':'external-water',
-  'homalomena-finished':'external-water',
-  'amomum-raw':'external-water',
-  'amomum-finished-national':'external-water',
-  'amomum-finished-shanghai':'external-water',
-  'amomum-finished-beijing':'external-water',
-  'fennel-raw':'external-plain',
-  'fennel-finished':'external-plain',
-  'fennel-salted-finished':'external-plain',
-  'brucea-raw':'internal-water',
-  'brucea-finished':'internal-water',
-  'flax-raw':'external-water',
-  'elsholtzia-raw':'external-water',
-  'elsholtzia-finished':'external-water',
-  'pine-raw':'external-water'
-});
-const GC_TABLE_LAYOUTS = new Set(['external-plain', 'external-water', 'internal-water']);
-
 function gcRecord(meta, analytes){
-  const tableLayout = GC_TABLE_LAYOUT_BY_RECORD[meta.recordKey];
-  if (!GC_TABLE_LAYOUTS.has(tableLayout)){
-    throw new Error(`气相记录 ${meta.recordKey || '(未命名)'} 缺少经源记录核对的表格布局`);
-  }
   const kind = meta.kind || (String(meta.recordLabel || '').startsWith('原料') ? '原料' : '成品');
   return analytes.map(analyte => ({
-    tech:'gc', unit:'%', limop:'ge', ...meta, kind, tableLayout, ...analyte
+    tech:'gc', unit:'%', limop:'ge', ...meta, kind, ...analyte
   }));
 }
 
@@ -827,6 +791,65 @@ function outCell(id){
   return `<div class="out empty" id="${esc(id)}">—</div>`;
 }
 
+function preciseGcLayout(tpl){
+  if (!tpl || tpl.tech !== 'gc') return null;
+  const layout = GC_WORD_TABLE_LAYOUTS[tpl.id];
+  if (!layout) throw new Error(`气相模板 ${tpl.id} 缺少Word精确布局`);
+  return layout;
+}
+
+function assayBindingField(field){
+  const name = String(field || '');
+  return name.startsWith(AP) ? name : AP + name;
+}
+
+function gcWordTableView(layout, tableRole){
+  const table = tableRole === 'reference' ? layout.referenceTable : layout.sampleTable;
+  const cellIds = new Set(table.cells.map(cell => cell.id));
+  return {
+    ...table,
+    bindings: layout.bindings.filter(binding => cellIds.has(binding.cellId))
+  };
+}
+
+function assayWordInput(binding){
+  const key = assayBindingField(binding.field);
+  const inputMode = binding.inputMode === 'decimal' ? ' inputmode="decimal"' : '';
+  return `<input class="cell" type="text"${inputMode} autocomplete="off"
+    data-k="${esc(key)}" value="${esc(get(key))}" aria-label="${esc(binding.sourceLabel || key)}">`;
+}
+
+function assayWordOutput(binding){
+  return outCell(assayBindingField(binding.field));
+}
+
+function renderAssayWordTable(tpl, tableRole){
+  const layout = preciseGcLayout(tpl);
+  return GcWordTableRenderer.render(gcWordTableView(layout, tableRole), {
+    input: assayWordInput,
+    output: assayWordOutput
+  });
+}
+
+function renderAssayReferenceTable(tpl){
+  return renderAssayWordTable(tpl, 'reference');
+}
+
+function renderAssaySampleTable(tpl){
+  return renderAssayWordTable(tpl, 'sample');
+}
+
+function assayShotFields(layout, stem, fallbackCount){
+  if (!layout){
+    return Array.from({length: fallbackCount}, (_, index) => `${AP}${stem}.${index}`);
+  }
+  const prefix = `${AP}${stem}.`;
+  return layout.bindings
+    .filter(binding => binding.role === 'input' && assayBindingField(binding.field).startsWith(prefix))
+    .map(binding => assayBindingField(binding.field))
+    .sort((left, right) => Number(left.slice(prefix.length)) - Number(right.slice(prefix.length)));
+}
+
 /** 结果与计算表 */
 function renderTable(c){
   const rows = rowsForCalc(c).map(r => {
@@ -1177,8 +1200,6 @@ function renderAssaySheet(){
   const ii = (k, def, cls) => inlineInput(pre + k, def, cls);
   const ic = k => `<input class="cell" type="text" inputmode="decimal" autocomplete="off"
                       data-k="${esc(pre + k)}" value="${esc(get(pre + k))}">`;
-  const tc = k => `<input class="cell" type="text" autocomplete="off"
-                      data-k="${esc(pre + k)}" value="${esc(get(pre + k))}">`;
 
   const dpSel = k => {
     const v = assayDp(k);
@@ -1200,54 +1221,8 @@ function renderAssaySheet(){
       <option value="internal"${mode === 'internal' ? ' selected' : ''}>内标法</option>
     </select>`;
 
-  const recordTableLayout = tpl && tpl.tech === 'gc' && mode === tpl.mode
-    ? tpl.tableLayout : '';
-  const usesGcRecordTables = Boolean(recordTableLayout);
-  const showWaterRow = usesGcRecordTables
-    ? recordTableLayout !== 'external-plain'
-    : dry;
-  const internalName = get(pre + 'internalName') || '内标物';
-  const analyteName = get(pre + 'name') || '待测成分';
-
-  const internalRecordRefRows = `
-      <tr data-assay-layout-row="internal-batch"><th class="rowlab" style="width:38%">${esc(internalName)}批号</th>
-          <td colspan="2">${tc('internalBatch')}</td></tr>
-      <tr data-assay-layout-row="reference-batch"><th class="rowlab">${esc(analyteName)}批号</th>
-          <td colspan="2">${tc('refBatch')}</td></tr>
-      <tr data-assay-layout-row="internal-source"><th class="rowlab">${esc(internalName)}来源</th>
-          <td colspan="2">${tc('internalSource')}</td></tr>
-      <tr data-assay-layout-row="reference-source"><th class="rowlab">${esc(analyteName)}来源</th>
-          <td colspan="2">${tc('refSource')}</td></tr>
-      <tr><th class="rowlab">${esc(internalName)}浓度 C<sub>s</sub>（mg/ml）</th><td colspan="2">${ic('Cis')}</td></tr>
-      <tr><th class="rowlab">${esc(analyteName)}浓度 C<sub>R</sub>（mg/ml）</th><td colspan="2">${ic('Cref')}</td></tr>
-      <tr data-assay-layout-row="reference-injection"><th class="rowlab">进样体积（μl）</th>
-          <td colspan="2">${ic('refInjection')}</td></tr>
-      <tr><th class="rowlab">${esc(internalName)}峰面积 A</th>
-          <td colspan="2"><div class="peaks">${refPeaks('refIS')}</div></td></tr>
-      <tr><th class="rowlab">${esc(internalName)}平均峰面积 A<sub>s</sub></th>
-          <td colspan="2">${outCell('assay.out.ISref')}</td></tr>
-      <tr><th class="rowlab">${esc(analyteName)}峰面积 A</th>
-          <td colspan="2"><div class="peaks">${refPeaks('refA')}</div></td></tr>
-      <tr><th class="rowlab">${esc(analyteName)}平均峰面积 A<sub>R</sub></th>
-          <td colspan="2">${outCell('assay.out.Aref')}</td></tr>
-      <tr><th class="rowlab">校正因子 f</th><td colspan="2">${outCell('assay.out.factor')}</td></tr>`;
-
-  const externalRecordRefRows = `
-      <tr data-assay-layout-row="reference-batch"><th class="rowlab" style="width:38%">对照品批号</th>
-          <td colspan="2">${tc('refBatch')}</td></tr>
-      <tr><th class="rowlab">纯度 S（%）</th><td colspan="2">${ic('refPurity')}</td></tr>
-      <tr data-assay-layout-row="reference-source"><th class="rowlab">对照品来源</th>
-          <td colspan="2">${tc('refSource')}</td></tr>
-      <tr data-assay-layout-row="reference-drying"><th class="rowlab">干燥条件</th>
-          <td colspan="2">${tc('refDrying')}</td></tr>
-      <tr><th class="rowlab">对照品浓度 C<sub>对</sub>（mg/ml）</th>
-          <td colspan="2">${ic('Cref')}</td></tr>
-      <tr data-assay-layout-row="reference-injection"><th class="rowlab">对照品进样量 V<sub>对</sub>（μl）</th>
-          <td colspan="2">${ic('refInjection')}</td></tr>
-      <tr><th class="rowlab">对照品峰面积 A<sub>对</sub></th>
-          <td colspan="2"><div class="peaks">${refPeaks('refA')}</div></td></tr>
-      <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
-          <td colspan="2">${outCell('assay.out.Aref')}</td></tr>`;
+  const gcLayout = tpl && tpl.tech === 'gc' ? preciseGcLayout(tpl) : null;
+  const preciseLayout = gcLayout && mode === tpl.mode ? gcLayout : null;
 
   const legacyRefRows = mode === 'internal' ? `
       <tr><th class="rowlab" style="width:38%">内标物名称</th>
@@ -1274,31 +1249,6 @@ function renderAssaySheet(){
       <tr><th class="rowlab">对照品平均峰面积 <span style="text-decoration:overline">A</span><sub>对</sub></th>
           <td colspan="2">${outCell('assay.out.Aref')}</td></tr>`;
 
-  const refRows = usesGcRecordTables
-    ? (mode === 'internal' ? internalRecordRefRows : externalRecordRefRows)
-    : legacyRefRows;
-
-  const internalRecordSampleRows = `
-      <tr><th class="rowlab">样品稀释倍数 V</th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
-      <tr data-assay-layout-row="sample-injection"><th class="rowlab">进样量 V<sub>样</sub>（μl）</th>
-          <td>${ic('sampleInjection.1')}</td><td>${ic('sampleInjection.2')}</td></tr>
-      <tr><th class="rowlab">${esc(internalName)}峰面积 A</th>
-          <td><div class="peaks">${smpPeaks('smpIS', 1)}</div></td>
-          <td><div class="peaks">${smpPeaks('smpIS', 2)}</div></td></tr>
-      <tr><th class="rowlab">${esc(internalName)}平均峰面积 A<sub>S</sub></th>
-          <td>${outCell('assay.out.IS.1')}</td><td>${outCell('assay.out.IS.2')}</td></tr>
-      <tr><th class="rowlab">${esc(analyteName)}峰面积 A</th>
-          <td><div class="peaks">${smpPeaks('smpA', 1)}</div></td>
-          <td><div class="peaks">${smpPeaks('smpA', 2)}</div></td></tr>`;
-
-  const externalRecordSampleRows = `
-      <tr><th class="rowlab">样品稀释倍数 f<sub>样</sub></th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
-      <tr data-assay-layout-row="sample-injection"><th class="rowlab">进样量 V<sub>样</sub>（μl）</th>
-          <td>${ic('sampleInjection.1')}</td><td>${ic('sampleInjection.2')}</td></tr>
-      <tr><th class="rowlab">样品峰面积 A<sub>样</sub></th>
-          <td><div class="peaks">${smpPeaks('smpA', 1)}</div></td>
-          <td><div class="peaks">${smpPeaks('smpA', 2)}</div></td></tr>`;
-
   const legacySampleRows = mode === 'internal' ? `
       <tr><th class="rowlab">样品稀释体积 V（ml）</th><td>${ic('f.1')}</td><td>${ic('f.2')}</td></tr>
       <tr><th class="rowlab">${esc(get(pre + 'internalName') || '内标物')}峰面积 A<sub>样内</sub></th>
@@ -1316,14 +1266,6 @@ function renderAssaySheet(){
           <td><div class="peaks">${smpPeaks('smpA', 1)}</div></td>
           <td><div class="peaks">${smpPeaks('smpA', 2)}</div></td></tr>`;
 
-  const samplePeakRows = usesGcRecordTables
-    ? (mode === 'internal' ? internalRecordSampleRows : externalRecordSampleRows)
-    : legacySampleRows;
-  // 两份内标法源记录的供试品表均将待测物平均峰面积标为 A_R，按记录原样保留。
-  const sampleMeanLabel = usesGcRecordTables && mode === 'internal'
-    ? `${esc(analyteName)}平均峰面积 A<sub>R</sub>`
-    : `样品平均峰面积 <span style="text-decoration:overline">A</span>`;
-
   const totalRows = tpl && tpl.totalLabel ? `
       <tr><th class="rowlab">${esc(tpl.partner)}平均含量（${esc(unit)}）<span class="lim">录入另一成分的计算结果</span></th>
           <td class="spanall" colspan="2">${ic('partnerMean')}</td></tr>
@@ -1332,6 +1274,45 @@ function renderAssaySheet(){
   const standardTarget = tpl && tpl.totalLabel
     ? esc(tpl.totalLabel)
     : `含 <b id="assay.nameEcho"></b>${get(pre + 'formulaText') ? `（${esc(get(pre + 'formulaText'))}）` : ''}`;
+  const preciseChecks = preciseLayout ? `
+    <div class="analyte-bar no-print assay-system-controls">
+      <span>RSD 应不大于 ${ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%
+        <span class="judge none" id="assay.rsdJudge">—</span></span>
+      <span>理论板数应不低于 ${ii('platesLim', platesDef, 'w120')}；实测 ${ic('plates')}
+        <span class="judge none" id="assay.platesJudge">—</span></span>
+      ${mode === 'internal' ? `<span>校正因子 f：${outCell('assay.out.factor')}</span>` : ''}
+    </div>` : '';
+  const referenceBlock = preciseLayout
+    ? `<div class="tscroll" data-assay-reference-table>${renderAssayReferenceTable(tpl)}</div>${preciseChecks}`
+    : `<div class="tscroll"><table class="form generic-assay-table" data-assay-reference-table
+        data-assay-table-layout="generic">
+        ${legacyRefRows}
+        <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%</span></th>
+            <td colspan="2">${outCell('assay.out.RSD')}
+                <span class="judge none" id="assay.rsdJudge">—</span></td></tr>
+        <tr><th class="rowlab">理论板数<span class="lim">应不低于 ${ii('platesLim', platesDef, 'w120')}</span></th>
+            <td colspan="2">${ic('plates')}
+                <span class="judge none" id="assay.platesJudge">—</span></td></tr>
+      </table></div>`;
+  const genericSampleMeanLabel = `样品平均峰面积 <span style="text-decoration:overline">A</span>`;
+  const sampleBlock = preciseLayout
+    ? `<div class="tscroll" data-assay-sample-table>${renderAssaySampleTable(tpl)}</div>
+       ${totalRows ? `<div class="tscroll"><table class="form assay-total-table">${totalRows}</table></div>` : ''}`
+    : `<div class="tscroll"><table class="form generic-assay-table" data-assay-sample-table
+        data-assay-table-layout="generic">
+        <tr><th class="rowlab" style="width:38%">样品编号</th><th style="width:31%">1</th><th style="width:31%">2</th></tr>
+        ${dry ? `<tr data-assay-layout-row="water"><th class="rowlab">水分 Q（%）</th><td class="spanall" colspan="2">${ic('Q')}</td></tr>` : ''}
+        <tr><th class="rowlab">取样量 W<sub>样</sub>（g）</th><td>${ic('Ws.1')}</td><td>${ic('Ws.2')}</td></tr>
+        ${legacySampleRows}
+        <tr><th class="rowlab">${genericSampleMeanLabel}</th>
+            <td>${outCell('assay.out.A.1')}</td><td>${outCell('assay.out.A.2')}</td></tr>
+        <tr><th class="rowlab">含量 X（${esc(unit)}）</th>
+            <td>${outCell('assay.out.X.1')}</td><td>${outCell('assay.out.X.2')}</td></tr>
+        <tr><th class="rowlab">相对偏差(%)</th><td class="spanall" colspan="2">${outCell('assay.out.RD')}</td></tr>
+        <tr><th class="rowlab">平均含量 <span style="text-decoration:overline">X</span>（${esc(unit)}）</th>
+            <td class="spanall" colspan="2">${outCell('assay.out.MEAN')}</td></tr>
+        ${totalRows}
+      </table></div>`;
 
   return `
   <section class="sheet" data-sheet="assay">
@@ -1353,33 +1334,10 @@ function renderAssaySheet(){
 
     <div class="subhead">对照品：<input class="inline w180" type="text" autocomplete="off"
         data-k="${pre}name" value="${esc(get(pre + 'name'))}" placeholder="成分名称"></div>
-    <div class="tscroll"><table class="form" data-assay-reference-table
-      data-assay-table-layout="${esc(recordTableLayout || 'generic')}">
-      ${refRows}
-      <tr><th class="rowlab">RSD（%）<span class="lim">应不大于 ${ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%</span></th>
-          <td colspan="2">${outCell('assay.out.RSD')}
-              <span class="judge none" id="assay.rsdJudge">—</span></td></tr>
-      <tr><th class="rowlab">理论板数<span class="lim">应不低于 ${ii('platesLim', platesDef, 'w120')}</span></th>
-          <td colspan="2">${ic('plates')}
-              <span class="judge none" id="assay.platesJudge">—</span></td></tr>
-    </table></div>
+    ${referenceBlock}
 
     <div class="subhead">供试品测量</div>
-    <div class="tscroll"><table class="form" data-assay-sample-table
-      data-assay-table-layout="${esc(recordTableLayout || 'generic')}">
-      <tr><th class="rowlab" style="width:38%">样品编号</th><th style="width:31%">1</th><th style="width:31%">2</th></tr>
-      ${showWaterRow ? `<tr data-assay-layout-row="water"><th class="rowlab">水分 Q（%）</th><td class="spanall" colspan="2">${ic('Q')}</td></tr>` : ''}
-      <tr><th class="rowlab">取样量 W<sub>样</sub>（g）</th><td>${ic('Ws.1')}</td><td>${ic('Ws.2')}</td></tr>
-      ${samplePeakRows}
-      <tr><th class="rowlab">${sampleMeanLabel}</th>
-          <td>${outCell('assay.out.A.1')}</td><td>${outCell('assay.out.A.2')}</td></tr>
-      <tr><th class="rowlab">含量 X（${esc(unit)}）</th>
-          <td>${outCell('assay.out.X.1')}</td><td>${outCell('assay.out.X.2')}</td></tr>
-      <tr><th class="rowlab">相对偏差(%)</th><td class="spanall" colspan="2">${outCell('assay.out.RD')}</td></tr>
-      <tr><th class="rowlab">平均含量 <span style="text-decoration:overline">X</span>（${esc(unit)}）</th>
-          <td class="spanall" colspan="2">${outCell('assay.out.MEAN')}</td></tr>
-      ${totalRows}
-    </table></div>
+    ${sampleBlock}
 
     <div class="analyte-bar">
       <span>修约位数：含量 X ${dpSel('ind')} 位，平均含量 ${dpSel('mean')} 位，相对偏差 ${dpSel('rd')} 位</span>
@@ -1414,7 +1372,7 @@ function renderAssaySheet(){
 
     <div class="note">
       ${tpl ? `当前模板：${esc(tpl.product)}（${esc(tpl.recordLabel)}）—${esc(tpl.name)}；标准规定原文与判定限度均按该条原料或成品记录预填。` : '当前为自定义模板。'}
-      ${usesGcRecordTables ? '对照品与供试品表格按该份气相检验记录自动切换。' : ''}
+      ${preciseLayout ? '对照品与供试品表格按该份气相检验记录自动切换。' : ''}
       ${dry ? 'Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。' : '本模板不按干燥品折算，公式不扣除水分。'}
       C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g；程序按标准规定的 ${esc(unit)} 单位自动换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
@@ -1519,20 +1477,22 @@ function computeAssay(){
   const indDp  = assayDp('ind');
   const meanDp = assayDp('mean');
   const rdDp   = assayDp('rd');
+  const gcLayout = tpl && tpl.tech === 'gc' ? preciseGcLayout(tpl) : null;
+  const shotLayout = gcLayout && mode === tpl.mode ? gcLayout : null;
 
   // 标准规定那一行里的成分名，跟着上方"对照品"输入框走
   const echo = document.getElementById('assay.nameEcho');
   if (echo) echo.textContent = get(pre + 'name') || '待测成分';
 
   /* 对照品 */
-  const refA = Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refA.${i}`)).filter(isFinite);
+  const refA = assayShotFields(shotLayout, 'refA', ASSAY.refShots).map(getN).filter(isFinite);
   const Aref = mean(refA);
   const rsd  = refA.length >= 2 ? sd(refA) / Aref * 100 : NaN;
   setOut('assay.out.Aref', fmtArea(Aref));
   setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
   const refIS = mode === 'internal'
-    ? Array.from({length: ASSAY.refShots}, (_, i) => getN(`${pre}refIS.${i}`)).filter(isFinite)
+    ? assayShotFields(shotLayout, 'refIS', ASSAY.refShots).map(getN).filter(isFinite)
     : [];
   const ISref = mean(refIS);
   setOut('assay.out.ISref', fmtArea(ISref));
@@ -1557,12 +1517,12 @@ function computeAssay(){
   setOut('assay.out.factor', isFinite(factor) ? factor.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') : '');
 
   const A = [1,2].map(s => {
-    const shots = Array.from({length: ASSAY.smpShots}, (_, i) => getN(`${pre}smpA.${s}.${i}`)).filter(isFinite);
+    const shots = assayShotFields(shotLayout, `smpA.${s}`, ASSAY.smpShots).map(getN).filter(isFinite);
     return shots.length ? mean(shots) : NaN;
   });
   [1,2].forEach(s => setOut(`assay.out.A.${s}`, fmtArea(A[s-1])));
   const AIS = mode === 'internal' ? [1,2].map(s => {
-    const shots = Array.from({length: ASSAY.smpShots}, (_, i) => getN(`${pre}smpIS.${s}.${i}`)).filter(isFinite);
+    const shots = assayShotFields(shotLayout, `smpIS.${s}`, ASSAY.smpShots).map(getN).filter(isFinite);
     return shots.length ? mean(shots) : NaN;
   }) : [NaN, NaN];
   [1,2].forEach(s => setOut(`assay.out.IS.${s}`, fmtArea(AIS[s-1])));
