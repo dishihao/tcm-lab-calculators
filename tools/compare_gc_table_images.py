@@ -142,9 +142,13 @@ def cumulative(values: list[float]) -> list[float]:
     return result
 
 
-def source_geometry(structure: dict, word_image: Image.Image) -> tuple[list[float], list[float], dict[str, tuple[float, float, float, float]]]:
-    grid = [float(value) * PT_TO_CSS for value in structure['gridPt']]
-    row_values = [float(row.get('heightPt') or 0) * PT_TO_CSS for row in structure['rows']]
+def source_geometry(structure: dict, word_image: Image.Image, visible: dict | None = None) -> tuple[list[float], list[float], dict[str, tuple[float, float, float, float]]]:
+    # OOXML heightPt is Word's atLeast minimum. The trusted Word PNG grid is
+    # authoritative for visual QA and is recorded in the companion asset.
+    grid_source = (visible or {}).get('renderGridPt') or structure['gridPt']
+    rows_source = (visible or {}).get('renderHeightPt') or [row.get('heightPt') or 0 for row in structure['rows']]
+    grid = [float(value) * PT_TO_CSS for value in grid_source]
+    row_values = [float(value) * PT_TO_CSS for value in rows_source]
     # If a source row has no explicit height, only image-region text checking uses
     # a proportional fallback; structural row-height comparison is unavailable.
     x = cumulative(grid); y = cumulative(row_values)
@@ -158,13 +162,17 @@ def source_geometry(structure: dict, word_image: Image.Image) -> tuple[list[floa
     return grid, row_values, cell_rects
 
 
-def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image, web_image: Image.Image) -> dict:
-    structure = source_meta['sourceStructure']; grid, rows, word_cell_rects = source_geometry(structure, word_image)
+def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image, web_image: Image.Image, visible: dict | None = None) -> dict:
+    structure = source_meta['sourceStructure']; grid, rows, word_cell_rects = source_geometry(structure, word_image, visible)
     geometry: list[dict] = []; borders: list[dict] = []; warnings: list[dict] = []
-    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', word_image.width, web_image.width), metric('normalizedTableCropHeightPx', word_image.height, web_image.height)] if item)
+    # Compare detected Word border-grid span, not the crop's anti-aliased
+    # fringe. The visible companion asset is produced from those same rules.
+    source_visible_width = sum(grid)
+    source_visible_height = sum(rows)
+    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', source_visible_width, web_image.width), metric('normalizedTableCropHeightPx', source_visible_height, web_image.height)] if item)
     raw_indent = structure.get('indentPt')
     try:
-        source_indent = float(raw_indent) * PT_TO_CSS if raw_indent is not None and math.isfinite(float(raw_indent)) and abs(float(raw_indent)) <= 1584 else None
+        source_indent = float(raw_indent) * PT_TO_CSS * float((visible or {}).get('renderScale') or 1) if raw_indent is not None and math.isfinite(float(raw_indent)) and abs(float(raw_indent)) <= 1584 else None
     except (TypeError, ValueError):
         source_indent = None
     actual_indent = (web.get('placement') or {}).get('tableLeftInContainerPx')
@@ -274,6 +282,14 @@ def audit(root: Path, strict: bool) -> int:
     runs = sorted(path for path in root.glob('visual-qa-*') if path.is_dir())
     if not runs: raise FileNotFoundError(f'no visual-qa-* run under {root}')
     run = runs[-1]; manifest = load_json(Path(__file__).with_name('gc-word-table-manifest.json')); expected_ids = [entry['templateId'] for entry in manifest['entries']]
+    asset_path = Path(__file__).resolve().parents[1] / 'assets' / 'gc-word-table-visible-geometry.js'
+    asset_source = asset_path.read_text(encoding='utf-8')
+    asset_prefix = 'const GC_WORD_TABLE_VISIBLE_GEOMETRY = Object.freeze('
+    if not asset_source.startswith(asset_prefix) or not asset_source.rstrip().endswith(');'):
+        raise ValueError(f'invalid visible geometry asset: {asset_path}')
+    visible_asset = json.loads(asset_source[len(asset_prefix):].strip()[:-2])
+    if set(visible_asset) != set(expected_ids):
+        raise ValueError('visible geometry asset template coverage differs from manifest')
     directories = {path.name: path for path in run.iterdir() if path.is_dir()}; unexpected = sorted(set(directories) - set(expected_ids)); missing, tables = [], []
     for template_id in expected_ids:
         folder = directories.get(template_id)
@@ -281,7 +297,10 @@ def audit(root: Path, strict: bool) -> int:
             required = [folder / f'{role}-word.png', folder / f'{role}-word.json', folder / f'{role}-web.png', folder / f'{role}-web.json'] if folder else []
             if not folder or not all(path.exists() for path in required): missing.append(f'{template_id}/{role}'); continue
             source_meta, web = load_json(required[1]), load_json(required[3]); word, web_image = read_normalized(required[0], source_meta), read_normalized(required[2], web)
-            semantic = compare_semantic_table(source_meta, web, word, web_image); write_artifacts(word, web_image, folder / role)
+            visible = visible_asset.get(template_id, {}).get(role)
+            if not visible:
+                raise ValueError(f'missing visible geometry for {template_id}/{role}')
+            semantic = compare_semantic_table(source_meta, web, word, web_image, visible); write_artifacts(word, web_image, folder / role)
             tables.append({'templateId': template_id, 'role': role, **semantic, 'geometryMismatch': bool(semantic['geometryMismatches'] or semantic['borderMismatches']), 'wrapMismatch': bool(semantic['textWrapMismatches']), 'contentPresenceMismatch': bool(semantic['contentPresenceMismatches'])})
     failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch'] or item['contentPresenceMismatch']]
     summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}

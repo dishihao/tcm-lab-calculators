@@ -806,8 +806,11 @@ function assayBindingField(field){
 function gcWordTableView(layout, tableRole){
   const table = tableRole === 'reference' ? layout.referenceTable : layout.sampleTable;
   const cellIds = new Set(table.cells.map(cell => cell.id));
+  const visibleGeometry = GC_WORD_TABLE_VISIBLE_GEOMETRY?.[layout.templateId]?.[tableRole];
+  if (!visibleGeometry) throw new Error(`气相模板 ${layout.templateId} 缺少Word可见几何`);
   return {
     ...table,
+    ...visibleGeometry,
     bindings: layout.bindings.filter(binding => cellIds.has(binding.cellId))
   };
 }
@@ -820,7 +823,8 @@ function assayWordInput(binding){
 }
 
 function assayWordOutput(binding){
-  return outCell(assayBindingField(binding.field), 'word-cell-output');
+  // 精确 GC 表复刻 Word 原始记录：尚无计算值时是留白，不是通用表的破折号。
+  return `<div class="out empty word-cell-output" id="${esc(assayBindingField(binding.field))}"></div>`;
 }
 
 function renderAssayWordTable(tpl, tableRole){
@@ -1403,7 +1407,7 @@ function setOut(id, txt){
   const el = document.getElementById(id);
   if (!el) return;
   if (txt === '' || txt === null || txt === undefined){
-    el.textContent = '—'; el.classList.add('empty');
+    el.textContent = el.classList.contains('word-cell-output') ? '' : '—'; el.classList.add('empty');
   } else {
     el.innerHTML = txt; el.classList.remove('empty');
   }

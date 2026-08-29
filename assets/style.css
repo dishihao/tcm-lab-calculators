@@ -614,7 +614,7 @@ td.spanall{background:#fdfdfd}
   max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;
 }
 .word-record-table{
-  table-layout:fixed; border-collapse:collapse; max-width:none; min-width:0; font-size:12pt;
+  table-layout:fixed; border-collapse:collapse; max-width:none; min-width:0;
 }
 .word-table-scroll .word-record-table{min-width:0}
 .word-record-table .word-cell-input{

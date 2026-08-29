@@ -75,12 +75,35 @@
     return `border-${side}:${width} ${cssStyle} ${cssColor(border.color, table, cellId, `border.${side}.color`)}`;
   }
 
+  function cellMargins(cell, table) {
+    const margins = cell.margins ?? table.paddingPt ?? {};
+    ensureKnownObjectKeys(margins, new Set(['top', 'right', 'bottom', 'left']), table, cell.id, 'margins');
+    return margins;
+  }
+
+  function verticalCellContributionPt(cell, table) {
+    const margins = cellMargins(cell, table);
+    const borderPt = side => {
+      const border = cell.borders?.[side];
+      if (border == null || border.value === 'nil' || border.value === 'none') return 0;
+      // In collapse mode each horizontal rule is shared by its two adjacent
+      // rows. Chromium quantizes the source 0.5pt Word rule to one CSS px;
+      // the content box therefore owns 3/8pt per side (3/4 of its OOXML
+      // half-rule), as verified from the audited Word border centres.
+      return finiteNumber(border.sizePt ?? 0.5, table, cell.id, `border.${side}.sizePt`, { nonNegative: true }) * 0.75;
+    };
+    return (margins.top ?? 0) + (margins.bottom ?? 0) + borderPt('top') + borderPt('bottom');
+  }
+
+  function renderedMarginPt(margins, side, table) {
+    const raw = margins[side] ?? 0;
+    return raw * ((side === 'left' || side === 'right') ? (table.renderScale ?? 1) : 1);
+  }
+
   function renderCellStyle(cell, table) {
     const styles = [];
-    ensureKnownObjectKeys(cell.margins, new Set(['top', 'right', 'bottom', 'left']), table, cell.id, 'margins');
-    if (cell.margins) {
-      styles.push(`padding:${pt(cell.margins.top ?? 0, table, cell.id, 'margins.top', { nonNegative: true })} ${pt(cell.margins.right ?? 0, table, cell.id, 'margins.right', { nonNegative: true })} ${pt(cell.margins.bottom ?? 0, table, cell.id, 'margins.bottom', { nonNegative: true })} ${pt(cell.margins.left ?? 0, table, cell.id, 'margins.left', { nonNegative: true })}`);
-    }
+    const margins = cellMargins(cell, table);
+    styles.push(`padding:${pt(renderedMarginPt(margins, 'top', table), table, cell.id, 'margins.top', { nonNegative: true })} ${pt(renderedMarginPt(margins, 'right', table), table, cell.id, 'margins.right', { nonNegative: true })} ${pt(renderedMarginPt(margins, 'bottom', table), table, cell.id, 'margins.bottom', { nonNegative: true })} ${pt(renderedMarginPt(margins, 'left', table), table, cell.id, 'margins.left', { nonNegative: true })}`);
     ensureKnownObjectKeys(cell.borders, new Set(['top', 'right', 'bottom', 'left']), table, cell.id, 'borders');
     for (const side of ['top', 'right', 'bottom', 'left']) {
       const border = renderBorder(cell.borders?.[side], side, table, cell.id);
@@ -187,14 +210,16 @@
       }
     }
     const size = properties.fontSizePt ?? properties.complexScriptFontSizePt;
-    if (size != null) styles.push(`font-size:${pt(size, table, cellId, 'run fontSizePt', { nonNegative: true })}`);
+    // Word's page-fit applies the audited horizontal table scale to run
+    // metrics as well; visible row minima remain independently preserved.
+    if (size != null) styles.push(`font-size:${pt(size * (table.renderScale ?? 1), table, cellId, 'run fontSizePt', { nonNegative: true })}`);
     if (properties.color != null) {
       ensureKnownObjectKeys(properties.color, new Set(['value', 'themeColor', 'themeTint', 'themeShade']), table, cellId, 'run color');
       styles.push(`color:${cssColor(properties.color.value, table, cellId, 'run color')}`);
     }
     if (properties.highlight != null) fail(table, cellId, 'unsupported highlight');
     if (properties.verticalAlign != null && !RUN_VERTICAL_ALIGNS.has(properties.verticalAlign)) fail(table, cellId, 'unsupported run vertical alignment');
-    if (properties.characterSpacingPt != null) styles.push(`letter-spacing:${pt(properties.characterSpacingPt, table, cellId, 'run characterSpacingPt')}`);
+    if (properties.characterSpacingPt != null) styles.push(`letter-spacing:${pt(properties.characterSpacingPt * (table.renderScale ?? 1), table, cellId, 'run characterSpacingPt')}`);
     if (properties.positionPt != null) styles.push(`position:relative;top:${pt(-properties.positionPt, table, cellId, 'run positionPt')}`);
     if (properties.language != null) {
       ensureKnownObjectKeys(properties.language, new Set(['latin', 'eastAsia', 'bidirectional']), table, cellId, 'run language');
@@ -288,20 +313,48 @@
     return row.heightPt == null ? 'auto' : 'atLeast';
   }
 
+  function visibleRowHeightPt(table, rowIndex) {
+    const value = table.renderHeightPt?.[rowIndex] ?? table.rows[rowIndex]?.heightPt;
+    return finiteNumber(value, table, `row-${rowIndex + 1}`, 'visible row height', { nonNegative: true });
+  }
+
+  function visibleGridPt(table) {
+    return table.renderGridPt ?? table.gridPt;
+  }
+
+  function visibleWidthPt(table) {
+    return table.renderWidthPt ?? table.widthPt;
+  }
+
+  function visibleIndentPt(table) {
+    const raw = table.indentPt;
+    if (!Number.isFinite(raw) || Math.abs(raw) > 1584) return 0;
+    return raw * (table.renderScale ?? 1);
+  }
+
   function renderRowContentStyle(row, table, rowIndex, cell) {
     const heightRule = effectiveHeightRule(row);
     if (heightRule === 'auto' || row.heightPt == null) return '';
-    const height = pt(row.heightPt, table, `row-${rowIndex + 1}`, 'heightPt', { nonNegative: true });
+    const contentHeight = heightPt => Math.max(0, heightPt - verticalCellContributionPt(cell, table));
     if (cell.rowSpan > 1) {
       const spannedRows = table.rows.slice(rowIndex, rowIndex + cell.rowSpan);
-      if (spannedRows.every(spannedRow => Number.isFinite(spannedRow.heightPt))) {
-        const combinedHeight = spannedRows.reduce((total, spannedRow) => total + spannedRow.heightPt, 0);
-        return `min-height:${pt(combinedHeight, table, cell.id, 'spanned row height', { nonNegative: true })};box-sizing:border-box`;
+      if (spannedRows.every((spannedRow, offset) => Number.isFinite(visibleRowHeightPt(table, rowIndex + offset)))) {
+        const combinedHeight = spannedRows.reduce((total, spannedRow, offset) => total + visibleRowHeightPt(table, rowIndex + offset), 0);
+        return `min-height:${pt(contentHeight(combinedHeight), table, cell.id, 'spanned row content height', { nonNegative: true })};box-sizing:border-box`;
       }
-      return `min-height:${height};box-sizing:border-box`;
+      return `min-height:${pt(contentHeight(visibleRowHeightPt(table, rowIndex)), table, cell.id, 'row content height', { nonNegative: true })};box-sizing:border-box`;
     }
+    const height = pt(contentHeight(visibleRowHeightPt(table, rowIndex)), table, cell.id, 'row content height', { nonNegative: true });
     if (heightRule === 'exact') return `height:${height};max-height:${height};overflow:hidden;box-sizing:border-box`;
     return `min-height:${height};box-sizing:border-box`;
+  }
+
+  function renderBoundContentStyle(cell, table) {
+    const properties = cell.paragraphs?.[0]?.properties;
+    if (!properties) return 'margin:0';
+    const paragraphStyle = renderParagraphStyle(properties, table, cell.id);
+    const runStyle = renderRunStyle(properties.defaultRunProperties, table, cell.id);
+    return [paragraphStyle, runStyle].filter(Boolean).join(';');
   }
 
   function validate(table) {
@@ -316,6 +369,17 @@
     integer(table.columnCount, table, 'table', 'columnCount', { positive: true });
     if (table.gridPt.length !== table.columnCount) fail(table, 'table', 'grid column count differs from columnCount');
     if (table.rows.length !== table.rowCount) fail(table, 'table', 'row count differs from rowCount');
+    if (table.renderWidthPt != null) finiteNumber(table.renderWidthPt, table, 'table', 'renderWidthPt', { nonNegative: true });
+    if (table.renderScale != null) finiteNumber(table.renderScale, table, 'table', 'renderScale', { nonNegative: true });
+    if (table.renderGridPt != null) {
+      if (!Array.isArray(table.renderGridPt) || table.renderGridPt.length !== table.columnCount) fail(table, 'table', 'render grid column count differs from columnCount');
+      const renderGridWidth = table.renderGridPt.reduce((total, width) => total + finiteNumber(width, table, 'table', 'renderGridPt item', { nonNegative: true }), 0);
+      if (Math.abs(renderGridWidth - visibleWidthPt(table)) > 0.05) fail(table, 'table', 'render grid width differs from renderWidthPt');
+    }
+    if (table.renderHeightPt != null) {
+      if (!Array.isArray(table.renderHeightPt) || table.renderHeightPt.length !== table.rowCount) fail(table, 'table', 'render row count differs from rowCount');
+      table.renderHeightPt.forEach((height, index) => finiteNumber(height, table, `row-${index + 1}`, 'renderHeightPt', { nonNegative: true }));
+    }
     const gridWidth = table.gridPt.reduce((total, width) => total + finiteNumber(width, table, 'table', 'gridPt item', { nonNegative: true }), 0);
     if (Math.abs(gridWidth - table.widthPt) > 0.05) fail(table, 'table', 'grid width differs from widthPt');
     const occupied = Array.from({ length: table.rowCount }, () => Array(table.columnCount).fill(null));
@@ -359,12 +423,13 @@
     validate(table);
     if (!adapters || typeof adapters !== 'object') fail(table, 'table', 'adapters must be an object');
     const bindings = new Map((table.bindings ?? []).map(binding => [binding.cellId, binding]));
+    const widthPt = visibleWidthPt(table), gridPt = visibleGridPt(table), scale = table.renderScale ?? 1;
     const tableStyle = [
-      `width:${pt(table.widthPt, table, 'table', 'widthPt', { nonNegative: true })}`,
+      `width:${pt(widthPt, table, 'table', 'renderWidthPt', { nonNegative: true })}`,
       'table-layout:fixed', 'border-collapse:collapse',
-      table.indentPt ? `margin-left:${pt(table.indentPt, table, 'table', 'indentPt')}` : '',
+      visibleIndentPt(table) ? `margin-left:${pt(visibleIndentPt(table), table, 'table', 'render indent', { nonNegative: true })}` : '',
     ].filter(Boolean).join(';');
-    const colgroup = `<colgroup>${table.gridPt.map(width => `<col style="width:${pt(width, table, 'table', 'gridPt item', { nonNegative: true })}">`).join('')}</colgroup>`;
+    const colgroup = `<colgroup>${gridPt.map(width => `<col style="width:${pt(width, table, 'table', 'renderGridPt item', { nonNegative: true })}">`).join('')}</colgroup>`;
     const rows = table.rows.map((row, rowIndex) => {
       const heightRule = effectiveHeightRule(row);
       const cells = table.cells.filter(cell => cell.row === rowIndex).map(cell => {
@@ -378,6 +443,7 @@
           if (typeof adapter !== 'function') fail(table, cell.id, `missing ${binding.role} adapter`);
           content = adapter(binding);
           if (typeof content !== 'string') fail(table, cell.id, `${binding.role} adapter must return HTML string`);
+          content = `<div class="word-bound-content" style="${renderBoundContentStyle(cell, table)}">${content}</div>`;
         } else {
           content = (cell.paragraphs ?? []).map(paragraph => renderParagraph(paragraph, table, cell.id)).join('');
         }
@@ -388,7 +454,7 @@
       }).join('');
       return `<tr data-word-row-height-rule="${heightRule}">${cells}</tr>`;
     }).join('');
-    return `<table class="word-record-table" data-word-table-role="${escapeHtml(table.tableRole)}" data-source-table-index="${table.sourceTableIndex}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
+    return `<table class="word-record-table" data-word-table-role="${escapeHtml(table.tableRole)}" data-source-table-index="${table.sourceTableIndex}" data-word-render-scale="${escapeHtml(scale)}" data-word-render-width-pt="${escapeHtml(widthPt)}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
   }
 
   window.GcWordTableRenderer = Object.freeze({ render, validate });

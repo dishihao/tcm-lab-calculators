@@ -57,6 +57,37 @@ const audit = await page.evaluate(() => ({
   gcFinishedRecords: new Set(GC_TEMPLATES.filter(t => t.kind === '成品').map(t => t.recordKey)).size,
   invalidTech: ASSAY_TEMPLATES.filter(t => !['hplc', 'gc'].includes(t.tech)).map(t => t.id),
 }));
+const visibleGeometryAsset = await page.evaluate(() => ({
+  present: typeof GC_WORD_TABLE_VISIBLE_GEOMETRY !== 'undefined',
+  layouts: typeof GC_WORD_TABLE_VISIBLE_GEOMETRY === 'undefined'
+    ? [] : Object.keys(GC_WORD_TABLE_VISIBLE_GEOMETRY),
+}));
+assert(visibleGeometryAsset.present, '缺少经 Word PNG 审计的可见几何资产');
+assert(visibleGeometryAsset.layouts.length === 33,
+  `可见几何资产模板数量错误: ${visibleGeometryAsset.layouts.length}`);
+const visibleGeometryCoverage = await page.evaluate(() => Object.entries(GC_WORD_TABLE_VISIBLE_GEOMETRY).flatMap(([templateId, roles]) =>
+  ['reference', 'sample'].map(role => {
+    const geometry = roles[role];
+    return {
+      templateId, role,
+      renderWidthPt: geometry?.renderWidthPt,
+      renderScale: geometry?.renderScale,
+      renderGridPt: geometry?.renderGridPt,
+      renderHeightPt: geometry?.renderHeightPt,
+    };
+  })
+));
+assert(visibleGeometryCoverage.length === 66, `可见几何资产表格数量错误: ${visibleGeometryCoverage.length}`);
+for (const item of visibleGeometryCoverage) {
+  assert(Number.isFinite(item.renderWidthPt) && item.renderWidthPt > 0,
+    `${item.templateId}:${item.role} 缺少有效的 Word 可见宽度`);
+  assert(Number.isFinite(item.renderScale) && item.renderScale > 0,
+    `${item.templateId}:${item.role} 缺少有效的 Word 可见缩放`);
+  assert(Array.isArray(item.renderGridPt) && item.renderGridPt.length > 0 && item.renderGridPt.every(value => Number.isFinite(value) && value >= 0),
+    `${item.templateId}:${item.role} 缺少有效的 Word 可见列宽`);
+  assert(Array.isArray(item.renderHeightPt) && item.renderHeightPt.length > 0 && item.renderHeightPt.every(value => Number.isFinite(value) && value > 0),
+    `${item.templateId}:${item.role} 缺少有效的 Word 可见行高`);
+}
 assert(audit.hplc.records === 603, '液相记录总数错误');
 assert(audit.hplc.rawRecords === 250, '液相原料记录数错误');
 assert(audit.hplc.finishedRecords === 353, '液相成品记录数错误');
@@ -126,6 +157,70 @@ for (const templateId of audit.gcIds) {
   assert(await exactTables.nth(1).getAttribute('data-source-table-index') === String(expectedTables[1]),
     `${templateId}: 供试品源表索引错误`);
 }
+
+// Word 原件的可见矩形是精确 GC 路径的合同：下面的尺寸来自独立导出的
+// Word sidecar，而不是当前浏览器布局或 renderer 计算。行高/行首位置则直接
+// 对照布局资产中 Word 记录的最小(AtLeast)行高，避免包装器重复占用行高。
+const expectedWordGeometry = {
+  'amomum-bornyl-acetate:reference': { widthPx: 660, heightPx: 237 },
+  'amomum-bornyl-acetate:sample': { widthPx: 660, heightPx: 333 },
+  'patchouli-patchoulol:reference': { widthPx: 661, heightPx: 361 },
+  'patchouli-patchoulol:sample': { widthPx: 661, heightPx: 397 },
+  'brucea-oleic:sample': { widthPx: 718, heightPx: 397 }
+};
+for (const [key, expected] of Object.entries(expectedWordGeometry)) {
+  const [templateId, role] = key.split(':');
+  await chooseTemplate(page, templateId);
+  const geometry = await page.locator(`[data-word-table-role="${role}"]`).evaluate((table, expectedRole) => {
+    const source = GC_WORD_TABLE_VISIBLE_GEOMETRY[store['assay.template']][expectedRole];
+    const outer = table.getBoundingClientRect();
+    const rows = Array.from(table.rows).map(row => {
+      const rect = row.getBoundingClientRect();
+      return { heightPx: rect.height, topPx: rect.top - outer.top };
+    });
+    return {
+      widthPx: outer.width,
+      heightPx: outer.height,
+      renderScale: table.getAttribute('data-word-render-scale'),
+      renderWidthPt: table.getAttribute('data-word-render-width-pt'),
+      sourceRowMinsPx: source.renderHeightPt.map(heightPt => heightPt * 4 / 3),
+      rows,
+      gridGaps: Array.from(table.querySelectorAll('.word-grid-gap')).map(cell => ({
+        text: cell.textContent, border: getComputedStyle(cell).borderTopWidth
+      }))
+    };
+  }, role);
+  // Word sidecar crops the anti-aliased outer double border; DOM's border-box
+  // is correspondingly up to 2 CSS px narrower while preserving all columns.
+  assert(Math.abs(geometry.widthPx - expected.widthPx) <= 2,
+    `${key}: Word 可见表宽错误 ${geometry.widthPx} != ${expected.widthPx}`);
+  // Word PNG crops include up to two CSS px of anti-aliased outer double-rule
+  // fringe; row/column grid comparisons below retain the one-pixel contract.
+  assert(Math.abs(geometry.heightPx - expected.heightPx) <= 3,
+    `${key}: Word 可见表高错误 ${geometry.heightPx} != ${expected.heightPx}`);
+  let rowTopPx = 0;
+  for (const [index, sourceMinPx] of geometry.sourceRowMinsPx.entries()) {
+    assert(Math.abs(geometry.rows[index].heightPx - sourceMinPx) <= 1,
+      `${key}: 第 ${index + 1} 行高度偏离 Word 源最小行高 ${geometry.rows[index].heightPx} != ${sourceMinPx}`);
+    assert(Math.abs(geometry.rows[index].topPx - rowTopPx) <= 1,
+      `${key}: 第 ${index + 1} 行累计 Y 偏移 ${geometry.rows[index].topPx} != ${rowTopPx}`);
+    rowTopPx += sourceMinPx;
+  }
+  assert(geometry.gridGaps.every(gap => gap.text === '' && gap.border === '0px'),
+    `${key}: 八列内部表的未绑定网格空白不得呈现为数据单元格`);
+}
+
+await chooseTemplate(page, 'patchouli-patchoulol');
+assert(await page.locator('#assay\\.out\\.Aref').innerText() === '',
+  '精确 GC 未计算的输出必须保持 Word 原件空白，而非通用占位符');
+await chooseTemplate(page, hplcComplete.id);
+assert(await page.locator('#assay\\.out\\.Aref').innerText() === '—',
+  '通用 HPLC 未计算输出必须保留破折号占位符');
+await field(page, 'assay.tech').selectOption('gc');
+await page.locator('[data-assay-product]').fill('自定义品种');
+await page.locator('[data-assay-product]').press('Enter');
+assert(await page.locator('#assay\\.out\\.Aref').innerText() === '—',
+  '手工自定义 GC 未计算输出必须保留通用破折号占位符');
 
 // 同名气相原料/成品必须保持各自标准。
 await chooseTemplate(page, 'mint-menthol');
