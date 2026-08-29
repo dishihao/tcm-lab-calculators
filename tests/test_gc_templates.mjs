@@ -158,11 +158,24 @@ assert(await field(page, 'assay.dryBasis').isChecked() === false,
 assert((await page.locator('[data-assay-sample-table]').innerText()).includes('水分Q'),
   '丁香成品记录的供试品表应显示水分行');
 
+const renderedWordHtml = await page.evaluate(() => renderAssaySheet());
+assert(renderedWordHtml.includes('class="tscroll word-table-scroll" data-assay-reference-table'),
+  'renderAssaySheet 返回的Word对照品包装器没有专用横向滚动类');
+assert(renderedWordHtml.includes('class="tscroll word-table-scroll" data-assay-sample-table'),
+  'renderAssaySheet 返回的Word供试品包装器没有专用横向滚动类');
+assert(renderedWordHtml.includes('class="cell word-cell-input"'),
+  'renderAssaySheet 返回的Word输入框没有专用控件类');
+assert(renderedWordHtml.includes('class="out empty word-cell-output"'),
+  'renderAssaySheet 返回的Word输出框没有专用控件类');
+
 // Word 原始记录表必须保留源文件 pt 几何：窄屏只允许外层横向滚动，不能缩放或重排列宽。
 const wordReferenceScroller = page.locator('[data-assay-reference-table].word-table-scroll');
 assert(await wordReferenceScroller.count() === 1,
   '丁香成品Word对照品表没有专用横向滚动容器');
 const wordReferenceTable = wordReferenceScroller.locator('.word-record-table');
+const wordReferenceInput = wordReferenceTable.locator('.word-cell-input').first();
+assert(await wordReferenceInput.count() === 1, '丁香成品Word表没有精确输入控件类');
+assert(await wordReferenceTable.locator('.word-cell-output').count() > 0, '丁香成品Word表没有精确输出控件类');
 const desktopWordGeometry = await wordReferenceTable.evaluate(table => ({
   scrollWidth: table.scrollWidth,
   tableLayout: getComputedStyle(table).tableLayout,
@@ -195,10 +208,14 @@ assert(mobileWordGeometry.columns.every((width, index) => Math.abs(width - deskt
 assert(mobileWordGeometry.rows.every((height, index) => Math.abs(height - desktopWordGeometry.rows[index]) <= 0.1),
   `手机端Word表行高改变: ${mobileWordGeometry.rows.join(',')} != ${desktopWordGeometry.rows.join(',')}`);
 
+await wordReferenceInput.focus();
+assert(await wordReferenceInput.evaluate(input => document.activeElement === input),
+  '打印测试没有先聚焦Word输入框');
 await page.emulateMedia({ media: 'print' });
 const printWordGeometry = await wordReferenceTable.evaluate(table => {
   const scroller = table.closest('.word-table-scroll');
   const input = table.querySelector('input');
+  const inputStyle = getComputedStyle(input);
   return {
     overflowX: getComputedStyle(scroller).overflowX,
     width: table.getBoundingClientRect().width,
@@ -206,7 +223,11 @@ const printWordGeometry = await wordReferenceTable.evaluate(table => {
     tableLayout: getComputedStyle(table).tableLayout,
     columns: Array.from(table.querySelectorAll('col')).map(column => column.getBoundingClientRect().width),
     rows: Array.from(table.rows).map(row => row.getBoundingClientRect().height),
-    inputOutlineStyle: getComputedStyle(input).outlineStyle,
+    inputFocused: document.activeElement === input,
+    inputBackground: inputStyle.backgroundColor,
+    inputBorderRadius: inputStyle.borderRadius,
+    inputOutlineStyle: inputStyle.outlineStyle,
+    inputBoxShadow: inputStyle.boxShadow,
   };
 });
 assert(printWordGeometry.overflowX === 'visible', '打印时Word表滚动容器没有取消溢出裁切');
@@ -218,7 +239,13 @@ assert(printWordGeometry.columns.every((width, index) => Math.abs(width - deskto
   '打印时Word表列宽改变');
 assert(printWordGeometry.rows.every((height, index) => Math.abs(height - desktopWordGeometry.rows[index]) <= 0.1),
   '打印时Word表行高改变');
+assert(printWordGeometry.inputFocused, '打印样式未在输入框聚焦时验证');
+assert(printWordGeometry.inputBackground === 'rgba(0, 0, 0, 0)',
+  `打印时Word输入框保留焦点背景: ${printWordGeometry.inputBackground}`);
+assert(printWordGeometry.inputBorderRadius === '0px',
+  `打印时Word输入框保留焦点圆角: ${printWordGeometry.inputBorderRadius}`);
 assert(printWordGeometry.inputOutlineStyle === 'none', '打印时Word输入框保留焦点外框');
+assert(printWordGeometry.inputBoxShadow === 'none', '打印时Word输入框保留焦点阴影');
 await page.emulateMedia({ media: 'screen' });
 await page.setViewportSize({ width: 1440, height: 1000 });
 

@@ -676,6 +676,9 @@ td.spanall{background:#fdfdfd}
   .word-table-scroll{overflow:visible}
   .word-record-table{max-width:none !important; min-width:0 !important}
   .word-record-table .word-cell-input{color:#000; outline:0}
+  .word-record-table .word-cell-input:focus{
+    background:transparent !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important;
+  }
   input.cell,input.inline{color:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   .identification-record input,.identification-record textarea,.identification-record select{color:#000}
   .out{color:#000}

@@ -29,20 +29,5 @@
 <script src="assets/gc-record-table-layouts.js?v=20260828-word-layout"></script>
 <script src="assets/gc-word-table-renderer.js?v=20260828-word-layout"></script>
 <script src="assets/app.js?v=20260828-word-layout"></script>
-<script>
-  (() => {
-    const sheets = document.getElementById('sheets');
-    const applyWordRecordClasses = () => {
-      sheets.querySelectorAll('.tscroll[data-assay-reference-table], .tscroll[data-assay-sample-table]').forEach(scroller => {
-        if (!scroller.querySelector('.word-record-table')) return;
-        scroller.classList.add('word-table-scroll');
-        scroller.querySelectorAll('input.cell').forEach(input => input.classList.add('word-cell-input'));
-        scroller.querySelectorAll('.out').forEach(output => output.classList.add('word-cell-output'));
-      });
-    };
-    applyWordRecordClasses();
-    new MutationObserver(applyWordRecordClasses).observe(sheets, { childList:true, subtree:true });
-  })();
-</script>
 </body>
 </html>

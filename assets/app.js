@@ -787,8 +787,8 @@ function inlineInput(name, def, cls){
   return `<input class="inline ${cls || ''}" type="text" autocomplete="off"
             data-k="${esc(name)}" value="${esc(v)}">`;
 }
-function outCell(id){
-  return `<div class="out empty" id="${esc(id)}">—</div>`;
+function outCell(id, extraClass = ''){
+  return `<div class="out empty${extraClass ? ` ${extraClass}` : ''}" id="${esc(id)}">—</div>`;
 }
 
 function preciseGcLayout(tpl){
@@ -815,12 +815,12 @@ function gcWordTableView(layout, tableRole){
 function assayWordInput(binding){
   const key = assayBindingField(binding.field);
   const inputMode = binding.inputMode === 'decimal' ? ' inputmode="decimal"' : '';
-  return `<input class="cell" type="text"${inputMode} autocomplete="off"
+  return `<input class="cell word-cell-input" type="text"${inputMode} autocomplete="off"
     data-k="${esc(key)}" value="${esc(get(key))}" aria-label="${esc(binding.sourceLabel || key)}">`;
 }
 
 function assayWordOutput(binding){
-  return outCell(assayBindingField(binding.field));
+  return outCell(assayBindingField(binding.field), 'word-cell-output');
 }
 
 function renderAssayWordTable(tpl, tableRole){
@@ -1283,7 +1283,7 @@ function renderAssaySheet(){
       ${mode === 'internal' ? `<span>校正因子 f：${outCell('assay.out.factor')}</span>` : ''}
     </div>` : '';
   const referenceBlock = preciseLayout
-    ? `<div class="tscroll" data-assay-reference-table>${renderAssayReferenceTable(tpl)}</div>${preciseChecks}`
+    ? `<div class="tscroll word-table-scroll" data-assay-reference-table>${renderAssayReferenceTable(tpl)}</div>${preciseChecks}`
     : `<div class="tscroll"><table class="form generic-assay-table" data-assay-reference-table
         data-assay-table-layout="generic">
         ${legacyRefRows}
@@ -1296,7 +1296,7 @@ function renderAssaySheet(){
       </table></div>`;
   const genericSampleMeanLabel = `样品平均峰面积 <span style="text-decoration:overline">A</span>`;
   const sampleBlock = preciseLayout
-    ? `<div class="tscroll" data-assay-sample-table>${renderAssaySampleTable(tpl)}</div>
+    ? `<div class="tscroll word-table-scroll" data-assay-sample-table>${renderAssaySampleTable(tpl)}</div>
        ${totalRows ? `<div class="tscroll"><table class="form assay-total-table">${totalRows}</table></div>` : ''}`
     : `<div class="tscroll"><table class="form generic-assay-table" data-assay-sample-table
         data-assay-table-layout="generic">
