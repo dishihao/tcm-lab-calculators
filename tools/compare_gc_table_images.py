@@ -10,6 +10,7 @@ import numpy as np
 TOLERANCE = 1.0
 PT_TO_CSS = 96.0 / 72.0
 INK_LIMIT = 180
+PLACEHOLDER_TEXT_VALUES = {'—', '–', '-', '―'}
 
 
 def load_json(path: Path) -> dict:
@@ -75,13 +76,48 @@ def border_style(value: str | None) -> str:
     return {'single': 'solid', 'double': 'double', 'nil': 'none', 'none': 'none'}.get(value or 'none', value or 'none')
 
 
-def semantic_text_line_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
-    """Gate only Word/DOM text-node line counts; image ink remains diagnostic."""
+def normalize_text(value: object | None) -> str:
+    if value is None:
+        return ''
+    return ' '.join(str(value).replace('\xa0', ' ').split())
+
+
+def text_state(value: object | None) -> str:
+    text = normalize_text(value)
+    if not text:
+        return 'empty'
+    if text in PLACEHOLDER_TEXT_VALUES:
+        return 'placeholder'
+    return 'content'
+
+
+def content_presence_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
     mismatches = []
     for key in sorted(set(source_cells) & set(web_cells)):
+        source_text = source_cells[key].get('text')
+        actual_text = web_cells[key].get('text')
+        source_state = text_state(source_text)
+        actual_state = text_state(actual_text)
+        if source_state == actual_state:
+            continue
+        if source_state == 'content' and actual_state == 'content':
+            continue
+        mismatches.append({'metric': 'contentPresenceMismatch', 'cellId': key, 'row': source_cells[key]['rowIndex'], 'column': source_cells[key]['gridColumnIndex'], 'expected': source_text, 'actual': actual_text, 'sourceState': source_state, 'actualState': actual_state})
+    return mismatches
+
+
+def semantic_text_line_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict], blocked_keys: set[str] | None = None) -> list[dict]:
+    """Gate only wrap differences for cells that contain substantive text on both sides."""
+    mismatches = []
+    blocked = blocked_keys or set()
+    for key in sorted(set(source_cells) & set(web_cells)):
+        if key in blocked:
+            continue
+        if text_state(source_cells[key].get('text')) != 'content' or text_state(web_cells[key].get('text')) != 'content':
+            continue
         expected, actual = source_cells[key].get('textLineCount'), web_cells[key].get('textLineCount')
         if expected is not None and actual is not None and expected != actual:
-            mismatches.append({'metric': 'semanticTextLineCount', 'cellId': key, 'row': source_cells[key]['rowIndex'], 'column': source_cells[key]['gridColumnIndex'], 'expected': expected, 'actual': actual, 'deltaLines': actual - expected})
+            mismatches.append({'metric': 'textWrapMismatch', 'cellId': key, 'row': source_cells[key]['rowIndex'], 'column': source_cells[key]['gridColumnIndex'], 'expected': expected, 'actual': actual, 'deltaLines': actual - expected})
     return mismatches
 
 
@@ -170,7 +206,9 @@ def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image
             expected_style = border_style(expected_border.get('value'))
             if expected_style != actual_border['style']:
                 borders.append({'metric': 'borderStyle', 'cellId': key, 'side': side, 'expected': expected_style, 'actual': actual_border['style']})
-    text = semantic_text_line_mismatches(source, web_cells)
+    presence = content_presence_mismatches(source, web_cells)
+    presence_keys = {item['cellId'] for item in presence}
+    text = semantic_text_line_mismatches(source, web_cells, presence_keys)
     image_wrap_diagnostics = []
     for key in sorted(set(source) & set(web_cells)):
         if key not in word_cell_rects:
@@ -179,7 +217,7 @@ def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image
         right = web_cells[key]
         web_lines = line_count(web_image, (right['x'], right['y'], right['width'], right['height']))
         image_wrap_diagnostics.append({'metric': 'imageTextLineCount', 'cellId': key, 'word': word_lines, 'web': web_lines, 'deltaLines': web_lines - word_lines})
-    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'textWrapMismatches': text, 'imageWrapDiagnostics': image_wrap_diagnostics, 'warnings': warnings, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
+    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'contentPresenceMismatches': presence, 'textWrapMismatches': text, 'imageWrapDiagnostics': image_wrap_diagnostics, 'warnings': warnings, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
 
 
 def write_artifacts(word: Image.Image, web: Image.Image, output: Path) -> None:
@@ -208,8 +246,8 @@ def self_test() -> int:
         if abs(central(word) - central(web)) > TOLERANCE: raise AssertionError('identical normalized fixture failed')
         # Semantic fixtures: one-line text with double borders, an empty bordered
         # cell, and genuine two-line text must be judged from Word/DOM line data.
-        source = {'r1c1': {'rowIndex': 1, 'gridColumnIndex': 1, 'textLineCount': 1, 'borders': {'top': {'value': 'double'}}}, 'r1c2': {'rowIndex': 1, 'gridColumnIndex': 2, 'textLineCount': 0, 'borders': {'top': {'value': 'double'}}}, 'r2c1': {'rowIndex': 2, 'gridColumnIndex': 1, 'textLineCount': 2, 'borders': {'top': {'value': 'single'}}}}
-        dom = {'r1c1': {'textLineCount': 1}, 'r1c2': {'textLineCount': 0}, 'r2c1': {'textLineCount': 2}}
+        source = {'r1c1': {'rowIndex': 1, 'gridColumnIndex': 1, 'textLineCount': 1, 'text': 'ordinary text', 'borders': {'top': {'value': 'double'}}}, 'r1c2': {'rowIndex': 1, 'gridColumnIndex': 2, 'textLineCount': 0, 'text': '', 'borders': {'top': {'value': 'double'}}}, 'r2c1': {'rowIndex': 2, 'gridColumnIndex': 1, 'textLineCount': 2, 'text': 'genuine wrap', 'borders': {'top': {'value': 'single'}}}}
+        dom = {'r1c1': {'textLineCount': 1, 'text': 'ordinary text'}, 'r1c2': {'textLineCount': 0, 'text': ''}, 'r2c1': {'textLineCount': 2, 'text': 'genuine wrap'}}
         if semantic_text_line_mismatches(source, dom): raise AssertionError('semantic text fixtures unexpectedly mismatched')
         dom['r2c1']['textLineCount'] = 1
         if len(semantic_text_line_mismatches(source, dom)) != 1: raise AssertionError('genuine two-line semantic wrap mismatch was not detected')
@@ -223,6 +261,11 @@ def self_test() -> int:
         if semantic['textWrapMismatches']: raise AssertionError('matching semantic one-line text was reported as wrapped')
         if 'imageWrapDiagnostics' not in semantic: raise AssertionError('image wrap diagnostics were omitted')
         print('SELF-TEST GREEN: 144-DPI Lanczos normalized fixture matches; 2 CSS-px border shift; one-line/double-border, empty-cell, and two-line semantic text fixtures verified; unavailable metric is warning-only')
+        empty_source = {'sourceStructure': {'gridPt': [20], 'rows': [{'heightPt': 20}], 'indentPt': 5, 'cells': [{'rowIndex': 1, 'gridColumnIndex': 1, 'gridSpan': 1, 'rowSpan': 1, 'textLineCount': 0, 'text': '', 'borders': fixture_borders}]}}
+        empty_web = {'columns': [{'index': 1, 'widthPx': 26.667}], 'rows': [{'index': 1, 'heightPx': 26.667, 'y': 0}], 'cells': [{'id': 'r1c1', 'rowIndex': 1, 'gridColumnIndex': 1, 'rowSpan': 1, 'gridSpan': 1, 'x': 0, 'y': 0, 'width': 26.667, 'height': 26.667, 'textLineCount': 1, 'text': '—', 'borders': {'top': {'widthPx': 0, 'style': 'double'}, 'right': {'widthPx': 0, 'style': 'none'}, 'bottom': {'widthPx': 0, 'style': 'none'}, 'left': {'widthPx': 0, 'style': 'none'}}}], 'placement': {}}
+        empty_semantic = compare_semantic_table(empty_source, empty_web, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (27, 27), 'white'))
+        if len(empty_semantic['contentPresenceMismatches']) != 1: raise AssertionError(f'expected one content-presence mismatch, got {len(empty_semantic["contentPresenceMismatches"])}')
+        if empty_semantic['textWrapMismatches']: raise AssertionError('empty vs em dash was classified as a wrap mismatch')
         return 0
     finally: shutil.rmtree(root, ignore_errors=True)
 
@@ -239,11 +282,11 @@ def audit(root: Path, strict: bool) -> int:
             if not folder or not all(path.exists() for path in required): missing.append(f'{template_id}/{role}'); continue
             source_meta, web = load_json(required[1]), load_json(required[3]); word, web_image = read_normalized(required[0], source_meta), read_normalized(required[2], web)
             semantic = compare_semantic_table(source_meta, web, word, web_image); write_artifacts(word, web_image, folder / role)
-            tables.append({'templateId': template_id, 'role': role, **semantic, 'geometryMismatch': bool(semantic['geometryMismatches'] or semantic['borderMismatches']), 'wrapMismatch': bool(semantic['textWrapMismatches'])})
-    failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch']]
-    summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}
+            tables.append({'templateId': template_id, 'role': role, **semantic, 'geometryMismatch': bool(semantic['geometryMismatches'] or semantic['borderMismatches']), 'wrapMismatch': bool(semantic['textWrapMismatches']), 'contentPresenceMismatch': bool(semantic['contentPresenceMismatches'])})
+    failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch'] or item['contentPresenceMismatch']]
+    summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}
     (run/'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"{summary['geometryMatched']}/66 tables geometry matched; {summary['shiftedBorders']} border-run mismatches; {summary['wrapMismatches']} cell-wrap mismatches; unexpected dirs={len(unexpected)}")
+    print(f"{summary['geometryMatched']}/66 tables geometry matched; {summary['shiftedBorders']} border-run mismatches; {summary['wrapMismatches']} cell-wrap mismatches; {summary['contentPresenceMismatches']} content-presence mismatches; unexpected dirs={len(unexpected)}")
     return 1 if strict and (len(tables) != 66 or missing or failures) else 0
 
 
