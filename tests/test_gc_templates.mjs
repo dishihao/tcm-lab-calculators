@@ -274,16 +274,76 @@ await field(page, 'assay.partnerMean').fill('13');
 assert(await page.locator('#assay\\.out\\.TOTAL').innerText() === '13.1', '双成分总量错误');
 assert(await page.locator('#assay\\.judge').innerText() === '符合规定', '双成分总量判定错误');
 
-const missingLayoutError = await page.evaluate(() => {
+const missingLayoutPaths = await page.evaluate(() => {
+  const template = {
+    id:'missing-gc-layout', tech:'gc', mode:'external', dry:false,
+    product:'缺布局测试品', recordLabel:'原料', kind:'原料',
+    name:'测试成分', formulaText:'C', plates:'10000', limit:'1.0', unit:'%',
+    standardText:'本品含测试成分不得少于1.0%。'
+  };
+  const originalStore = JSON.parse(JSON.stringify(store));
+  const errorOf = action => {
+    try {
+      action();
+      return '';
+    } catch (error) {
+      return String(error.message || error);
+    }
+  };
+  const selectMode = mode => {
+    Object.keys(store).filter(key => key.startsWith('assay.')).forEach(key => delete store[key]);
+    Object.assign(store, {
+      'assay.template':template.id,
+      'assay.tech':'gc',
+      'assay.mode':mode,
+      'assay.dryBasis':'0',
+      'assay.productName':template.product,
+      'assay.selectedProduct':template.product,
+      'assay.name':template.name,
+      'assay.formulaText':template.formulaText,
+      'assay.platesLim':template.plates,
+      'assay.limop':'ge',
+      'assay.limval':template.limit,
+      'assay.unit':template.unit
+    });
+  };
+  ASSAY_TEMPLATES.push(template);
   try {
-    preciseGcLayout({ id:'missing-gc-layout', tech:'gc' });
-    return '';
-  } catch (error) {
-    return String(error.message || error);
+    selectMode(template.mode);
+    const exactRenderError = errorOf(() => renderAssaySheet());
+    const exactComputeError = errorOf(() => computeAssay());
+
+    selectMode('internal');
+    let genericHtml = '';
+    const genericRenderError = errorOf(() => { genericHtml = renderAssaySheet(); });
+    const genericComputeError = errorOf(() => computeAssay());
+    const host = document.createElement('div');
+    host.innerHTML = genericHtml;
+    return {
+      exactRenderError,
+      exactComputeError,
+      genericRenderError,
+      genericComputeError,
+      genericTables: host.querySelectorAll('.generic-assay-table').length,
+      wordTables: host.querySelectorAll('.word-record-table').length
+    };
+  } finally {
+    ASSAY_TEMPLATES.pop();
+    Object.keys(store).forEach(key => delete store[key]);
+    Object.assign(store, originalStore);
   }
 });
-assert(missingLayoutError === '气相模板 missing-gc-layout 缺少Word精确布局',
-  '气相模板缺少精确布局时没有按模板ID硬失败');
+const missingLayoutMessage = '气相模板 missing-gc-layout 缺少Word精确布局';
+assert(missingLayoutPaths.exactRenderError === missingLayoutMessage,
+  '气相模板原定量方法渲染时缺少精确布局没有硬失败');
+assert(missingLayoutPaths.exactComputeError === missingLayoutMessage,
+  '气相模板原定量方法计算时缺少精确布局没有硬失败');
+assert(missingLayoutPaths.genericRenderError === '',
+  '手动改变气相定量方法后渲染仍要求Word精确布局');
+assert(missingLayoutPaths.genericComputeError === '',
+  '手动改变气相定量方法后计算仍要求Word精确布局');
+assert(missingLayoutPaths.genericTables === 2 && missingLayoutPaths.wordTables === 0,
+  '手动改变气相定量方法后没有使用两张通用表');
 
 await chooseTemplate(page, hplcComplete.id);
 assert(await page.locator('.generic-assay-table').count() === 2,

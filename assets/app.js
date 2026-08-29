@@ -1221,8 +1221,8 @@ function renderAssaySheet(){
       <option value="internal"${mode === 'internal' ? ' selected' : ''}>内标法</option>
     </select>`;
 
-  const gcLayout = tpl && tpl.tech === 'gc' ? preciseGcLayout(tpl) : null;
-  const preciseLayout = gcLayout && mode === tpl.mode ? gcLayout : null;
+  const preciseLayout = tpl && tpl.tech === 'gc' && mode === tpl.mode
+    ? preciseGcLayout(tpl) : null;
 
   const legacyRefRows = mode === 'internal' ? `
       <tr><th class="rowlab" style="width:38%">内标物名称</th>
@@ -1477,8 +1477,8 @@ function computeAssay(){
   const indDp  = assayDp('ind');
   const meanDp = assayDp('mean');
   const rdDp   = assayDp('rd');
-  const gcLayout = tpl && tpl.tech === 'gc' ? preciseGcLayout(tpl) : null;
-  const shotLayout = gcLayout && mode === tpl.mode ? gcLayout : null;
+  const shotLayout = tpl && tpl.tech === 'gc' && mode === tpl.mode
+    ? preciseGcLayout(tpl) : null;
 
   // 标准规定那一行里的成分名，跟着上方"对照品"输入框走
   const echo = document.getElementById('assay.nameEcho');
