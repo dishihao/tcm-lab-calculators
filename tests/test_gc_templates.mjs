@@ -158,6 +158,70 @@ assert(await field(page, 'assay.dryBasis').isChecked() === false,
 assert((await page.locator('[data-assay-sample-table]').innerText()).includes('水分Q'),
   '丁香成品记录的供试品表应显示水分行');
 
+// Word 原始记录表必须保留源文件 pt 几何：窄屏只允许外层横向滚动，不能缩放或重排列宽。
+const wordReferenceScroller = page.locator('[data-assay-reference-table].word-table-scroll');
+assert(await wordReferenceScroller.count() === 1,
+  '丁香成品Word对照品表没有专用横向滚动容器');
+const wordReferenceTable = wordReferenceScroller.locator('.word-record-table');
+const desktopWordGeometry = await wordReferenceTable.evaluate(table => ({
+  scrollWidth: table.scrollWidth,
+  tableLayout: getComputedStyle(table).tableLayout,
+  columns: Array.from(table.querySelectorAll('col')).map(column => column.getBoundingClientRect().width),
+  rows: Array.from(table.rows).map(row => row.getBoundingClientRect().height),
+  width: table.getBoundingClientRect().width,
+}));
+assert(desktopWordGeometry.tableLayout === 'fixed', '丁香成品Word表未使用固定列布局');
+
+await page.setViewportSize({ width: 390, height: 1000 });
+const mobileWordGeometry = await wordReferenceTable.evaluate(table => {
+  const scroller = table.closest('.word-table-scroll');
+  return {
+    scrollWidth: table.scrollWidth,
+    tableLayout: getComputedStyle(table).tableLayout,
+    columns: Array.from(table.querySelectorAll('col')).map(column => column.getBoundingClientRect().width),
+    rows: Array.from(table.rows).map(row => row.getBoundingClientRect().height),
+    width: table.getBoundingClientRect().width,
+    scrollerScrollWidth: scroller.scrollWidth,
+    scrollerClientWidth: scroller.clientWidth,
+  };
+});
+assert(mobileWordGeometry.scrollWidth === desktopWordGeometry.scrollWidth,
+  `手机端Word表宽度改变: ${mobileWordGeometry.scrollWidth} != ${desktopWordGeometry.scrollWidth}`);
+assert(mobileWordGeometry.tableLayout === 'fixed', '手机端Word表没有保留固定列布局');
+assert(mobileWordGeometry.scrollerScrollWidth > mobileWordGeometry.scrollerClientWidth,
+  '手机端Word表没有通过专用容器横向滚动');
+assert(mobileWordGeometry.columns.every((width, index) => Math.abs(width - desktopWordGeometry.columns[index]) <= 0.1),
+  `手机端Word表列宽改变: ${mobileWordGeometry.columns.join(',')} != ${desktopWordGeometry.columns.join(',')}`);
+assert(mobileWordGeometry.rows.every((height, index) => Math.abs(height - desktopWordGeometry.rows[index]) <= 0.1),
+  `手机端Word表行高改变: ${mobileWordGeometry.rows.join(',')} != ${desktopWordGeometry.rows.join(',')}`);
+
+await page.emulateMedia({ media: 'print' });
+const printWordGeometry = await wordReferenceTable.evaluate(table => {
+  const scroller = table.closest('.word-table-scroll');
+  const input = table.querySelector('input');
+  return {
+    overflowX: getComputedStyle(scroller).overflowX,
+    width: table.getBoundingClientRect().width,
+    scrollWidth: table.scrollWidth,
+    tableLayout: getComputedStyle(table).tableLayout,
+    columns: Array.from(table.querySelectorAll('col')).map(column => column.getBoundingClientRect().width),
+    rows: Array.from(table.rows).map(row => row.getBoundingClientRect().height),
+    inputOutlineStyle: getComputedStyle(input).outlineStyle,
+  };
+});
+assert(printWordGeometry.overflowX === 'visible', '打印时Word表滚动容器没有取消溢出裁切');
+assert(printWordGeometry.tableLayout === 'fixed', '打印时Word表没有保留固定列布局');
+assert(Math.abs(printWordGeometry.width - desktopWordGeometry.width) <= 0.1
+  && printWordGeometry.scrollWidth === desktopWordGeometry.scrollWidth,
+`打印时Word表宽度改变: ${printWordGeometry.width}/${printWordGeometry.scrollWidth} != ${desktopWordGeometry.width}/${desktopWordGeometry.scrollWidth}`);
+assert(printWordGeometry.columns.every((width, index) => Math.abs(width - desktopWordGeometry.columns[index]) <= 0.1),
+  '打印时Word表列宽改变');
+assert(printWordGeometry.rows.every((height, index) => Math.abs(height - desktopWordGeometry.rows[index]) <= 0.1),
+  '打印时Word表行高改变');
+assert(printWordGeometry.inputOutlineStyle === 'none', '打印时Word输入框保留焦点外框');
+await page.emulateMedia({ media: 'screen' });
+await page.setViewportSize({ width: 1440, height: 1000 });
+
 await chooseTemplate(page, 'mugwort-eucalyptol');
 assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '7'
   && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '8',

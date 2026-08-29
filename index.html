@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>中药饮片化验室检验记录、计算与温湿度记录</title>
 <meta name="description" content="中药饮片检验记录与计算工具：杂质、水分、总灰分、浸出物、二氧化硫、显微、薄层、理化、液相/气相含量测定，以及实验室温湿度月度记录；支持按品种搜索原料和成品模板。">
-<link rel="stylesheet" href="assets/style.css?v=20260801-identification">
+<link rel="stylesheet" href="assets/style.css?v=20260828-word-layout">
 </head>
 <body>
 
@@ -28,6 +28,21 @@
 <script src="assets/identification-templates.js?v=20260801-identification"></script>
 <script src="assets/gc-record-table-layouts.js?v=20260828-word-layout"></script>
 <script src="assets/gc-word-table-renderer.js?v=20260828-word-layout"></script>
-<script src="assets/app.js?v=20260828-gc-layouts"></script>
+<script src="assets/app.js?v=20260828-word-layout"></script>
+<script>
+  (() => {
+    const sheets = document.getElementById('sheets');
+    const applyWordRecordClasses = () => {
+      sheets.querySelectorAll('.tscroll[data-assay-reference-table], .tscroll[data-assay-sample-table]').forEach(scroller => {
+        if (!scroller.querySelector('.word-record-table')) return;
+        scroller.classList.add('word-table-scroll');
+        scroller.querySelectorAll('input.cell').forEach(input => input.classList.add('word-cell-input'));
+        scroller.querySelectorAll('.out').forEach(output => output.classList.add('word-cell-output'));
+      });
+    };
+    applyWordRecordClasses();
+    new MutationObserver(applyWordRecordClasses).observe(sheets, { childList:true, subtree:true });
+  })();
+</script>
 </body>
 </html>
