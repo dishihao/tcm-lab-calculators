@@ -487,6 +487,118 @@ git commit -m "保持气相Word表格固定宽度与打印排版"
 
 ---
 
+### Task 7A: 修复源 Word 可见几何并消除精确表空白占位符
+
+**Files:**
+- Modify: `assets/gc-word-table-renderer.js`
+- Modify: `assets/gc-record-table-layouts.js`（仅在源可见宽度确实经过 Word 页面缩放时增加审核后的 `renderScale`/`renderWidthPt`）
+- Modify: `assets/app.js`
+- Modify: `assets/style.css`
+- Modify: `tests/test_gc_templates.mjs`
+- Test against: `output/gc-word-layout-audit/visual-qa-20260829-154521/summary.json`（本地忽略 QA 证据）
+
+**Interfaces:**
+- Consumes: `GC_WORD_TABLE_LAYOUTS[template.id]` 的源表 `widthPt`、`gridPt`、`rows`、`cells` 和最新 QA 的源可见裁切尺寸。
+- Produces: 精确 GC 表的可见宽度、列位置、行高、单元格 Y 位置和空白结果与 Word 源表一致；`render()` 仍只接收布局和 adapters。
+
+- [ ] **Step 1: 写生产几何差异的失败测试**
+
+在 `tests/test_gc_templates.mjs` 中读取最新 QA 的独立期望值，至少固定以下不变量：
+
+```js
+const expectedWordGeometry = {
+  'amomum-bornyl-acetate:reference': { widthPx: 660, heightPx: 237 },
+  'amomum-bornyl-acetate:sample': { widthPx: 660, heightPx: 333 },
+  'patchouli-patchoulol:reference': { widthPx: 661, heightPx: 361 },
+  'patchouli-patchoulol:sample': { widthPx: 661, heightPx: 397 },
+  'brucea-oleic:sample': { widthPx: 718, heightPx: 397 }
+};
+```
+
+选择这些模板后断言：
+
+- 网页表格的源宽度/缩放属性与对应 Word 可见尺寸一致；
+- 每个源行 `heightPt` 转换后的实际行高误差不超过 1 CSS px；
+- 第一行之外的累计 `rowTopPx` 误差不超过 1 CSS px；
+- 未填写的精确 GC 输出单元格为空字符串，不显示 `—`；
+- 普通 HPLC/自定义通用表仍可显示原有 `—` 占位符。
+
+测试必须在修改生产代码前因当前 0/66 几何匹配和空白占位符差异失败。
+
+- [ ] **Step 2: 运行测试确认失败来自真实几何差异**
+
+Run: `node tests/test_gc_templates.mjs`  
+Expected: FAIL，错误包含源行高/累计 Y 位置或精确输出空白不一致，不得改动 QA 阈值使其通过。
+
+- [ ] **Step 3: 修正 Word 行高的 content-box 计算**
+
+当前 renderer 将整行 `heightPt` 作为每个单元格内部 wrapper 的 `min-height`，而单元格边框、内边距和 line box 又会额外增加高度。按源 Word 行高重建时：
+
+1. 计算单元格垂直内边距和上下边框占用；
+2. 将 wrapper 的最小高度设为 `max(0, row.heightPt - verticalPadding - verticalBorder)`；
+3. 对 `rowSpan > 1` 使用所有跨行高度之和减去一次跨行单元格的垂直边距/边框；
+4. 源 `heightRule:null` 继续按 `atLeast`，不能丢弃 `heightPt`；
+5. 表格、单元格、段落和输入控件不能引入 UA 默认 margin、padding 或 line-height；
+6. 保留明确的 `exact`、`atLeast`、`auto` 语义和现有跨行不裁切规则。
+
+不得通过统一增减一个全局像素值掩盖不同源行的差异；修正必须由布局中的行、单元格和 run 格式计算得到。
+
+- [ ] **Step 4: 修正 Word 页面缩放后的可见表格宽度**
+
+用最新 Word 导出 sidecar 的 `cropCssPx.width` 与布局 `widthPt × 96 / 72` 比较。仅对源记录明确经过页面缩放的表格增加经审核的 `renderScale`/`renderWidthPt`；普通表格保持原始宽度。尤其核对：
+
+- `patchouli-patchoulol` 和其成品版供试品表；
+- `brucea-oleic` 和其成品版供试品表；
+- 四个内标供试品表的八列网格及 `isGridGap` 区域。
+
+渲染时同时缩放 `<colgroup>`、单元格 `widthPt`、表格总宽度、左侧缩进和跨行高度相关的水平位置，不能只缩放外层表格。布局资源中没有经 QA 证明的表格不得自行增加缩放值。
+
+- [ ] **Step 5: 精确 GC 空白输出保持空白**
+
+新增只供精确 GC 使用的输出 adapter：当 `assay.out.*` 没有计算值时返回空字符串；有值时按源单元格格式返回结果。不得修改通用 `outCell()` 的既有 `—` 行为，不得把 RSD/理论板数/no-print 控件填入源表的八个未绑定空白格。
+
+- [ ] **Step 6: 运行针对性测试确认通过**
+
+Run:
+
+```powershell
+node tests/test_gc_templates.mjs
+node tests/test_gc_word_table_renderer.mjs
+node tests/test_gc_word_layout_data.mjs --require-asset --require-builder
+```
+
+Expected: 精确 GC 几何代表值、源空白结果、33 个模板和 HPLC/通用隔离全部 PASS。
+
+- [ ] **Step 7: 重新运行 66 张源/网页表格 QA**
+
+Run:
+
+```powershell
+pwsh -NoProfile -File tools/export_gc_word_reference_tables.ps1 -Manifest tools/gc-word-table-manifest.json -OutputDir output/gc-word-layout-audit
+node tools/capture_gc_web_tables.mjs --output output/gc-word-layout-audit
+python tools/compare_gc_table_images.py --input output/gc-word-layout-audit --strict
+```
+
+Expected：
+
+- `66/66` paired tables;
+- `missing=[]`、`unexpectedDirectories=[]`；
+- `shiftedBorders=0`；
+- `wrapMismatches=0`；
+- `contentPresenceMismatches=0`；
+- `geometryMatched=66`。
+
+如果仍有差异，报告必须按 `templateId/role/row/cellId/metric` 列出，不能降低 1 CSS px 阈值或把差异标为 warning。
+
+- [ ] **Step 8: 提交生产几何修复**
+
+```bash
+git add assets/gc-word-table-renderer.js assets/gc-record-table-layouts.js assets/app.js assets/style.css tests/test_gc_templates.mjs
+git commit -m "修正气相Word表格源记录几何"
+```
+
+---
+
 ### Task 7: 建立 66 张源表与网页表的视觉差异验收
 
 **Files:**
