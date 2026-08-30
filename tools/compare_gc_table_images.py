@@ -6,6 +6,7 @@ import argparse, json, math, shutil, sys, tempfile
 from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw
 import numpy as np
+from derive_gc_word_visible_geometry import derive as derive_visible_geometry
 
 TOLERANCE = 1.0
 PT_TO_CSS = 96.0 / 72.0
@@ -64,6 +65,28 @@ def metric(name: str, expected: float | None, actual: float | None, **identity: 
     if abs(delta) > TOLERANCE:
         return {'metric': name, 'expected': round(expected, 3), 'actual': round(actual, 3), 'deltaPx': round(delta, 3), **identity}
     return None
+
+
+def close_enough(left: object, right: object, tolerance: float = 0.000001) -> bool:
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return abs(float(left) - float(right)) <= tolerance
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(close_enough(a, b, tolerance) for a, b in zip(left, right))
+    return left == right
+
+
+def validate_visible_asset_entry(template_id: str, role: str, asset: dict, derived: dict) -> None:
+    required_keys = [
+        'sourceFile', 'sourceTableIndex', 'sourceSha256', 'imageDpi',
+        'renderWidthPt', 'renderScale', 'renderGridPt', 'renderHeightPt',
+        'sourceTextLineCounts',
+    ]
+    missing = [key for key in required_keys if key not in asset]
+    if missing:
+        raise ValueError(f'{template_id}/{role}: visible geometry asset missing {missing}')
+    for key in required_keys:
+        if not close_enough(asset.get(key), derived.get(key)):
+            raise ValueError(f'{template_id}/{role}: visible geometry asset {key} differs from current Word sidecar')
 
 
 def unavailable_warning(name: str, expected: float | None, actual: float | None, **identity: object) -> dict:
@@ -169,7 +192,10 @@ def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image
     # fringe. The visible companion asset is produced from those same rules.
     source_visible_width = sum(grid)
     source_visible_height = sum(rows)
-    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', source_visible_width, web_image.width), metric('normalizedTableCropHeightPx', source_visible_height, web_image.height)] if item)
+    web_outer = web.get('outer') or {}
+    actual_crop_width = web_outer.get('width', web_image.width)
+    actual_crop_height = web_outer.get('height', web_image.height)
+    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', source_visible_width, actual_crop_width), metric('normalizedTableCropHeightPx', source_visible_height, actual_crop_height)] if item)
     raw_indent = structure.get('indentPt')
     try:
         source_indent = float(raw_indent) * PT_TO_CSS * float((visible or {}).get('renderScale') or 1) if raw_indent is not None and math.isfinite(float(raw_indent)) and abs(float(raw_indent)) <= 1584 else None
@@ -225,7 +251,7 @@ def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image
         right = web_cells[key]
         web_lines = line_count(web_image, (right['x'], right['y'], right['width'], right['height']))
         image_wrap_diagnostics.append({'metric': 'imageTextLineCount', 'cellId': key, 'word': word_lines, 'web': web_lines, 'deltaLines': web_lines - word_lines})
-    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'contentPresenceMismatches': presence, 'textWrapMismatches': text, 'imageWrapDiagnostics': image_wrap_diagnostics, 'warnings': warnings, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
+    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': actual_crop_width, 'height': actual_crop_height}, 'webScreenshotCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'contentPresenceMismatches': presence, 'textWrapMismatches': text, 'imageWrapDiagnostics': image_wrap_diagnostics, 'warnings': warnings, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
 
 
 def write_artifacts(word: Image.Image, web: Image.Image, output: Path) -> None:
@@ -268,12 +294,35 @@ def self_test() -> int:
         if not any(item.get('metric') == 'tableIndentInContainerPx' and item.get('status') in ('unavailable', 'notApplicable') for item in semantic['warnings']): raise AssertionError('unavailable indent warning was not retained')
         if semantic['textWrapMismatches']: raise AssertionError('matching semantic one-line text was reported as wrapped')
         if 'imageWrapDiagnostics' not in semantic: raise AssertionError('image wrap diagnostics were omitted')
+        rounded_capture = {**web_meta, 'outer': {'width': 26.667, 'height': 26.667}}
+        rounded_semantic = compare_semantic_table(source_meta, rounded_capture, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (29, 29), 'white'))
+        if any(item.get('metric', '').startswith('normalizedTableCrop') for item in rounded_semantic['geometryMismatches']):
+            raise AssertionError('screenshot pixel rounding was used instead of DOM outer geometry')
         print('SELF-TEST GREEN: 144-DPI Lanczos normalized fixture matches; 2 CSS-px border shift; one-line/double-border, empty-cell, and two-line semantic text fixtures verified; unavailable metric is warning-only')
         empty_source = {'sourceStructure': {'gridPt': [20], 'rows': [{'heightPt': 20}], 'indentPt': 5, 'cells': [{'rowIndex': 1, 'gridColumnIndex': 1, 'gridSpan': 1, 'rowSpan': 1, 'textLineCount': 0, 'text': '', 'borders': fixture_borders}]}}
         empty_web = {'columns': [{'index': 1, 'widthPx': 26.667}], 'rows': [{'index': 1, 'heightPx': 26.667, 'y': 0}], 'cells': [{'id': 'r1c1', 'rowIndex': 1, 'gridColumnIndex': 1, 'rowSpan': 1, 'gridSpan': 1, 'x': 0, 'y': 0, 'width': 26.667, 'height': 26.667, 'textLineCount': 1, 'text': '—', 'borders': {'top': {'widthPx': 0, 'style': 'double'}, 'right': {'widthPx': 0, 'style': 'none'}, 'bottom': {'widthPx': 0, 'style': 'none'}, 'left': {'widthPx': 0, 'style': 'none'}}}], 'placement': {}}
         empty_semantic = compare_semantic_table(empty_source, empty_web, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (27, 27), 'white'))
         if len(empty_semantic['contentPresenceMismatches']) != 1: raise AssertionError(f'expected one content-presence mismatch, got {len(empty_semantic["contentPresenceMismatches"])}')
         if empty_semantic['textWrapMismatches']: raise AssertionError('empty vs em dash was classified as a wrap mismatch')
+        derived_visible = {
+            'sourceFile': 'source.doc',
+            'sourceTableIndex': 3,
+            'sourceSha256': 'abc123',
+            'imageDpi': 144,
+            'renderWidthPt': 150.0,
+            'renderScale': 1.0,
+            'renderGridPt': [50.0, 100.0],
+            'renderHeightPt': [25.0],
+            'sourceTextLineCounts': {'reference-r1c1': 1},
+        }
+        validate_visible_asset_entry('fixture', 'reference', dict(derived_visible), derived_visible)
+        stale_visible = {**derived_visible, 'sourceSha256': 'stale'}
+        try:
+            validate_visible_asset_entry('fixture', 'reference', stale_visible, derived_visible)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('stale visible companion source hash was accepted')
         return 0
     finally: shutil.rmtree(root, ignore_errors=True)
 
@@ -300,7 +349,9 @@ def audit(root: Path, strict: bool) -> int:
             visible = visible_asset.get(template_id, {}).get(role)
             if not visible:
                 raise ValueError(f'missing visible geometry for {template_id}/{role}')
-            semantic = compare_semantic_table(source_meta, web, word, web_image, visible); write_artifacts(word, web_image, folder / role)
+            derived_visible = derive_visible_geometry(required[1])
+            validate_visible_asset_entry(template_id, role, visible, derived_visible)
+            semantic = compare_semantic_table(source_meta, web, word, web_image, derived_visible); write_artifacts(word, web_image, folder / role)
             tables.append({'templateId': template_id, 'role': role, **semantic, 'geometryMismatch': bool(semantic['geometryMismatches'] or semantic['borderMismatches']), 'wrapMismatch': bool(semantic['textWrapMismatches']), 'contentPresenceMismatch': bool(semantic['contentPresenceMismatches'])})
     failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch'] or item['contentPresenceMismatch']]
     summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}

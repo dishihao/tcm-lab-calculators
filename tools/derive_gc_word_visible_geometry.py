@@ -84,6 +84,16 @@ def derive(word_json: Path) -> dict:
     if any(value <= 0 for value in row_height_pt):
         raise ValueError(f'{label}: non-positive visible row height {row_height_pt}')
     source_grid = [float(value) for value in structure['gridPt']]
+    role = word_json.name.removesuffix('-word.json')
+    source_text_line_counts: dict[str, int] = {}
+    for cell in structure['cells']:
+        # Continued vertical-merge records have no separately rendered cell.
+        if cell.get('verticalMerge') == 'continue':
+            continue
+        line_count = cell.get('textLineCount')
+        if not isinstance(line_count, int) or line_count < 0:
+            raise ValueError(f'{label}: invalid source textLineCount for r{cell.get("rowIndex")}c{cell.get("gridColumnIndex")}')
+        source_text_line_counts[f'{role}-r{cell["rowIndex"]}c{cell["gridColumnIndex"]}'] = line_count
     return {
         'sourceFile': meta['sourceFile'],
         'sourceTableIndex': int(meta['sourceTableIndex']),
@@ -95,6 +105,10 @@ def derive(word_json: Path) -> dict:
         'renderScale': round(render_scale, 9),
         'renderGridPt': [round(value * render_scale, 6) for value in source_grid],
         'renderHeightPt': row_height_pt,
+        # This is copied from the Word source sidecar, never from browser DOM
+        # measurement. The renderer uses the explicit one-line policy only for
+        # source text cells whose original Word line count is one.
+        'sourceTextLineCounts': source_text_line_counts,
     }
 
 

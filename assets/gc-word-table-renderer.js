@@ -123,6 +123,16 @@
       if (typeof cell.noWrap !== 'boolean') fail(table, cell.id, 'invalid noWrap');
       if (cell.noWrap) styles.push('white-space:nowrap');
     }
+    const sourceLineCount = table.sourceTextLineCounts?.[cell.id];
+    if (sourceLineCount != null) {
+      integer(sourceLineCount, table, cell.id, 'source text line count', { nonNegative: true });
+      // Word's rendered source sidecar is authoritative when its one-line text
+      // has to fit a narrow label cell. This is deliberately per-cell rather
+      // than a global no-wrap rule: source multi-line paragraphs keep wrapping.
+      if (sourceLineCount === 1 && (cell.paragraphs ?? []).some(paragraph => paragraph?.runs?.some(run => run?.text))) {
+        styles.push('white-space:nowrap');
+      }
+    }
     if (cell.fitText != null && typeof cell.fitText !== 'boolean') fail(table, cell.id, 'invalid fitText');
     return styles.join(';');
   }
@@ -394,6 +404,13 @@
       for (let row = cell.row; row < cell.row + cell.rowSpan; row += 1) for (let column = cell.column; column < cell.column + cell.colSpan; column += 1) {
         if (occupied[row][column]) fail(table, cell.id, `overlap with ${occupied[row][column]} at row=${row} column=${column}`);
         occupied[row][column] = cell.id;
+      }
+    }
+    if (table.sourceTextLineCounts != null) {
+      if (!table.sourceTextLineCounts || typeof table.sourceTextLineCounts !== 'object' || Array.isArray(table.sourceTextLineCounts)) fail(table, 'table', 'sourceTextLineCounts must be an object');
+      for (const [cellId, lineCount] of Object.entries(table.sourceTextLineCounts)) {
+        if (!ids.has(cellId)) fail(table, cellId, 'source text line count references an unknown cell');
+        integer(lineCount, table, cellId, 'source text line count', { nonNegative: true });
       }
     }
     for (let row = 0; row < table.rowCount; row += 1) for (let column = 0; column < table.columnCount; column += 1) {
