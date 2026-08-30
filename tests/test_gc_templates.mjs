@@ -443,6 +443,13 @@ await field(page, 'assay.sampleInjection.1').fill('2.0');
 await field(page, 'assay.sampleInjection.2').fill('2.1');
 await fillPeaks(page, 'assay.smpA.1', [31, 32, 33]);
 await fillPeaks(page, 'assay.smpA.2', [41, 42, 43]);
+assert(await field(page, 'assay.refBatch').inputValue() === 'REF-BRUCEA'
+  && await field(page, 'assay.refSource').inputValue() === 'SRC-BRUCEA'
+  && await field(page, 'assay.sampleInjection.1').inputValue() === '2.0'
+  && await field(page, 'assay.sampleInjection.2').inputValue() === '2.1'
+  && await field(page, 'assay.refA.0').inputValue() === '201'
+  && await field(page, 'assay.smpA.2.2').inputValue() === '43',
+  '鸦胆子切回前哨兵值没有正确写入');
 await chooseTemplate(page, 'patchouli-patchoulol');
 assert(await field(page, 'assay.refBatch').inputValue() === 'REF-PATCHOULI'
   && await field(page, 'assay.refSource').inputValue() === 'SRC-PATCHOULI'
