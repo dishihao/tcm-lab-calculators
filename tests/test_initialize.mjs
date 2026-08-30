@@ -73,6 +73,55 @@ assert(await field(page, 'assay.name').inputValue() === assayTemplate.name,
 assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].selected`).count() === 1,
   '含量测定: 初始化后没有保留模板');
 
+// 精确 GC 初始化：清空新增的批次/来源/进样量/峰面积及输出，
+// 但保留模板、源固定文字、源表编号和可见布局。
+await field(page, 'assay.tech').selectOption('gc');
+await page.locator('[data-assay-search]').fill('广藿香');
+await page.locator('[data-assay-product-choice="广藿香"]').click();
+await page.locator('[data-assay-template-button="patchouli-patchoulol"]').click();
+const gcTemplateBeforeInit = await page.evaluate(() => ({
+  id: store['assay.templateId'],
+  standard: document.querySelector('.standard-quote')?.innerText || '',
+  sourceTables: Array.from(document.querySelectorAll('.word-record-table')).map(table => table.getAttribute('data-source-table-index')),
+  geometry: Array.from(document.querySelectorAll('.word-record-table')).map(table => ({
+    width: table.getAttribute('data-word-render-width-pt'),
+    scale: table.getAttribute('data-word-render-scale'),
+    rows: table.rows.length,
+  })),
+}));
+for (const [key, value] of Object.entries({
+  'assay.refBatch': 'REF-INIT', 'assay.refSource': 'SRC-INIT', 'assay.refInjection': '0.8',
+  'assay.internalBatch': 'IS-INIT', 'assay.sampleInjection.1': '1.0', 'assay.sampleInjection.2': '1.1',
+  'assay.refA.0': '101', 'assay.refA.1': '102', 'assay.refA.2': '103', 'assay.refA.3': '104', 'assay.refA.4': '105',
+  'assay.Cref': '2', 'assay.Cis': '1', 'assay.Q': '0',
+  'assay.refIS.0': '200', 'assay.refIS.1': '200', 'assay.refIS.2': '200', 'assay.refIS.3': '200', 'assay.refIS.4': '200',
+  'assay.smpA.1.0': '11', 'assay.smpA.1.1': '12', 'assay.smpA.1.2': '13',
+  'assay.smpA.2.0': '21', 'assay.smpA.2.1': '22', 'assay.smpA.2.2': '23',
+  'assay.smpIS.1.0': '200', 'assay.smpIS.1.1': '200', 'assay.smpIS.2.0': '200', 'assay.smpIS.2.1': '200',
+  'assay.Ws.1': '1', 'assay.Ws.2': '1', 'assay.f.1': '10', 'assay.f.2': '10',
+})) await field(page, key).fill(value);
+assert(await page.locator('#assay\\.out\\.MEAN').innerText() !== '', '精确 GC 初始化前没有计算输出');
+await acceptInitialize(page, 'assay');
+for (const key of [
+  'assay.refBatch', 'assay.refSource', 'assay.refInjection', 'assay.internalBatch',
+  'assay.sampleInjection.1', 'assay.sampleInjection.2', 'assay.refA.0', 'assay.refA.4',
+  'assay.smpA.1.0', 'assay.smpA.2.2',
+]) assert(await field(page, key).inputValue() === '', `精确气相初始化后没有清空 ${key}`);
+for (const key of ['assay.out.Aref', 'assay.out.A.1', 'assay.out.A.2', 'assay.out.MEAN'])
+  assert(await page.locator(`#${key.replaceAll('.', '\\.')}`).innerText() === '', `精确气相初始化后没有清空 ${key}`);
+const gcTemplateAfterInit = await page.evaluate(() => ({
+  id: store['assay.templateId'],
+  standard: document.querySelector('.standard-quote')?.innerText || '',
+  sourceTables: Array.from(document.querySelectorAll('.word-record-table')).map(table => table.getAttribute('data-source-table-index')),
+  geometry: Array.from(document.querySelectorAll('.word-record-table')).map(table => ({
+    width: table.getAttribute('data-word-render-width-pt'),
+    scale: table.getAttribute('data-word-render-scale'),
+    rows: table.rows.length,
+  })),
+}));
+assert(JSON.stringify(gcTemplateAfterInit) === JSON.stringify(gcTemplateBeforeInit),
+  '精确气相初始化不应改变模板、标准原文、源表编号或可见布局');
+
 for (const item of ['microscopy', 'tlc', 'physicochemical']) {
   const template = await page.evaluate(id => IDENTIFICATION_TEMPLATES.find(t => t.item === id), item);
   assert(template, `${item}: 没有鉴别模板`);

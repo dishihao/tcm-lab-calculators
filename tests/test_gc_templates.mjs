@@ -418,20 +418,46 @@ assert(patchouliReferenceTable.includes('正十八烷批号') && patchouliRefere
   '广藿香内标法对照品表没有按记录显示两种物质的批号');
 assert(patchouliReferenceTable.includes('正十八烷来源') && patchouliReferenceTable.includes('百秋李醇来源'),
   '广藿香内标法对照品表没有按记录显示两种物质的来源');
+// 精确 GC 表中的批次/来源/进样量/峰面积都必须进入现有 assay.<field>
+// 状态快照；切换到另一份记录后不能串值。
+await field(page, 'assay.refBatch').fill('REF-PATCHOULI');
+await field(page, 'assay.refSource').fill('SRC-PATCHOULI');
+await field(page, 'assay.refInjection').fill('0.8');
+await fillPeaks(page, 'assay.refA', [101, 102, 103, 104, 105]);
 await field(page, 'assay.internalBatch').fill('IS-PATCHOULI');
 await field(page, 'assay.sampleInjection.1').fill('1.0');
+await field(page, 'assay.sampleInjection.2').fill('1.1');
+await fillPeaks(page, 'assay.smpA.1', [11, 12, 13]);
+await fillPeaks(page, 'assay.smpA.2', [21, 22, 23]);
 
 await chooseTemplate(page, 'brucea-oleic');
 const bruceaReferenceTable = await page.locator('[data-assay-reference-table]').innerText();
 assert(bruceaReferenceTable.includes('苯甲酸苯酯批号') && bruceaReferenceTable.includes('油酸批号'),
   '鸦胆子内标法对照品表没有切换为本记录物质名称');
+await field(page, 'assay.refBatch').fill('REF-BRUCEA');
+await field(page, 'assay.refSource').fill('SRC-BRUCEA');
+await field(page, 'assay.refInjection').fill('0.9');
+await fillPeaks(page, 'assay.refA', [201, 202, 203, 204, 205]);
 await field(page, 'assay.internalBatch').fill('IS-BRUCEA');
 await field(page, 'assay.sampleInjection.1').fill('2.0');
+await field(page, 'assay.sampleInjection.2').fill('2.1');
+await fillPeaks(page, 'assay.smpA.1', [31, 32, 33]);
+await fillPeaks(page, 'assay.smpA.2', [41, 42, 43]);
 await chooseTemplate(page, 'patchouli-patchoulol');
+assert(await field(page, 'assay.refBatch').inputValue() === 'REF-PATCHOULI'
+  && await field(page, 'assay.refSource').inputValue() === 'SRC-PATCHOULI'
+  && await field(page, 'assay.refInjection').inputValue() === '0.8',
+  '切回广藿香后没有恢复其对照品批号、来源和进样量');
 assert(await field(page, 'assay.internalBatch').inputValue() === 'IS-PATCHOULI',
   '切回广藿香后没有恢复其对照品表数据');
-assert(await field(page, 'assay.sampleInjection.1').inputValue() === '1.0',
-  '切回广藿香后没有恢复其供试品表数据');
+assert(await field(page, 'assay.sampleInjection.1').inputValue() === '1.0'
+  && await field(page, 'assay.sampleInjection.2').inputValue() === '1.1',
+  '切回广藿香后没有恢复两份供试品进样量');
+assert(await field(page, 'assay.refA.0').inputValue() === '101'
+  && await field(page, 'assay.refA.4').inputValue() === '105'
+  && await field(page, 'assay.smpA.1.0').inputValue() === '11'
+  && await field(page, 'assay.smpA.2.2').inputValue() === '23',
+  '切回广藿香后没有恢复对照品及两份供试品峰面积');
 
 // 手动改变定量方法时是自定义路径，恢复模板方法后重新使用精确表。
 await field(page, 'assay.mode').selectOption('external');
