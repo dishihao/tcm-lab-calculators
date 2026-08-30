@@ -220,9 +220,7 @@
       }
     }
     const size = properties.fontSizePt ?? properties.complexScriptFontSizePt;
-    // Word's page-fit applies the audited horizontal table scale to run
-    // metrics as well; visible row minima remain independently preserved.
-    if (size != null) styles.push(`font-size:${pt(size * (table.renderScale ?? 1), table, cellId, 'run fontSizePt', { nonNegative: true })}`);
+    if (size != null) styles.push(`font-size:${pt(size, table, cellId, 'run fontSizePt', { nonNegative: true })}`);
     if (properties.color != null) {
       ensureKnownObjectKeys(properties.color, new Set(['value', 'themeColor', 'themeTint', 'themeShade']), table, cellId, 'run color');
       styles.push(`color:${cssColor(properties.color.value, table, cellId, 'run color')}`);
@@ -305,9 +303,8 @@
   function renderParagraph(paragraph, table, cellId) {
     if (!paragraph || typeof paragraph !== 'object' || Array.isArray(paragraph)) fail(table, cellId, 'invalid paragraph');
     if (!Array.isArray(paragraph.runs)) fail(table, cellId, 'paragraph runs must be an array');
-    const style = renderParagraphStyle(paragraph.properties, table, cellId);
     const defaultRunProperties = paragraph.properties?.defaultRunProperties;
-    if (defaultRunProperties != null) renderRunStyle(defaultRunProperties, table, cellId);
+    const style = [renderParagraphStyle(paragraph.properties, table, cellId), renderRunStyle(defaultRunProperties, table, cellId)].filter(Boolean).join(';');
     const content = paragraph.runs.map(run => {
       if (!run || typeof run !== 'object') fail(table, cellId, 'invalid paragraph run');
       if (run.kind === 'text') return renderTextRun({ ...run,

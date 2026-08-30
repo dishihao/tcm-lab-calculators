@@ -188,14 +188,10 @@ def source_geometry(structure: dict, word_image: Image.Image, visible: dict | No
 def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image, web_image: Image.Image, visible: dict | None = None) -> dict:
     structure = source_meta['sourceStructure']; grid, rows, word_cell_rects = source_geometry(structure, word_image, visible)
     geometry: list[dict] = []; borders: list[dict] = []; warnings: list[dict] = []
-    # Compare detected Word border-grid span, not the crop's anti-aliased
-    # fringe. The visible companion asset is produced from those same rules.
-    source_visible_width = sum(grid)
-    source_visible_height = sum(rows)
     web_outer = web.get('outer') or {}
     actual_crop_width = web_outer.get('width', web_image.width)
     actual_crop_height = web_outer.get('height', web_image.height)
-    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', source_visible_width, actual_crop_width), metric('normalizedTableCropHeightPx', source_visible_height, actual_crop_height)] if item)
+    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', word_image.width, actual_crop_width), metric('normalizedTableCropHeightPx', word_image.height, actual_crop_height)] if item)
     raw_indent = structure.get('indentPt')
     try:
         source_indent = float(raw_indent) * PT_TO_CSS * float((visible or {}).get('renderScale') or 1) if raw_indent is not None and math.isfinite(float(raw_indent)) and abs(float(raw_indent)) <= 1584 else None

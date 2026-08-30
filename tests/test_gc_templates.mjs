@@ -230,6 +230,37 @@ for (const templateId of ['patchouli-patchoulol', 'patchouli-patchoulol-finished
     `${templateId}: isGridGap 不能显示内容或边框`);
 }
 
+// renderScale is a horizontal page-fit factor only. Source Word font metrics
+// must stay vertical/source-faithful even for the page-scaled internal-standard sample tables.
+for (const [templateId, expectedScale] of Object.entries({
+  'patchouli-patchoulol': 0.741821993,
+  'brucea-oleic': 0.799792069
+})) {
+  await chooseTemplate(page, templateId);
+  const fontMetrics = await page.locator('[data-word-table-role="sample"]').evaluate(table => {
+    const labelCell = Array.from(table.rows[0].cells).find(cell => cell.textContent.includes('样品编号'));
+    const span = labelCell?.querySelector('span');
+    const paragraph = labelCell?.querySelector('p');
+    const spanStyle = span ? getComputedStyle(span) : null;
+    const paragraphStyle = paragraph ? getComputedStyle(paragraph) : null;
+    return {
+      renderScale: Number(table.getAttribute('data-word-render-scale')),
+      text: labelCell?.innerText,
+      fontSizePx: spanStyle ? Number.parseFloat(spanStyle.fontSize) : null,
+      lineHeightPx: paragraphStyle ? Number.parseFloat(paragraphStyle.lineHeight) : null,
+      whiteSpace: labelCell ? getComputedStyle(labelCell).whiteSpace : null
+    };
+  });
+  assert(Math.abs(fontMetrics.renderScale - expectedScale) <= 0.000000001,
+    `${templateId}: 样品表应保留水平 renderScale`);
+  assert(Math.abs(fontMetrics.fontSizePx - 14) <= 0.1,
+    `${templateId}: 样品表源标签字号不能按 renderScale 缩小 ${fontMetrics.fontSizePx}`);
+  assert(Math.abs(fontMetrics.lineHeightPx - 21) <= 0.1,
+    `${templateId}: 样品表源标签行高必须保持 Word 10.5pt x 1.5 ${fontMetrics.lineHeightPx}`);
+  assert(fontMetrics.whiteSpace === 'nowrap',
+    `${templateId}: Word 源一行标签应按 sourceTextLineCounts 保持一行`);
+}
+
 await chooseTemplate(page, 'patchouli-patchoulol');
 assert(await page.locator('#assay\\.out\\.Aref').innerText() === '',
   '精确 GC 未计算的输出必须保持 Word 原件空白，而非通用占位符');

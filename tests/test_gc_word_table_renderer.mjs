@@ -95,7 +95,7 @@ assert.match(html, /data-word-table-role="reference"/);
 assert.match(html, /data-source-table-index="7"/);
 assert.match(html, /<col style="width:120pt">/);
 assert.match(html, /<td rowspan="2" colspan="2"/);
-assert.match(html, /<p style="margin:0;text-align:center;margin-top:1pt;margin-bottom:2pt;line-height:1">/);
+assert.match(html, /<p style="margin:0;text-align:center;margin-top:1pt;margin-bottom:2pt;line-height:1;font-family:SimSun;font-size:10.5pt;letter-spacing:0.25pt">/);
 assert.match(html, /<span style="font-family:SimSun;font-size:10.5pt;letter-spacing:0.25pt">A &lt; B &amp; C<\/span><sub/);
 assert.match(html, /<sub><span style="font-family:SimSun;font-size:10.5pt;letter-spacing:0.25pt">2<\/span><\/sub>/);
 assert.match(html, /<p style="margin:0"><span class="word-math-fraction" style="display:inline-flex;flex-direction:column;vertical-align:middle;line-height:1;text-align:center">/);

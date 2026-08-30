@@ -131,3 +131,52 @@ Strict summary for `visual-qa-20260830-015500`:
 
 - The first fresh export attempt, `visual-qa-20260830-015051`, reached 65/66 and failed on `clove-eugenol/reference` during Word COM sidecar extraction after writing `reference-word.png`. A clean rerun completed 66/66 with source read-only and temp cleanup true; no source mutation occurred.
 - No tolerance relaxation was introduced. The comparator threshold remains `TOLERANCE = 1.0`.
+
+## Fix Round 1 - Font metrics
+
+Review finding: `renderScale` is horizontal-only and must not scale source Word font size or vertical line boxes in the four page-scaled internal-standard sample tables.
+
+RED:
+
+```text
+node tests/test_gc_templates.mjs
+Error: patchouli-patchoulol: 样品表源标签字号不能按 renderScale 缩小 10.3855
+```
+
+Follow-up RED after removing font-size scaling exposed the paragraph line-box issue:
+
+```text
+node tests/test_gc_templates.mjs
+Error: patchouli-patchoulol: 样品表源标签行高必须保持 Word 10.5pt x 1.5 22.5
+```
+
+Fix:
+
+- Removed `font-size * table.renderScale`; source run font size is emitted unchanged.
+- Applied default run metrics to the source paragraph container so `line-height` resolves against the source Word font size, not the app body font.
+- Kept horizontal `renderScale` for width/grid/indent; existing character spacing scaling remains isolated to horizontal spacing.
+- Restored the strict full-table crop gate to compare independent Word PNG crop geometry against captured DOM outer geometry, while row/column/cell geometry continues to use source-derived visible grid data.
+
+GREEN:
+
+```text
+node tests/test_gc_templates.mjs
+PASS: 1037 个液相模板/603 条记录，33 个气相模板，方法分离、标准原文及计算
+
+node tests/test_gc_word_table_renderer.mjs
+PASS: pure GC Word-table renderer: geometry, runs, math, bindings, escaping, and fail-closed styles
+
+node tests/test_gc_word_layout_data.mjs --require-asset --require-builder
+33 precise layouts; 0 unresolved bindings
+
+pwsh -NoProfile -File tools/export_gc_word_reference_tables.ps1 -Manifest tools/gc-word-table-manifest.json -OutputDir output/gc-word-layout-audit
+Exported 66/66 Word tables to C:\Users\37475\Desktop\含量计算\tcm-lab-calculators\.worktrees\gc-word-table-fidelity\output\gc-word-layout-audit\visual-qa-20260830-021229; errors=0
+
+python tools/derive_gc_word_visible_geometry.py --input output/gc-word-layout-audit/visual-qa-20260830-021229 --manifest tools/gc-word-table-manifest.json --output assets/gc-word-table-visible-geometry.js --javascript
+
+node tools/capture_gc_web_tables.mjs --output output/gc-word-layout-audit
+Captured 33 templates / 66 tables in C:\Users\37475\Desktop\含量计算\tcm-lab-calculators\.worktrees\gc-word-table-fidelity\output\gc-word-layout-audit\visual-qa-20260830-021229
+
+python tools/compare_gc_table_images.py --input output/gc-word-layout-audit --strict
+66/66 tables geometry matched; 0 border-run mismatches; 0 cell-wrap mismatches; 0 content-presence mismatches; unexpected dirs=0
+```
