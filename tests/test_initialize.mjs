@@ -100,7 +100,14 @@ const gcTemplateBeforeInit = await page.evaluate(() => {
     rows: table.rows.length,
   }));
   if (!geometry.every(item => item.width > 0 && item.scale > 0 && item.rows > 0)) throw new Error('精确 GC 可见几何属性缺失');
-  return { id: store['assay.template'], standard: ASSAY_TEMPLATES.find(t => t.id === store['assay.template'])?.standardText || '', sourceTables, geometry };
+  const cellText = (table, marker) => Array.from(table.querySelectorAll('th,td'))
+    .map(cell => cell.innerText).find(text => text.includes(marker)) || '';
+  const fixedLabels = {
+    reference: [cellText(tables[0], '正十八烷批号'), cellText(tables[0], '百秋李醇批号')],
+    sample: [cellText(tables[1], '样品编号'), cellText(tables[1], '正十八烷峰面积'), cellText(tables[1], '百秋李醇面积')],
+  };
+  if (fixedLabels.reference.some(text => !text) || fixedLabels.sample.some(text => !text)) throw new Error('精确 GC 源表固定标签缺失');
+  return { id: store['assay.template'], standard, sourceTables, geometry, fixedLabels };
 });
 for (const [key, value] of Object.entries({
   'assay.refBatch': 'REF-INIT', 'assay.refSource': 'SRC-INIT', 'assay.refInjection': '0.8',
@@ -130,13 +137,22 @@ for (const key of ['assay.out.Aref', 'assay.out.A.1', 'assay.out.A.2', 'assay.ou
   assert(await page.locator(`#${key.replaceAll('.', '\\.')}`).innerText() === '', `精确气相初始化后没有清空 ${key}`);
 const gcTemplateAfterInit = await page.evaluate(() => ({
   id: store['assay.template'],
-  standard: ASSAY_TEMPLATES.find(t => t.id === store['assay.template'])?.standardText || '',
+  standard: document.querySelector('.sheet.active')?.querySelector('.standard-quote')?.innerText || '',
   sourceTables: Array.from(document.querySelector('.sheet.active')?.querySelectorAll('.word-record-table') || []).map(table => Number(table.getAttribute('data-source-table-index'))),
   geometry: Array.from(document.querySelector('.sheet.active')?.querySelectorAll('.word-record-table') || []).map(table => ({
     width: Number(table.getAttribute('data-word-render-width-pt')),
     scale: Number(table.getAttribute('data-word-render-scale')),
     rows: table.rows.length,
   })),
+  fixedLabels: (() => {
+    const tables = Array.from(document.querySelector('.sheet.active')?.querySelectorAll('.word-record-table') || []);
+    const cellText = (table, marker) => Array.from(table?.querySelectorAll('th,td') || [])
+      .map(cell => cell.innerText).find(text => text.includes(marker)) || '';
+    return {
+      reference: [cellText(tables[0], '正十八烷批号'), cellText(tables[0], '百秋李醇批号')],
+      sample: [cellText(tables[1], '样品编号'), cellText(tables[1], '正十八烷峰面积'), cellText(tables[1], '百秋李醇面积')],
+    };
+  })(),
 }));
 assert(JSON.stringify(gcTemplateAfterInit) === JSON.stringify(gcTemplateBeforeInit),
   `精确气相初始化不应改变模板、标准原文、源表编号或可见布局: ${JSON.stringify(gcTemplateBeforeInit)} -> ${JSON.stringify(gcTemplateAfterInit)}`);
