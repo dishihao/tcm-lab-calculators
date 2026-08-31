@@ -3,6 +3,7 @@ Thumbs.db
 desktop.ini
 .DS_Store
 *.log
+__pycache__/
 output/
 .playwright-cli/
 .worktrees/

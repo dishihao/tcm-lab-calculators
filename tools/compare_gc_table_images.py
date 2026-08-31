@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse, json, math, shutil, sys, tempfile
 from pathlib import Path
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 import numpy as np
-from derive_gc_word_visible_geometry import derive as derive_visible_geometry
+from derive_gc_word_visible_geometry import derive_runtime_and_provenance, extract_border_evidence
 
 TOLERANCE = 1.0
 PT_TO_CSS = 96.0 / 72.0
@@ -67,6 +67,48 @@ def metric(name: str, expected: float | None, actual: float | None, **identity: 
     return None
 
 
+def compare_border_evidence(expected: dict, actual: dict) -> list[dict]:
+    """Compare independently derived Word PNG runs with browser DOM border runs."""
+    mismatches: list[dict] = []
+    def localize(evidence: dict, collection: str) -> list[dict]:
+        outer = evidence.get('mainOuterPx') or {}
+        left, top = float(outer.get('left', 0)), float(outer.get('top', 0))
+        localized = []
+        for item in evidence.get(collection, []):
+            value = dict(item)
+            if collection == 'verticalSegments':
+                value['positionPx'] = float(value['positionPx']) - left
+                value['startPx'] = float(value['startPx']) - top
+                value['endPx'] = float(value['endPx']) - top
+            else:
+                value['positionPx'] = float(value['positionPx']) - top
+                value['startPx'] = float(value['startPx']) - left
+                value['endPx'] = float(value['endPx']) - left
+            localized.append(value)
+        return localized
+    specs = (
+        ('verticalSegments', ('rowStart', 'rowEnd'), 'vertical'),
+        ('horizontalSegments', ('boundary',), 'horizontal'),
+    )
+    for collection, identity_keys, axis in specs:
+        left = sorted(localize(expected, collection), key=lambda item: tuple(item.get(key) for key in identity_keys) + (item.get('positionPx', 0), item.get('startPx', 0)))
+        right = sorted(localize(actual, collection), key=lambda item: tuple(item.get(key) for key in identity_keys) + (item.get('positionPx', 0), item.get('startPx', 0)))
+        if len(left) != len(right):
+            mismatches.append({'metric': f'{axis}BorderSegmentCount', 'expected': len(left), 'actual': len(right)})
+        for index, (source, web) in enumerate(zip(left, right)):
+            identity = {'axis': axis, 'segment': index, **{key: source.get(key) for key in identity_keys}}
+            for key, metric_name in (
+                ('positionPx', f'{axis}BorderPositionPx'),
+                ('startPx', f'{axis}BorderStartPx'),
+                ('endPx', f'{axis}BorderEndPx'),
+                ('thicknessPx', f'{axis}BorderThicknessPx'),
+            ):
+                item = metric(metric_name, source.get(key), web.get(key), **identity)
+                if item:
+                    mismatches.append(item)
+    return mismatches
+
+
 def close_enough(left: object, right: object, tolerance: float = 0.000001) -> bool:
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         return abs(float(left) - float(right)) <= tolerance
@@ -117,7 +159,7 @@ def text_state(value: object | None) -> str:
 def content_presence_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
     mismatches = []
     for key in sorted(set(source_cells) & set(web_cells)):
-        source_text = source_cells[key].get('text')
+        source_text = source_cells[key].get('semanticContent') or source_cells[key].get('text')
         actual_text = web_cells[key].get('text')
         source_state = text_state(source_text)
         actual_state = text_state(actual_text)
@@ -126,6 +168,20 @@ def content_presence_mismatches(source_cells: dict[str, dict], web_cells: dict[s
         if source_state == 'content' and actual_state == 'content':
             continue
         mismatches.append({'metric': 'contentPresenceMismatch', 'cellId': key, 'row': source_cells[key]['rowIndex'], 'column': source_cells[key]['gridColumnIndex'], 'expected': source_text, 'actual': actual_text, 'sourceState': source_state, 'actualState': actual_state})
+    return mismatches
+
+
+def exact_content_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
+    mismatches = []
+    for key, source in sorted(source_cells.items()):
+        expected = source.get('semanticContent')
+        if not expected:
+            continue
+        actual = (web_cells.get(key) or {}).get('fixedSemantic')
+        if expected != actual:
+            mismatches.append({'metric': 'exactFixedSemanticContent', 'cellId': key,
+                               'row': source['rowIndex'], 'column': source['gridColumnIndex'],
+                               'expected': expected, 'actual': actual})
     return mismatches
 
 
@@ -144,12 +200,16 @@ def semantic_text_line_mismatches(source_cells: dict[str, dict], web_cells: dict
     return mismatches
 
 
-def source_cells(structure: dict) -> dict[str, dict]:
+def source_cells(structure: dict, visible_column_count: int | None = None) -> dict[str, dict]:
     raw = structure['cells']; by_position = {(c['rowIndex'], c['gridColumnIndex']): c for c in raw}
     result: dict[str, dict] = {}
     for cell in raw:
         if cell.get('verticalMerge') == 'continue':
             continue
+        if visible_column_count is not None and cell['gridColumnIndex'] > visible_column_count:
+            continue
+        if visible_column_count is not None and cell['gridColumnIndex'] - 1 + cell['gridSpan'] > visible_column_count:
+            raise ValueError(f'source cell r{cell["rowIndex"]}c{cell["gridColumnIndex"]} crosses visible column boundary')
         row, column, span = cell['rowIndex'], cell['gridColumnIndex'], cell['gridSpan']
         row_span, next_row = 1, row + 1
         while (next_cell := by_position.get((next_row, column))) and next_cell.get('verticalMerge') == 'continue' and next_cell['gridSpan'] == span:
@@ -175,7 +235,8 @@ def source_geometry(structure: dict, word_image: Image.Image, visible: dict | No
     # If a source row has no explicit height, only image-region text checking uses
     # a proportional fallback; structural row-height comparison is unavailable.
     x = cumulative(grid); y = cumulative(row_values)
-    source = source_cells(structure); cell_rects = {}
+    visible_count = (visible or {}).get('visibleColumnCount')
+    source = source_cells(structure, visible_count); cell_rects = {}
     declared_width, declared_height = x[-1] or 1, y[-1] or 1
     for key, cell in source.items():
         r, c = cell['rowIndex'] - 1, cell['gridColumnIndex'] - 1
@@ -185,75 +246,111 @@ def source_geometry(structure: dict, word_image: Image.Image, visible: dict | No
     return grid, row_values, cell_rects
 
 
-def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image, web_image: Image.Image, visible: dict | None = None) -> dict:
-    structure = source_meta['sourceStructure']; grid, rows, word_cell_rects = source_geometry(structure, word_image, visible)
-    geometry: list[dict] = []; borders: list[dict] = []; warnings: list[dict] = []
+def compare_semantic_table(source_meta: dict, web: dict, word_image: Image.Image, web_image: Image.Image,
+                           visible: dict, provenance: dict) -> dict:
+    structure = source_meta['sourceStructure']
+    grid, rows, word_cell_rects = source_geometry(structure, word_image, visible)
+    geometry: list[dict] = []
     web_outer = web.get('outer') or {}
     actual_crop_width = web_outer.get('width', web_image.width)
     actual_crop_height = web_outer.get('height', web_image.height)
-    geometry.extend(item for item in [metric('normalizedTableCropWidthPx', word_image.width, actual_crop_width), metric('normalizedTableCropHeightPx', word_image.height, actual_crop_height)] if item)
-    raw_indent = structure.get('indentPt')
-    try:
-        source_indent = float(raw_indent) * PT_TO_CSS * float((visible or {}).get('renderScale') or 1) if raw_indent is not None and math.isfinite(float(raw_indent)) and abs(float(raw_indent)) <= 1584 else None
-    except (TypeError, ValueError):
-        source_indent = None
-    actual_indent = (web.get('placement') or {}).get('tableLeftInContainerPx')
-    if source_indent is None:
-        warnings.append(unavailable_warning('tableIndentInContainerPx', None, actual_indent, reason='source mixed-row indent sentinel; cell/row left geometry remains compared'))
-    elif actual_indent is None:
-        warnings.append(unavailable_warning('tableIndentInContainerPx', source_indent, None, origin='source.indentPt', target='web.placement.tableLeftInContainerPx'))
-    else:
-        geometry.extend(item for item in [metric('tableIndentInContainerPx', source_indent, actual_indent, origin='source.indentPt', target='web.placement.tableLeftInContainerPx')] if item)
+    for item in (
+        metric('normalizedTableCropWidthPx', word_image.width, actual_crop_width),
+        metric('normalizedTableCropHeightPx', word_image.height, actual_crop_height),
+        metric('tableIndentInContainerPx', float(visible['renderIndentPt']) * PT_TO_CSS,
+               (web.get('placement') or {}).get('tableLeftInContainerPx')),
+    ):
+        if item:
+            geometry.append(item)
+
     for index, expected in enumerate(grid, 1):
         actual = next((column['widthPx'] for column in web['columns'] if column['index'] == index), None)
         item = metric('columnWidthPx', expected, actual, column=index)
-        if item: geometry.append(item)
-    positions = cumulative(grid)
+        if item:
+            geometry.append(item)
+    x_positions, y_positions = cumulative(grid), cumulative(rows)
     for index, expected in enumerate(rows, 1):
         web_row = next((row for row in web['rows'] if row['index'] == index), None)
-        item = metric('rowHeightPx', expected if expected else None, web_row['heightPx'] if web_row else None, row=index)
-        if item: geometry.append(item)
-        if expected and web_row:
-            item = metric('rowTopPx', positions[index - 1] if False else cumulative(rows)[index - 1], web_row['y'], row=index)
-            if item: geometry.append(item)
-    source = source_cells(structure); web_cells = {cell['id']: cell for cell in web['cells']}
+        for item in (
+            metric('rowHeightPx', expected, web_row['heightPx'] if web_row else None, row=index),
+            metric('rowTopPx', y_positions[index - 1], web_row['y'] if web_row else None, row=index),
+        ):
+            if item:
+                geometry.append(item)
+
+    source = source_cells(structure, visible['visibleColumnCount'])
+    web_cells = {cell['id']: cell for cell in web['cells']}
     for key in sorted(set(source) | set(web_cells)):
         left, right = source.get(key), web_cells.get(key)
         if not left or not right:
-            geometry.append({'metric': 'cellPresence', 'cellId': key, 'expected': bool(left), 'actual': bool(right)}); continue
-        r, c = left['rowIndex'] - 1, left['gridColumnIndex'] - 1
-        expected = {'x': positions[c], 'y': cumulative(rows)[r], 'width': positions[c + left['gridSpan']] - positions[c], 'height': cumulative(rows)[r + left['rowSpan']] - cumulative(rows)[r]}
-        for name, expected_value in expected.items():
-            item = metric(f'cell{name[0].upper()}{name[1:]}Px', expected_value, right[name], cellId=key, row=left['rowIndex'], column=left['gridColumnIndex'])
-            if item: geometry.append(item)
+            geometry.append({'metric': 'cellPresence', 'cellId': key,
+                             'expected': bool(left), 'actual': bool(right)})
+            continue
+        row, column = left['rowIndex'] - 1, left['gridColumnIndex'] - 1
+        expected_rect = {
+            'x': x_positions[column], 'y': y_positions[row],
+            'width': x_positions[column + left['gridSpan']] - x_positions[column],
+            'height': y_positions[row + left['rowSpan']] - y_positions[row],
+        }
+        for name, expected_value in expected_rect.items():
+            item = metric(f'cell{name[0].upper()}{name[1:]}Px', expected_value, right[name],
+                          cellId=key, row=left['rowIndex'], column=left['gridColumnIndex'])
+            if item:
+                geometry.append(item)
         if left['rowSpan'] != right['rowSpan'] or left['gridSpan'] != right['gridSpan']:
-            geometry.append({'metric': 'cellSpan', 'cellId': key, 'expected': {'rowSpan': left['rowSpan'], 'gridSpan': left['gridSpan']}, 'actual': {'rowSpan': right['rowSpan'], 'gridSpan': right['gridSpan']}})
-        for side in ('top', 'right', 'bottom', 'left'):
-            expected_border = (left.get('borders') or {}).get(side) or {}
-            actual_border = right['borders'][side]
-            width_item = metric('borderWidthPx', (expected_border.get('sizePt') or 0) * PT_TO_CSS, actual_border['widthPx'], cellId=key, side=side)
-            if width_item: borders.append(width_item)
-            expected_style = border_style(expected_border.get('value'))
-            if expected_style != actual_border['style']:
-                borders.append({'metric': 'borderStyle', 'cellId': key, 'side': side, 'expected': expected_style, 'actual': actual_border['style']})
+            geometry.append({'metric': 'cellSpan', 'cellId': key,
+                             'expected': {'rowSpan': left['rowSpan'], 'gridSpan': left['gridSpan']},
+                             'actual': {'rowSpan': right['rowSpan'], 'gridSpan': right['gridSpan']}})
+
+    web_border_evidence = extract_border_evidence(web_image, 96.0, len(rows), 'web-capture')
+    borders = compare_border_evidence(provenance['borderEvidence'], web_border_evidence)
     presence = content_presence_mismatches(source, web_cells)
-    presence_keys = {item['cellId'] for item in presence}
-    text = semantic_text_line_mismatches(source, web_cells, presence_keys)
+    exact = exact_content_mismatches(source, web_cells)
+    blocked = {item['cellId'] for item in presence}
+    text = semantic_text_line_mismatches(source, web_cells, blocked)
     image_wrap_diagnostics = []
     for key in sorted(set(source) & set(web_cells)):
         if key not in word_cell_rects:
             continue
-        word_lines = line_count(word_image, word_cell_rects[key])
         right = web_cells[key]
-        web_lines = line_count(web_image, (right['x'], right['y'], right['width'], right['height']))
-        image_wrap_diagnostics.append({'metric': 'imageTextLineCount', 'cellId': key, 'word': word_lines, 'web': web_lines, 'deltaLines': web_lines - word_lines})
-    return {'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height}, 'webCssPx': {'width': actual_crop_width, 'height': actual_crop_height}, 'webScreenshotCssPx': {'width': web_image.width, 'height': web_image.height}}, 'geometryMismatches': geometry, 'borderMismatches': borders, 'contentPresenceMismatches': presence, 'textWrapMismatches': text, 'imageWrapDiagnostics': image_wrap_diagnostics, 'warnings': warnings, 'sourceCellCount': len(source), 'webCellCount': len(web_cells)}
+        image_wrap_diagnostics.append({
+            'metric': 'imageTextLineCount', 'cellId': key,
+            'word': line_count(word_image, word_cell_rects[key]),
+            'web': line_count(web_image, (right['x'], right['y'], right['width'], right['height'])),
+        })
+    return {
+        'tableCrop': {'wordCssPx': {'width': word_image.width, 'height': word_image.height},
+                      'webCssPx': {'width': actual_crop_width, 'height': actual_crop_height},
+                      'webScreenshotCssPx': {'width': web_image.width, 'height': web_image.height}},
+        'geometryMismatches': geometry, 'borderMismatches': borders,
+        'contentPresenceMismatches': presence, 'textWrapMismatches': text,
+        'exactContentMismatches': exact, 'imageWrapDiagnostics': image_wrap_diagnostics,
+        'warnings': [], 'sourceCellCount': len(source), 'webCellCount': len(web_cells),
+    }
 
 
 def write_artifacts(word: Image.Image, web: Image.Image, output: Path) -> None:
     output.mkdir(parents=True, exist_ok=True); width, height = max(word.width, web.width), max(word.height, web.height)
     overlay = Image.new('RGBA', (width, height), 'white'); overlay.alpha_composite(word.convert('RGBA')); red = web.convert('RGBA'); red.putalpha(120); overlay.alpha_composite(red); overlay.save(output / 'overlay.png')
     left, right = Image.new('L', (width, height)), Image.new('L', (width, height)); left.paste(Image.fromarray((mask(word) * 255).astype(np.uint8))); right.paste(Image.fromarray((mask(web) * 255).astype(np.uint8))); ImageChops.difference(left, right).save(output / 'diff.png')
+
+
+def write_contact_sheet(run: Path, artifact: str, output_name: str) -> None:
+    files = sorted(run.glob(f'*/*/{artifact}.png'))
+    if len(files) != 66:
+        raise ValueError(f'{artifact} contact sheet expected 66 images, got {len(files)}')
+    columns, tile_width, tile_height, label_height = 6, 240, 180, 18
+    rows = math.ceil(len(files) / columns)
+    sheet = Image.new('RGB', (columns * tile_width, rows * tile_height), 'white')
+    draw = ImageDraw.Draw(sheet)
+    for index, filename in enumerate(files):
+        with Image.open(filename) as opened:
+            thumb = ImageOps.contain(opened.convert('RGB'), (tile_width - 4, tile_height - label_height - 4))
+        x, y = (index % columns) * tile_width, (index // columns) * tile_height
+        label = f'{filename.parents[1].name}/{filename.parent.name}'
+        draw.text((x + 2, y + 2), label, fill='black')
+        sheet.paste(thumb, (x + 2, y + label_height))
+    sheet.save(run / output_name)
 
 
 def render_fixture(path: Path, size: tuple[int, int], dpi: int, rule_x: int) -> None:
@@ -274,51 +371,18 @@ def self_test() -> int:
         central = lambda image: round(np.where(mask(image)[10:90, 90:115].sum(axis=0) >= 60)[0].mean() + 90, 2)
         if abs(central(shifted) - central(web)) <= TOLERANCE: raise AssertionError('2 CSS-px rule shift passed after 144-to-96 normalization')
         if abs(central(word) - central(web)) > TOLERANCE: raise AssertionError('identical normalized fixture failed')
-        # Semantic fixtures: one-line text with double borders, an empty bordered
-        # cell, and genuine two-line text must be judged from Word/DOM line data.
-        source = {'r1c1': {'rowIndex': 1, 'gridColumnIndex': 1, 'textLineCount': 1, 'text': 'ordinary text', 'borders': {'top': {'value': 'double'}}}, 'r1c2': {'rowIndex': 1, 'gridColumnIndex': 2, 'textLineCount': 0, 'text': '', 'borders': {'top': {'value': 'double'}}}, 'r2c1': {'rowIndex': 2, 'gridColumnIndex': 1, 'textLineCount': 2, 'text': 'genuine wrap', 'borders': {'top': {'value': 'single'}}}}
-        dom = {'r1c1': {'textLineCount': 1, 'text': 'ordinary text'}, 'r1c2': {'textLineCount': 0, 'text': ''}, 'r2c1': {'textLineCount': 2, 'text': 'genuine wrap'}}
+        source = {'r1c1': {'rowIndex': 1, 'gridColumnIndex': 1, 'textLineCount': 1,
+                           'text': '', 'semanticContent': 'overline(A)'}}
+        dom = {'r1c1': {'textLineCount': 1, 'text': 'A', 'fixedSemantic': 'overline(A)'}}
         if semantic_text_line_mismatches(source, dom): raise AssertionError('semantic text fixtures unexpectedly mismatched')
-        dom['r2c1']['textLineCount'] = 1
-        if len(semantic_text_line_mismatches(source, dom)) != 1: raise AssertionError('genuine two-line semantic wrap mismatch was not detected')
-        if metric('unavailableOnly', None, 0) is not None: raise AssertionError('unavailable placement metric became a geometry failure')
-        fixture_borders = {'top': {'value': 'double'}, 'right': {'value': 'none'}, 'bottom': {'value': 'none'}, 'left': {'value': 'none'}}
-        source_meta = {'sourceStructure': {'gridPt': [20], 'rows': [{'heightPt': 20}], 'indentPt': 5, 'cells': [{'rowIndex': 1, 'gridColumnIndex': 1, 'gridSpan': 1, 'rowSpan': 1, 'textLineCount': 1, 'borders': fixture_borders}]}}
-        web_meta = {'columns': [{'index': 1, 'widthPx': 26.667}], 'rows': [{'index': 1, 'heightPx': 26.667, 'y': 0}], 'cells': [{'id': 'r1c1', 'rowIndex': 1, 'gridColumnIndex': 1, 'rowSpan': 1, 'gridSpan': 1, 'x': 0, 'y': 0, 'width': 26.667, 'height': 26.667, 'textLineCount': 1, 'borders': {'top': {'widthPx': 0, 'style': 'double'}, 'right': {'widthPx': 0, 'style': 'none'}, 'bottom': {'widthPx': 0, 'style': 'none'}, 'left': {'widthPx': 0, 'style': 'none'}}}], 'placement': {}}
-        semantic = compare_semantic_table(source_meta, web_meta, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (27, 27), 'white'))
-        if any(item.get('metric') == 'tableIndentInContainerPx' for item in semantic['geometryMismatches']): raise AssertionError('unavailable indent became a geometry mismatch')
-        if not any(item.get('metric') == 'tableIndentInContainerPx' and item.get('status') in ('unavailable', 'notApplicable') for item in semantic['warnings']): raise AssertionError('unavailable indent warning was not retained')
-        if semantic['textWrapMismatches']: raise AssertionError('matching semantic one-line text was reported as wrapped')
-        if 'imageWrapDiagnostics' not in semantic: raise AssertionError('image wrap diagnostics were omitted')
-        rounded_capture = {**web_meta, 'outer': {'width': 26.667, 'height': 26.667}}
-        rounded_semantic = compare_semantic_table(source_meta, rounded_capture, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (29, 29), 'white'))
-        if any(item.get('metric', '').startswith('normalizedTableCrop') for item in rounded_semantic['geometryMismatches']):
-            raise AssertionError('screenshot pixel rounding was used instead of DOM outer geometry')
-        print('SELF-TEST GREEN: 144-DPI Lanczos normalized fixture matches; 2 CSS-px border shift; one-line/double-border, empty-cell, and two-line semantic text fixtures verified; unavailable metric is warning-only')
-        empty_source = {'sourceStructure': {'gridPt': [20], 'rows': [{'heightPt': 20}], 'indentPt': 5, 'cells': [{'rowIndex': 1, 'gridColumnIndex': 1, 'gridSpan': 1, 'rowSpan': 1, 'textLineCount': 0, 'text': '', 'borders': fixture_borders}]}}
-        empty_web = {'columns': [{'index': 1, 'widthPx': 26.667}], 'rows': [{'index': 1, 'heightPx': 26.667, 'y': 0}], 'cells': [{'id': 'r1c1', 'rowIndex': 1, 'gridColumnIndex': 1, 'rowSpan': 1, 'gridSpan': 1, 'x': 0, 'y': 0, 'width': 26.667, 'height': 26.667, 'textLineCount': 1, 'text': '—', 'borders': {'top': {'widthPx': 0, 'style': 'double'}, 'right': {'widthPx': 0, 'style': 'none'}, 'bottom': {'widthPx': 0, 'style': 'none'}, 'left': {'widthPx': 0, 'style': 'none'}}}], 'placement': {}}
-        empty_semantic = compare_semantic_table(empty_source, empty_web, Image.new('RGB', (27, 27), 'white'), Image.new('RGB', (27, 27), 'white'))
-        if len(empty_semantic['contentPresenceMismatches']) != 1: raise AssertionError(f'expected one content-presence mismatch, got {len(empty_semantic["contentPresenceMismatches"])}')
-        if empty_semantic['textWrapMismatches']: raise AssertionError('empty vs em dash was classified as a wrap mismatch')
-        derived_visible = {
-            'sourceFile': 'source.doc',
-            'sourceTableIndex': 3,
-            'sourceSha256': 'abc123',
-            'imageDpi': 144,
-            'renderWidthPt': 150.0,
-            'renderScale': 1.0,
-            'renderGridPt': [50.0, 100.0],
-            'renderHeightPt': [25.0],
-            'sourceTextLineCounts': {'reference-r1c1': 1},
-        }
-        validate_visible_asset_entry('fixture', 'reference', dict(derived_visible), derived_visible)
-        stale_visible = {**derived_visible, 'sourceSha256': 'stale'}
-        try:
-            validate_visible_asset_entry('fixture', 'reference', stale_visible, derived_visible)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError('stale visible companion source hash was accepted')
+        if exact_content_mismatches(source, dom): raise AssertionError('matching fixed semantic content failed')
+        dom['r1c1']['fixedSemantic'] = 'plain(A)'
+        if len(exact_content_mismatches(source, dom)) != 1: raise AssertionError('semantic mismatch was not strict')
+        border = {'verticalSegments': [{'rowStart': 1, 'rowEnd': 1, 'positionPx': 0, 'startPx': 0, 'endPx': 20, 'thicknessPx': 1}], 'horizontalSegments': []}
+        shifted_border = json.loads(json.dumps(border)); shifted_border['verticalSegments'][0]['positionPx'] = 2.01
+        if compare_border_evidence(border, border): raise AssertionError('identical border evidence failed')
+        if not compare_border_evidence(border, shifted_border): raise AssertionError('2px border shift passed')
+        print('SELF-TEST GREEN: normalized pixels, exact semantic content, and independent 1px border evidence are strict')
         return 0
     finally: shutil.rmtree(root, ignore_errors=True)
 
@@ -335,6 +399,10 @@ def audit(root: Path, strict: bool) -> int:
     visible_asset = json.loads(asset_source[len(asset_prefix):].strip()[:-2])
     if set(visible_asset) != set(expected_ids):
         raise ValueError('visible geometry asset template coverage differs from manifest')
+    private_path = run / 'visible-geometry-private.json'
+    if not private_path.exists():
+        raise FileNotFoundError(f'missing private provenance sidecar: {private_path}')
+    private_asset = load_json(private_path)
     directories = {path.name: path for path in run.iterdir() if path.is_dir()}; unexpected = sorted(set(directories) - set(expected_ids)); missing, tables = [], []
     for template_id in expected_ids:
         folder = directories.get(template_id)
@@ -343,16 +411,26 @@ def audit(root: Path, strict: bool) -> int:
             if not folder or not all(path.exists() for path in required): missing.append(f'{template_id}/{role}'); continue
             source_meta, web = load_json(required[1]), load_json(required[3]); word, web_image = read_normalized(required[0], source_meta), read_normalized(required[2], web)
             visible = visible_asset.get(template_id, {}).get(role)
-            if not visible:
+            private = private_asset.get(template_id, {}).get(role)
+            if not visible or not private:
                 raise ValueError(f'missing visible geometry for {template_id}/{role}')
-            derived_visible = derive_visible_geometry(required[1])
-            validate_visible_asset_entry(template_id, role, visible, derived_visible)
-            semantic = compare_semantic_table(source_meta, web, word, web_image, derived_visible); write_artifacts(word, web_image, folder / role)
-            tables.append({'templateId': template_id, 'role': role, **semantic, 'geometryMismatch': bool(semantic['geometryMismatches'] or semantic['borderMismatches']), 'wrapMismatch': bool(semantic['textWrapMismatches']), 'contentPresenceMismatch': bool(semantic['contentPresenceMismatches'])})
-    failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch'] or item['contentPresenceMismatch']]
-    summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}
+            derived_visible, derived_private = derive_runtime_and_provenance(required[1])
+            if not close_enough(visible, derived_visible):
+                raise ValueError(f'{template_id}/{role}: public runtime geometry differs from current Word evidence')
+            if not close_enough(private, derived_private):
+                raise ValueError(f'{template_id}/{role}: private provenance differs from current Word evidence')
+            semantic = compare_semantic_table(source_meta, web, word, web_image, derived_visible, derived_private); write_artifacts(word, web_image, folder / role)
+            tables.append({'templateId': template_id, 'role': role, **semantic,
+                           'geometryMismatch': bool(semantic['geometryMismatches'] or semantic['borderMismatches']),
+                           'wrapMismatch': bool(semantic['textWrapMismatches']),
+                           'contentPresenceMismatch': bool(semantic['contentPresenceMismatches']),
+                           'exactContentMismatch': bool(semantic['exactContentMismatches'])})
+    failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch'] or item['contentPresenceMismatch'] or item['exactContentMismatch'] or item['warnings']]
+    write_contact_sheet(run, 'overlay', 'overlay-contact-sheet.png')
+    write_contact_sheet(run, 'diff', 'diff-contact-sheet.png')
+    summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'indentMismatches': sum(any(m.get('metric') == 'tableIndentInContainerPx' for m in x['geometryMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'exactContentMismatches': sum(bool(x['exactContentMismatch']) for x in tables), 'warningOnlyExclusions': sum(bool(x['warnings']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}
     (run/'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"{summary['geometryMatched']}/66 tables geometry matched; {summary['shiftedBorders']} border-run mismatches; {summary['wrapMismatches']} cell-wrap mismatches; {summary['contentPresenceMismatches']} content-presence mismatches; unexpected dirs={len(unexpected)}")
+    print(f"{summary['geometryMatched']}/66 tables geometry matched; {summary['shiftedBorders']} border-run mismatches; {summary['indentMismatches']} indent mismatches; {summary['wrapMismatches']} cell-wrap mismatches; {summary['exactContentMismatches']} exact-content mismatches; warnings={summary['warningOnlyExclusions']}; unexpected dirs={len(unexpected)}")
     return 1 if strict and (len(tables) != 66 or missing or failures) else 0
 
 

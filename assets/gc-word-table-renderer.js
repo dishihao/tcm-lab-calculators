@@ -295,6 +295,8 @@
       case 'delimiter':
         if (!DELIMITER_CHARACTERS.has(node.beginning) || !DELIMITER_CHARACTERS.has(node.ending)) fail(table, cellId, 'unsupported math delimiter');
         return `<span class="word-math-delimiter">${escapeHtml(node.beginning)}${renderMath(node.content, table, cellId)}${escapeHtml(node.ending)}</span>`;
+      case 'overline':
+        return `<span class="word-math-overline" style="text-decoration:overline;text-decoration-thickness:from-font">${renderMath(node.base, table, cellId)}</span>`;
       default:
         fail(table, cellId, `unsupported math node ${String(node.type)}`);
     }
@@ -334,9 +336,11 @@
   }
 
   function visibleIndentPt(table) {
-    const raw = table.indentPt;
-    if (!Number.isFinite(raw) || Math.abs(raw) > 1584) return 0;
-    return raw * (table.renderScale ?? 1);
+    const raw = table.renderIndentPt ?? table.indentPt;
+    if (!Number.isFinite(raw) || Math.abs(raw) > 1584) {
+      fail(table, 'table', 'validated renderIndentPt is required');
+    }
+    return raw;
   }
 
   function renderRowContentStyle(row, table, rowIndex, cell) {
@@ -377,9 +381,16 @@
     if (table.gridPt.length !== table.columnCount) fail(table, 'table', 'grid column count differs from columnCount');
     if (table.rows.length !== table.rowCount) fail(table, 'table', 'row count differs from rowCount');
     if (table.renderWidthPt != null) finiteNumber(table.renderWidthPt, table, 'table', 'renderWidthPt', { nonNegative: true });
+    if (table.renderCanvasWidthPt != null) finiteNumber(table.renderCanvasWidthPt, table, 'table', 'renderCanvasWidthPt', { nonNegative: true });
+    if (table.renderCanvasHeightPt != null) finiteNumber(table.renderCanvasHeightPt, table, 'table', 'renderCanvasHeightPt', { nonNegative: true });
+    if (table.renderInkWidthPt != null) finiteNumber(table.renderInkWidthPt, table, 'table', 'renderInkWidthPt', { nonNegative: true });
+    if (table.renderIndentPt != null) finiteNumber(table.renderIndentPt, table, 'table', 'renderIndentPt');
     if (table.renderScale != null) finiteNumber(table.renderScale, table, 'table', 'renderScale', { nonNegative: true });
+    const visibleColumnCount = table.visibleColumnCount ?? table.columnCount;
+    integer(visibleColumnCount, table, 'table', 'visibleColumnCount', { positive: true });
+    if (visibleColumnCount > table.columnCount) fail(table, 'table', 'visibleColumnCount exceeds source columnCount');
     if (table.renderGridPt != null) {
-      if (!Array.isArray(table.renderGridPt) || table.renderGridPt.length !== table.columnCount) fail(table, 'table', 'render grid column count differs from columnCount');
+      if (!Array.isArray(table.renderGridPt) || table.renderGridPt.length !== visibleColumnCount) fail(table, 'table', 'render grid column count differs from visibleColumnCount');
       const renderGridWidth = table.renderGridPt.reduce((total, width) => total + finiteNumber(width, table, 'table', 'renderGridPt item', { nonNegative: true }), 0);
       if (Math.abs(renderGridWidth - visibleWidthPt(table)) > 0.05) fail(table, 'table', 'render grid width differs from renderWidthPt');
     }
@@ -438,15 +449,17 @@
     if (!adapters || typeof adapters !== 'object') fail(table, 'table', 'adapters must be an object');
     const bindings = new Map((table.bindings ?? []).map(binding => [binding.cellId, binding]));
     const widthPt = visibleWidthPt(table), gridPt = visibleGridPt(table), scale = table.renderScale ?? 1;
+    const visibleColumnCount = table.visibleColumnCount ?? table.columnCount;
+    const indentPt = visibleIndentPt(table);
     const tableStyle = [
       `width:${pt(widthPt, table, 'table', 'renderWidthPt', { nonNegative: true })}`,
-      'table-layout:fixed', 'border-collapse:collapse',
-      visibleIndentPt(table) ? `margin-left:${pt(visibleIndentPt(table), table, 'table', 'render indent', { nonNegative: true })}` : '',
+      'table-layout:fixed', 'border-collapse:collapse', 'margin-left:0.5pt',
     ].filter(Boolean).join(';');
     const colgroup = `<colgroup>${gridPt.map(width => `<col style="width:${pt(width, table, 'table', 'renderGridPt item', { nonNegative: true })}">`).join('')}</colgroup>`;
     const rows = table.rows.map((row, rowIndex) => {
       const heightRule = effectiveHeightRule(row);
-      const cells = table.cells.filter(cell => cell.row === rowIndex).map(cell => {
+      const cells = table.cells.filter(cell => cell.row === rowIndex && cell.column < visibleColumnCount).map(cell => {
+        if (cell.column + cell.colSpan > visibleColumnCount) fail(table, cell.id, 'cell crosses visible column boundary');
         if (cell.isGridGap) {
           return `<td class="word-grid-gap"${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''} style="border:0;padding:0;background:transparent" aria-hidden="true"></td>`;
         }
@@ -464,11 +477,51 @@
         const rowContentStyle = renderRowContentStyle(row, table, rowIndex, cell);
         if (rowContentStyle) content = `<div class="word-row-content" style="${rowContentStyle}">${content}</div>`;
         const style = renderCellStyle(cell, table);
-        return `<td${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
+        return `<td data-word-cell-id="${escapeHtml(cell.id)}"${cell.semanticContent ? ` data-fixed-semantic="${escapeHtml(cell.semanticContent)}"` : ''}${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
       }).join('');
       return `<tr data-word-row-height-rule="${heightRule}">${cells}</tr>`;
     }).join('');
-    return `<table class="word-record-table" data-word-table-role="${escapeHtml(table.tableRole)}" data-source-table-index="${table.sourceTableIndex}" data-word-render-scale="${escapeHtml(scale)}" data-word-render-width-pt="${escapeHtml(widthPt)}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
+    const tableHtml = `<table class="word-record-table" data-word-table-role="${escapeHtml(table.tableRole)}" data-source-table-index="${table.sourceTableIndex}" data-word-render-scale="${escapeHtml(scale)}" data-word-render-width-pt="${escapeHtml(widthPt)}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
+    const canvasWidth = table.renderCanvasWidthPt ?? widthPt;
+    const canvasHeight = table.renderCanvasHeightPt ?? table.renderHeightPt?.reduce((sum, height) => sum + height, 0);
+    const frameStyle = [
+      'position:relative', `width:${pt(canvasWidth, table, 'table', 'renderCanvasWidthPt', { nonNegative: true })}`,
+      canvasHeight != null ? `height:${pt(canvasHeight, table, 'table', 'renderCanvasHeightPt', { nonNegative: true })}` : '',
+      indentPt ? `margin-left:${pt(indentPt, table, 'table', 'renderIndentPt')}` : '',
+    ].filter(Boolean).join(';');
+    const sourceGridPositions = table.gridPt.reduce((positions, width) => [...positions, positions.at(-1) + width], [0]);
+    const visibleRowPositions = table.renderHeightPt?.reduce((positions, height) => [...positions, positions.at(-1) + height], [0]);
+    const clippedBindings = table.cells.filter(cell => cell.column >= visibleColumnCount && bindings.has(cell.id)).map(cell => {
+      const binding = bindings.get(cell.id), adapter = adapters[binding.role];
+      if (typeof adapter !== 'function') fail(table, cell.id, `missing ${binding.role} adapter`);
+      const content = adapter(binding);
+      if (typeof content !== 'string') fail(table, cell.id, `${binding.role} adapter must return HTML string`);
+      const rawLeft = sourceGridPositions[cell.column];
+      const left = 0.5 + widthPt + (rawLeft - sourceGridPositions[visibleColumnCount]);
+      const width = sourceGridPositions[cell.column + cell.colSpan] - rawLeft;
+      const top = visibleRowPositions?.[cell.row] ?? 0;
+      const height = visibleRowPositions ? visibleRowPositions[cell.row + cell.rowSpan] - top + 0.75 : 0;
+      const cellStyle = [
+        'position:absolute', 'box-sizing:border-box', `left:${pt(left, table, cell.id, 'clipped cell left', { nonNegative: true })}`,
+        `top:${pt(top, table, cell.id, 'clipped cell top', { nonNegative: true })}`,
+        `width:${pt(width, table, cell.id, 'clipped cell width', { nonNegative: true })}`,
+        height ? `height:${pt(height, table, cell.id, 'clipped cell height', { nonNegative: true })}` : '',
+        renderCellStyle(cell, table),
+      ].filter(Boolean).join(';');
+      return `<div class="word-clipped-source-cell" data-word-clipped-cell-id="${escapeHtml(cell.id)}" style="${cellStyle}"><div class="word-bound-content" style="${renderBoundContentStyle(cell, table)}">${content}</div></div>`;
+    }).join('');
+    const indentCanvasStyle = indentPt < 0
+      ? `box-sizing:content-box;padding-left:${pt(-indentPt, table, 'table', 'negative renderIndentPt', { nonNegative: true })};width:${pt(canvasWidth, table, 'table', 'renderCanvasWidthPt', { nonNegative: true })}`
+      : 'box-sizing:content-box';
+    const inkWidth = table.renderInkWidthPt ?? canvasWidth;
+    // A negative Word indent is preserved through a padded logical canvas.
+    // Its raster origin lands one CSS pixel earlier in Chromium, so advance
+    // only the trailing clip edge by 1pt; border positions remain source-led.
+    const maskLeft = inkWidth + (indentPt < 0 ? 1 : 0);
+    const trailingMask = inkWidth - widthPt > 2.5 && inkWidth < canvasWidth
+      ? `<span class="word-canvas-trailing-mask" aria-hidden="true" style="position:absolute;z-index:10;top:0;left:${pt(maskLeft, table, 'table', 'renderInkWidthPt', { nonNegative: true })};width:${pt(Math.max(0, canvasWidth - maskLeft), table, 'table', 'render trailing mask width', { nonNegative: true })};height:100%;background:#fff;pointer-events:none"></span>`
+      : '';
+    return `<div class="word-indent-canvas" data-word-indent-canvas="${escapeHtml(table.tableRole)}" style="${indentCanvasStyle}"><div class="word-record-frame" data-word-table-frame="${escapeHtml(table.tableRole)}" style="${frameStyle}">${tableHtml}${clippedBindings}${trailingMask}</div></div>`;
   }
 
   window.GcWordTableRenderer = Object.freeze({ render, validate });

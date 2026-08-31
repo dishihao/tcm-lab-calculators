@@ -1,0 +1,795 @@
+{
+  "version": 1,
+  "semanticAsts": {
+    "internalCorrectionFactor": {
+      "type": "sequence",
+      "children": [
+        {
+          "type": "text",
+          "text": "校正因子f＝"
+        },
+        {
+          "type": "fraction",
+          "numerator": {
+            "type": "sequence",
+            "children": [
+              {
+                "type": "subscript",
+                "base": {
+                  "type": "text",
+                  "text": "A"
+                },
+                "subscript": {
+                  "type": "text",
+                  "text": "S"
+                }
+              },
+              {
+                "type": "text",
+                "text": "／"
+              },
+              {
+                "type": "subscript",
+                "base": {
+                  "type": "text",
+                  "text": "C"
+                },
+                "subscript": {
+                  "type": "text",
+                  "text": "S"
+                }
+              }
+            ]
+          },
+          "denominator": {
+            "type": "sequence",
+            "children": [
+              {
+                "type": "subscript",
+                "base": {
+                  "type": "text",
+                  "text": "A"
+                },
+                "subscript": {
+                  "type": "text",
+                  "text": "R"
+                }
+              },
+              {
+                "type": "text",
+                "text": "／"
+              },
+              {
+                "type": "subscript",
+                "base": {
+                  "type": "text",
+                  "text": "C"
+                },
+                "subscript": {
+                  "type": "text",
+                  "text": "R"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "sampleMean": {
+      "type": "overline",
+      "base": {
+        "type": "text",
+        "text": "X"
+      }
+    },
+    "externalReferenceAverage": {
+      "type": "subscript",
+      "base": {
+        "type": "overline",
+        "base": {
+          "type": "text",
+          "text": "A"
+        }
+      },
+      "subscript": {
+        "type": "text",
+        "text": "对"
+      }
+    },
+    "externalSampleAverage": {
+      "type": "overline",
+      "base": {
+        "type": "text",
+        "text": "A"
+      }
+    }
+  },
+  "entries": [
+    {
+      "identity": "patchouli-patchoulol|reference|10|reference-r10c1",
+      "objectHash": "12c1457e81075feb05999669699f14b6665a1d84e773d336a680e8a9f7217079",
+      "semanticType": "internalCorrectionFactor",
+      "targetCellId": "reference-r10c1"
+    },
+    {
+      "identity": "patchouli-patchoulol|sample|11|sample-r12c1",
+      "objectHash": "62c258f8e620fd9f2d8aae814d1ac943b3d5b90482ebbe25753d6fa092a03149",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r12c1"
+    },
+    {
+      "identity": "patchouli-patchoulol-finished|reference|9|reference-r10c1",
+      "objectHash": "db27d12066186b81eecc8f48303cbc3202185934a0507ded2da1f5550379a8c0",
+      "semanticType": "internalCorrectionFactor",
+      "targetCellId": "reference-r10c1"
+    },
+    {
+      "identity": "patchouli-patchoulol-finished|sample|10|sample-r12c1",
+      "objectHash": "1c984fd9e1270e5361b3c207bd4e2aca4bc6c4713a6032fcc1bcbb3a21755ee6",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r12c1"
+    },
+    {
+      "identity": "mugwort-eucalyptol|reference|7|reference-r5c1",
+      "objectHash": "898d0cfdbe8e6da2423da899e8868dd8d371aaf06e61034c4503bd1ae24d4d1d",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "mugwort-eucalyptol|sample|8|sample-r7c1",
+      "objectHash": "e36e95310acbfc0e8f8dc9b5119a8096680f5f113ea516521ba1d74b98c4c6c1",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "mugwort-eucalyptol|sample|8|sample-r10c1",
+      "objectHash": "aa80bf9b5bd568d1af3e9c3917965af66a2ba1e39748c661de630b7b459b31fb",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "mugwort-borneol|reference|9|reference-r5c1",
+      "objectHash": "e4a9a56ffab8468400f6b0f7bc3cc3fbec44e9dc276b271f22ae4ae59d8664d0",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "mugwort-borneol|sample|10|sample-r7c1",
+      "objectHash": "ea28bd07cdc6c46e0f5a2dd559b405265b1623e6527651b43db33faf77ed9f1b",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "mugwort-borneol|sample|10|sample-r10c1",
+      "objectHash": "91f6f32236197d5a2d198fd92e3694b7bb5a07fd7ebab73b1ff90a4197466bf8",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "mugwort-eucalyptol-finished|reference|18|reference-r5c1",
+      "objectHash": "4ca9be257eaea4b8207e3ee09b9c7547070d0dfcfc66c7ee191baf59814cc012",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "mugwort-eucalyptol-finished|sample|19|sample-r7c1",
+      "objectHash": "fc5d0e25b950f67aed30ee59bfddab0da04ea08b2958e03e8824783fea074576",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "mugwort-eucalyptol-finished|sample|19|sample-r10c1",
+      "objectHash": "962da7da4970a5604e23644bcdcae5366d32c3c90302dd37800649912cd6d728",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "mugwort-borneol-finished|reference|20|reference-r5c1",
+      "objectHash": "fc132fe2aead0b8925e6f2dd7d230c97d0e9387513a6af3f6c63ce4c719b8916",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "mugwort-borneol-finished|sample|21|sample-r7c1",
+      "objectHash": "2ef128adf0ef3a1f52ad7db9e3daba11116f1111532304e0aace3d3e7a0a7871",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "mugwort-borneol-finished|sample|21|sample-r10c1",
+      "objectHash": "0550dedaa405c782b3929fdd6bdc3c6b95db9f07891b32dc79ca0c0d6c66896c",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "star-anise-anethole|reference|5|reference-r5c1",
+      "objectHash": "f764e64e3695a99be87c0ff79fef61af8e2c189b80a02a22f73380aa562565fd",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "star-anise-anethole|sample|6|sample-r6c1",
+      "objectHash": "168a7e6bfaf5e0c31237b13fdf2853731319641e4657a2142c4d98b6338e1372",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "star-anise-anethole|sample|6|sample-r9c1",
+      "objectHash": "37baf0fff662907c6c83b260d9e9679e78d0b4ec8ca81e2d5d2eda0e79736b3f",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "star-anise-anethole-finished|reference|8|reference-r5c1",
+      "objectHash": "1798856a4882a00d4fa3862b7cc19ebe54cde3338c56f75ba096d3d1172e1760",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "star-anise-anethole-finished|sample|9|sample-r6c1",
+      "objectHash": "294587235d31749560a5f0166cfd089d344d1fccda2b3915362f158767d613f7",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "star-anise-anethole-finished|sample|9|sample-r9c1",
+      "objectHash": "aaea1164520eb6dd2b0bfc489680ae989b716660a9aaf04fb5577d49f2faa9ab",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "mint-menthol|reference|9|reference-r5c1",
+      "objectHash": "2dfadd25e6dfe1c51aca1ba074e614693c1712a99ab08f01270da751566c2f55",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "mint-menthol|sample|10|sample-r7c1",
+      "objectHash": "a5558927473f025438ab9632f1cf226a713fce9209123a401fc7b9a57d8a9dd9",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "mint-menthol|sample|10|sample-r10c1",
+      "objectHash": "d16ac40bc26606e333fa3c5c904ad24a08f10aeeb79e3772028fbc3772fb87d5",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "mint-menthol-finished|reference|9|reference-r5c1",
+      "objectHash": "a5b706c21825ccf21efb16521429f7b884b14adc6db92df37b1399e3edb3847e",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "mint-menthol-finished|sample|10|sample-r7c1",
+      "objectHash": "bfd9d991a933c899fbb4170baf1384de040cff0e52edd404d988891145e77bb7",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "mint-menthol-finished|sample|10|sample-r10c1",
+      "objectHash": "b821d3a4b905cf7f60145bf13cc6f1d73d2ad6aae03af8c361f4ce648d6a7de2",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "clove-eugenol|reference|6|reference-r5c1",
+      "objectHash": "34c8d68f131e5128229eec78745e5d878262cf31d9bd8979ec8df455435f21c8",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "clove-eugenol|sample|7|sample-r6c1",
+      "objectHash": "1d6d4c3efbec17b35697d5d7b2f6a42d959397a9356d617a370540b1845d38e8",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "clove-eugenol|sample|7|sample-r9c1",
+      "objectHash": "be1975c1ec2bf733fe06555bef7d0165a562926cd44b1efc04199c248a4e6141",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "clove-eugenol-finished|reference|6|reference-r5c1",
+      "objectHash": "b7ffed491a88222075928b88e90cba435d3958945dd198d6084c91e616910382",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "clove-eugenol-finished|sample|7|sample-r7c1",
+      "objectHash": "7d9add5796f336ddfec42aad2a1be6f1364c2d6825664f601478d53f1403a018",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "clove-eugenol-finished|sample|7|sample-r10c1",
+      "objectHash": "a2dbe4c19d1f04927aa1d30a87c7aab8ac99fa7928f9bd882d19814859908426",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "cardamom-eucalyptol|reference|7|reference-r5c1",
+      "objectHash": "718456232dc9f581f8308397ab0ca140bcf6e4624a34f1d03b10874120b86d1a",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "cardamom-eucalyptol|sample|8|sample-r7c1",
+      "objectHash": "d1dd8afdfeea518270639e29e36e22e6cc0b51b9b553fbb503b62657989a40ae",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "cardamom-eucalyptol|sample|8|sample-r10c1",
+      "objectHash": "881eab2c9071dcfe836ec8aae304e2348aa350f4c771b52c95e34f3cb78f4c0f",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "cardamom-eucalyptol-finished|reference|7|reference-r5c1",
+      "objectHash": "b027af137ee65fd3303a6f9ab54ba657888c58eb205046607dabb9c0d9889686",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "cardamom-eucalyptol-finished|sample|8|sample-r7c1",
+      "objectHash": "9a46decd12a15556cc770583404ef7b09e75ed9497d130269cab3bcbac939fdc",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "cardamom-eucalyptol-finished|sample|8|sample-r10c1",
+      "objectHash": "799b96fc6ba38de1ff811fcfd7e1f9eef2c68366f9d4cbe2e4d023fc7ef33c36",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "dendrobium-dendrobine|reference|5|reference-r5c1",
+      "objectHash": "8422d4f92f9a387b0ca7d4999d666bcd7530cf5e50981d966068bcd6cf638165",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "dendrobium-dendrobine|sample|6|sample-r6c1",
+      "objectHash": "7af271d55074468442bff3fdc5c8f9f2a178628bb7b0191960caaee3186dfa4b",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "dendrobium-dendrobine|sample|6|sample-r9c1",
+      "objectHash": "e96b8ecde9bf5889fff4ce98b22613d33ba1691635525c2d9599aa8855217f54",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "homalomena-linalool|reference|7|reference-r5c1",
+      "objectHash": "a9aea2599f9a9a8ad3fa9ef02921c9cb191bac051864738fafe670519f5ec87d",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "homalomena-linalool|sample|8|sample-r7c1",
+      "objectHash": "a9993a5ba7720fd171d87ac4c568f78c53eb752068ddd87e7dbf4a23fa123f2e",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "homalomena-linalool|sample|8|sample-r10c1",
+      "objectHash": "2c80b78cd9fde397171d6f48847c8a20340c61022d2b5ef52659f825c7019f98",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "homalomena-linalool-finished|reference|8|reference-r5c1",
+      "objectHash": "0251e7a794007c84d0734d72b0a938e2c225ce0936161fce368662c188ab3344",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "homalomena-linalool-finished|sample|9|sample-r7c1",
+      "objectHash": "87068e325d729aea636260eb569ffab94fde17faa59233484935e84f2927a109",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "homalomena-linalool-finished|sample|9|sample-r10c1",
+      "objectHash": "903c70fed134fc814560d85c00039fac32317cf905c4fc34bd800cf811c5def1",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate|reference|7|reference-r5c1",
+      "objectHash": "69383c800f4df4578f2d1211165220c880c440786871a04a601debc0c30dcbe9",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate|sample|8|sample-r7c1",
+      "objectHash": "eb18524d166d19bb4dc4fbe88df8bdb68141fac65475452521319d21516f349e",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "amomum-bornyl-acetate|sample|8|sample-r10c1",
+      "objectHash": "3415d3f69bb162199d0b1fce616d1ae74985b9a5799a1365d1f58ddf7571954f",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-national|reference|7|reference-r5c1",
+      "objectHash": "44dc2f9682a7f1ff3674f8e80489e68d342f41bd302fc93688b257d3a7faf120",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-national|sample|8|sample-r7c1",
+      "objectHash": "c515bc4411f0357abd4c91bc29525493ecb8d9483f7e0a74cfa03398f0d29132",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-national|sample|8|sample-r10c1",
+      "objectHash": "4d82e518833705a2aa0372b47d2b603c0497d46f94f0029a5c923069e16fbd1c",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-shanghai|reference|7|reference-r5c1",
+      "objectHash": "094b5e1cef6f82244e029cc47805696da1bb3534c2871f25139bb8d57285b620",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-shanghai|sample|8|sample-r7c1",
+      "objectHash": "e8da9f9f18557117c91839baad3754bb29c1e220bb01cfff78a2c4059cc6ce59",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-shanghai|sample|8|sample-r10c1",
+      "objectHash": "8e20b0feb91ae285058eea8df6b539f574180a0bab9342e78f9ba03270eadf00",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-beijing|reference|7|reference-r5c1",
+      "objectHash": "640c05dff5975828a08b7a4c5223ed80d32eb5b0a6b4b2d3b5250c06d5037b28",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-beijing|sample|8|sample-r7c1",
+      "objectHash": "7986adf8b6686d7fa3cb6505dfd0fcfce5233f25a2390dffa2cddd312cf11919",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "amomum-bornyl-acetate-finished-beijing|sample|8|sample-r10c1",
+      "objectHash": "064cb3ba5101ae0dfd05f46cf6225dc40dd726e64c115cd887fb00784b6f45bd",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "fennel-anethole|reference|6|reference-r5c1",
+      "objectHash": "eefafae4df9dfb5920eba195112570b0f59b8b6f2f19ada1cf3d8b57621be178",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "fennel-anethole|sample|7|sample-r6c1",
+      "objectHash": "2218dbcab88750f742676a204b83e448efe8724a0c0a694440053fdd80b9b2b2",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "fennel-anethole|sample|7|sample-r9c1",
+      "objectHash": "375f9ea48b98099994b2b6f896ed7a4e1635469b5644468d38690ea32fb78225",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "fennel-anethole-finished|reference|8|reference-r5c1",
+      "objectHash": "5773ddae26de63b60641ce2754b801c6ba18afba7c483336a876f1c2f36a7478",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "fennel-anethole-finished|sample|9|sample-r6c1",
+      "objectHash": "510baf57d0110d3c6d4675a159256f716be580a25e421a30e473e891f1489d87",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "fennel-anethole-finished|sample|9|sample-r9c1",
+      "objectHash": "6d91728c0546b8a0a642ecae13f71a9d2a83e54673b31ce8458baa86ee086ff3",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "fennel-anethole-salted-finished|reference|7|reference-r5c1",
+      "objectHash": "228686408a552f78c8a06b925d5dc6271f600a9389222cbfb556bc685eda0280",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "fennel-anethole-salted-finished|sample|8|sample-r6c1",
+      "objectHash": "4c04340b552aba985f95b7d595fec40c039df214aac279406a0f2ac88baaabba",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r6c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "fennel-anethole-salted-finished|sample|8|sample-r9c1",
+      "objectHash": "c83af693b6e29cf99132b5e5074b75a4f41bef6c7cd38e791a10283bb71ccd58",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r9c1"
+    },
+    {
+      "identity": "brucea-oleic|reference|6|reference-r10c1",
+      "objectHash": "20dcc3a1df852cb35e20a8f3af048beb463b7df6929372d9bf51baf7b89730c3",
+      "semanticType": "internalCorrectionFactor",
+      "targetCellId": "reference-r10c1"
+    },
+    {
+      "identity": "brucea-oleic|sample|7|sample-r12c1",
+      "objectHash": "971166c28d98e1f73ad8f4fcf7ec574c9ad1bc04fea92208e6e8f73e27533571",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r12c1"
+    },
+    {
+      "identity": "brucea-oleic-finished|reference|6|reference-r10c1",
+      "objectHash": "f0ab9370fc468b98bfc5bf0ef09cb1addd8892aa4c48f8265ad6fd5b79b34d4f",
+      "semanticType": "internalCorrectionFactor",
+      "targetCellId": "reference-r10c1"
+    },
+    {
+      "identity": "brucea-oleic-finished|sample|7|sample-r12c1",
+      "objectHash": "5df082ff2ca2a982754a27f9de205bd1144934db5752c24d1a96713cb54d6157",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r12c1"
+    },
+    {
+      "identity": "flax-linoleic|reference|3|reference-r5c1",
+      "objectHash": "647bee07badfb77a335775b262772b24af73eeac02812db129c1e674e40d8307",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "flax-linoleic|sample|4|sample-r7c1",
+      "objectHash": "d96aef3ff90d3bcd7a79fff0f417f1d4ad3f617d6edd0de48d08afb37fedf4dd",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "flax-linoleic|sample|4|sample-r10c1",
+      "objectHash": "8e384780935a9769c1053cfd633f6e1c5ea4e9fd9db97e2088ba1d78e24fd362",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "flax-linolenic|reference|5|reference-r5c1",
+      "objectHash": "296ec719a15b0de97a0832ebd63057b1f9ff82b4d596f8ba64839302e637ca1e",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "flax-linolenic|sample|6|sample-r7c1",
+      "objectHash": "2d4763079dab8f7dde48309dec19d4804a9c1f00f83c9929a68e82efa89fa3f2",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "flax-linolenic|sample|6|sample-r10c1",
+      "objectHash": "57f479bb56830d59e47d9e78dccc0e9dd797fd4389dcd6708482564b37f16e5f",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "elsholtzia-thymol|reference|7|reference-r5c1",
+      "objectHash": "63e96be2fba636528adac3d208c5328096ad3d1057e4ce76c1fbaf02352d22ee",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "elsholtzia-thymol|sample|8|sample-r7c1",
+      "objectHash": "d5fb2b973223f429946347ed6d59b155b354c461f43699ac313f0b83498f19aa",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "elsholtzia-thymol|sample|8|sample-r10c1",
+      "objectHash": "62bad1302fe13ba7fc920ea2899e47c06ce57ee599f7b171b6d69654a73925e4",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "elsholtzia-carvacrol|reference|9|reference-r5c1",
+      "objectHash": "b0a41f9f9cc96d472bb5564a65c96202f0beb42d21f23b91768d2728b0b907e3",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "elsholtzia-carvacrol|sample|10|sample-r7c1",
+      "objectHash": "1402d1757f2dbb08fa46409426c87e824d57ea16a615d239db6fd9269272b506",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "elsholtzia-carvacrol|sample|10|sample-r10c1",
+      "objectHash": "e6248a3a5131354c7764223236366c9774578b1c5283c4a92c7927b22084a44e",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "elsholtzia-thymol-finished|reference|8|reference-r5c1",
+      "objectHash": "4f50fbb2c5782232df5dc64076cd6f7629511727dc30a1aae90b8b85014eb228",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "elsholtzia-thymol-finished|sample|9|sample-r7c1",
+      "objectHash": "f38042593b1796509cfd523f3a9cd110ffa3afeee66713763102e016c000a8f7",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "elsholtzia-thymol-finished|sample|9|sample-r10c1",
+      "objectHash": "b07ef6100a4c3ce44437ee8984306387cf2718d0e866f42a406da5751fc21f72",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "elsholtzia-carvacrol-finished|reference|10|reference-r5c1",
+      "objectHash": "99dd1c9a593f94ee00478debf69e6b16e24058ee5145062314ea4209bfc3c187",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "elsholtzia-carvacrol-finished|sample|11|sample-r7c1",
+      "objectHash": "e9d448953c911cf1bebd1a5a6ca84d33e76b6d66044fbbfc1d915252d27eb10d",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "elsholtzia-carvacrol-finished|sample|11|sample-r10c1",
+      "objectHash": "7034c5466e01aa2b6416f4bac59287afa1f14037658f89cfbdb418a1b1d36b7c",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    },
+    {
+      "identity": "pine-alpha-pinene|reference|4|reference-r5c1",
+      "objectHash": "494f706f771578fec2ab313a955079f37b73aef58786437b84243d3be5753154",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1"
+    },
+    {
+      "identity": "pine-alpha-pinene|sample|5|sample-r7c1",
+      "objectHash": "d25a67f434b00f2dfe67c72b41b4ee8792752ac6ff450097510734db8425e6e6",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      }
+    },
+    {
+      "identity": "pine-alpha-pinene|sample|5|sample-r10c1",
+      "objectHash": "43755656f7ff22aa5e75be100d088b4fd629afa9a30688e1546051e54f9c65c5",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1"
+    }
+  ]
+}

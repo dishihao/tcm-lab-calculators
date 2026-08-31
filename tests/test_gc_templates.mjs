@@ -71,7 +71,11 @@ const visibleGeometryCoverage = await page.evaluate(() => Object.entries(GC_WORD
     return {
       templateId, role,
       renderWidthPt: geometry?.renderWidthPt,
-      renderScale: geometry?.renderScale,
+      renderCanvasWidthPt: geometry?.renderCanvasWidthPt,
+      renderCanvasHeightPt: geometry?.renderCanvasHeightPt,
+      renderInkWidthPt: geometry?.renderInkWidthPt,
+      renderIndentPt: geometry?.renderIndentPt,
+      visibleColumnCount: geometry?.visibleColumnCount,
       renderGridPt: geometry?.renderGridPt,
       renderHeightPt: geometry?.renderHeightPt,
       sourceTextLineCounts: geometry?.sourceTextLineCounts,
@@ -82,14 +86,24 @@ assert(visibleGeometryCoverage.length === 66, `可见几何资产表格数量错
 for (const item of visibleGeometryCoverage) {
   assert(Number.isFinite(item.renderWidthPt) && item.renderWidthPt > 0,
     `${item.templateId}:${item.role} 缺少有效的 Word 可见宽度`);
-  assert(Number.isFinite(item.renderScale) && item.renderScale > 0,
-    `${item.templateId}:${item.role} 缺少有效的 Word 可见缩放`);
+  assert(Number.isFinite(item.renderCanvasWidthPt) && item.renderCanvasWidthPt > 0
+    && Number.isFinite(item.renderCanvasHeightPt) && item.renderCanvasHeightPt > 0,
+  `${item.templateId}:${item.role} 缺少有效的 Word 可见画布`);
+  assert(Number.isFinite(item.renderInkWidthPt) && item.renderInkWidthPt > 0
+    && item.renderInkWidthPt <= item.renderCanvasWidthPt,
+  `${item.templateId}:${item.role} 缺少 Word 最右可见墨迹边界`);
+  assert(Number.isFinite(item.renderIndentPt) && Math.abs(item.renderIndentPt) < 1584,
+    `${item.templateId}:${item.role} 缺少严格可比较的 Word 可见缩进`);
+  assert(Number.isInteger(item.visibleColumnCount) && item.visibleColumnCount > 0,
+    `${item.templateId}:${item.role} 缺少 Word 可见列数`);
   assert(Array.isArray(item.renderGridPt) && item.renderGridPt.length > 0 && item.renderGridPt.every(value => Number.isFinite(value) && value >= 0),
     `${item.templateId}:${item.role} 缺少有效的 Word 可见列宽`);
   assert(Array.isArray(item.renderHeightPt) && item.renderHeightPt.length > 0 && item.renderHeightPt.every(value => Number.isFinite(value) && value > 0),
     `${item.templateId}:${item.role} 缺少有效的 Word 可见行高`);
   assert(item.sourceTextLineCounts && typeof item.sourceTextLineCounts === 'object',
     `${item.templateId}:${item.role} 缺少 Word 源单元格行数策略`);
+  assert(item.renderGridPt.length === item.visibleColumnCount,
+    `${item.templateId}:${item.role} 可见列数与非均匀网格不一致`);
 }
 const sourceSubscriptFixture = await page.evaluate(() =>
   GC_WORD_TABLE_VISIBLE_GEOMETRY['mugwort-eucalyptol'].reference.sourceTextLineCounts['reference-r3c1']);
@@ -169,40 +183,46 @@ for (const templateId of audit.gcIds) {
 // 144-DPI Word PNG 边界手工抄录的独立字面量，不能从 renderer 所加载的
 // companion asset 反推；这样 renderer/asset 同时漂移不会让回归测试失效。
 const expectedWordGeometry = {
-  'amomum-bornyl-acetate:reference': { widthPx: 660, heightPx: 237, renderWidthPt: 495, renderScale: 1.003141149, rowsPx: [33.666667, 32, 62.666667, 32.666667, 42, 33] },
-  'amomum-bornyl-acetate:sample': { widthPx: 660, heightPx: 333, renderWidthPt: 495, renderScale: 1.003141149, rowsPx: [32.333333, 32, 32, 32, 32, 32.666667, 31.333333, 32.666667, 31.333333, 43.666667] },
-  'patchouli-patchoulol:reference': { widthPx: 661, heightPx: 361, renderWidthPt: 495.5, renderScale: 1.004154423, rowsPx: [33.666667, 32, 38.666667, 32, 31.333333, 32, 32, 32, 32, 64.333333] },
-  'patchouli-patchoulol:sample': { widthPx: 661, heightPx: 397, renderWidthPt: 495.5, renderScale: 0.741821993, rowsPx: [32.333333, 32, 32, 32, 32, 32.666667, 31.333333, 32.666667, 31.333333, 32, 32, 43.666667] },
-  'brucea-oleic:sample': { widthPx: 718, heightPx: 397, renderWidthPt: 538.5, renderScale: 0.799792069, rowsPx: [32.333333, 32, 32, 32, 32, 32.666667, 31.333333, 32.666667, 31.333333, 32, 32, 43.666667] }
+  'amomum-bornyl-acetate:reference': { canvasWidthPx: 660, canvasHeightPx: 237.333333, tableWidthPx: 659.666, renderWidthPt: 493.9995, indentPx: -0.933335, visibleColumns: 8, rowsPx: [33.667,32,62.667,32.666,42,33] },
+  'amomum-bornyl-acetate:sample': { canvasWidthPx: 660, canvasHeightPx: 333.333333, tableWidthPx: 659.666, renderWidthPt: 493.9995, indentPx: -0.933335, visibleColumns: 5, rowsPx: [32.334,32,32,32,32,32.666,31.334,32.666,31.334,43.666] },
+  'patchouli-patchoulol:reference': { canvasWidthPx: 660.666667, canvasHeightPx: 361.333333, tableWidthPx: 660.333, renderWidthPt: 494.49975, indentPx: 7.066665, visibleColumns: 8, rowsPx: [33.667,32,38.667,32,31.333,32,32,32,32,64.333] },
+  'patchouli-patchoulol:sample': { canvasWidthPx: 660.666667, canvasHeightPx: 397.333333, tableWidthPx: 660.333, renderWidthPt: 494.49975, indentPx: 7.066665, visibleColumns: 6, rowsPx: [32.334,32,32,32,32,32.666,31.334,32.666,31.334,32,32,43.666] },
+  'brucea-oleic:sample': { canvasWidthPx: 718, canvasHeightPx: 397.333333, tableWidthPx: 667.333, renderWidthPt: 499.7505, indentPx: 0.399999, visibleColumns: 6, rowsPx: [32.334,32,32,32,32,32.666,31.334,32.666,31.334,32,32,43.666] }
 };
 for (const [key, expected] of Object.entries(expectedWordGeometry)) {
   const [templateId, role] = key.split(':');
   await chooseTemplate(page, templateId);
   const geometry = await page.locator(`[data-word-table-role="${role}"]`).evaluate(table => {
-    const outer = table.getBoundingClientRect();
+    const outer = table.getBoundingClientRect(), frame = table.closest('[data-word-table-frame]'), frameRect = frame.getBoundingClientRect();
     const rows = Array.from(table.rows).map(row => {
       const rect = row.getBoundingClientRect();
       return { heightPx: rect.height, topPx: rect.top - outer.top };
     });
     return {
-      widthPx: outer.width,
-      heightPx: outer.height,
-      renderScale: table.getAttribute('data-word-render-scale'),
+      tableWidthPx: outer.width,
+      canvasWidthPx: frameRect.width,
+      canvasHeightPx: frameRect.height,
+      indentPx: Number.parseFloat(getComputedStyle(frame).marginLeft),
       renderWidthPt: Number(table.getAttribute('data-word-render-width-pt')),
+      visibleColumns: table.querySelectorAll('col').length,
       rows,
       gridGaps: Array.from(table.querySelectorAll('.word-grid-gap')).map(cell => ({
         text: cell.textContent, border: getComputedStyle(cell).borderTopWidth
       }))
     };
   });
-  assert(Math.abs(geometry.widthPx - expected.widthPx) <= 1,
-    `${key}: Word 可见表宽错误 ${geometry.widthPx} != ${expected.widthPx}`);
-  assert(Math.abs(geometry.heightPx - expected.heightPx) <= 1,
-    `${key}: Word 可见表高错误 ${geometry.heightPx} != ${expected.heightPx}`);
+  assert(Math.abs(geometry.canvasWidthPx - expected.canvasWidthPx) <= 1,
+    `${key}: Word 可见画布宽错误 ${geometry.canvasWidthPx} != ${expected.canvasWidthPx}`);
+  assert(Math.abs(geometry.canvasHeightPx - expected.canvasHeightPx) <= 1,
+    `${key}: Word 可见画布高错误 ${geometry.canvasHeightPx} != ${expected.canvasHeightPx}`);
+  assert(Math.abs(geometry.tableWidthPx - expected.tableWidthPx) <= 1,
+    `${key}: Word 主外框宽错误 ${geometry.tableWidthPx} != ${expected.tableWidthPx}`);
   assert(Math.abs(geometry.renderWidthPt - expected.renderWidthPt) <= 0.000001,
     `${key}: Word 可见表宽属性错误 ${geometry.renderWidthPt} != ${expected.renderWidthPt}`);
-  assert(Math.abs(Number(geometry.renderScale) - expected.renderScale) <= 0.000000001,
-    `${key}: Word 可见缩放属性错误 ${geometry.renderScale} != ${expected.renderScale}`);
+  assert(Math.abs(geometry.indentPx - expected.indentPx) <= 1,
+    `${key}: Word 可见缩进错误 ${geometry.indentPx} != ${expected.indentPx}`);
+  assert(geometry.visibleColumns === expected.visibleColumns,
+    `${key}: Word 可见列数错误 ${geometry.visibleColumns} != ${expected.visibleColumns}`);
   let rowTopPx = 0;
   for (const [index, sourceRowPx] of expected.rowsPx.entries()) {
     assert(Math.abs(geometry.rows[index].heightPx - sourceRowPx) <= 1,
@@ -215,27 +235,25 @@ for (const [key, expected] of Object.entries(expectedWordGeometry)) {
     `${key}: 八列内部表的未绑定网格空白不得呈现为数据单元格`);
 }
 
-// 四张八列内部标样品表的 isGridGap 只为占据 HTML grid，绝不能成为可见/语义数据单元格。
+// 四张八列内部标样品表必须按 Word 当前可见的前六列重建；尾部结构空洞
+// 不得继续制造 borderless 右区，也不得成为语义数据单元格。
 for (const templateId of ['patchouli-patchoulol', 'patchouli-patchoulol-finished', 'brucea-oleic', 'brucea-oleic-finished']) {
   await chooseTemplate(page, templateId);
-  const gaps = await page.locator('[data-word-table-role="sample"] .word-grid-gap').evaluateAll(cells => cells.map(cell => {
-    const style = getComputedStyle(cell);
-    return {
-      text: cell.textContent,
-      borderWidths: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth]
-    };
+  const grid = await page.locator('[data-word-table-role="sample"]').evaluate(table => ({
+    columns: Array.from(table.querySelectorAll('col')).map(col => col.getBoundingClientRect().width),
+    gaps: table.querySelectorAll('.word-grid-gap').length,
+    fullHeightBorders: Array.from(table.rows[0].cells).map(cell => cell.getBoundingClientRect().right - table.getBoundingClientRect().left)
   }));
-  assert(gaps.length === 11, `${templateId}: 应保留 11 个结构性网格空洞`);
-  assert(gaps.every(gap => gap.text === '' && gap.borderWidths.every(width => width === '0px')),
-    `${templateId}: isGridGap 不能显示内容或边框`);
+  assert(grid.columns.length === 6, `${templateId}: 内标供试品必须只渲染六个 Word 可见网格列`);
+  assert(grid.gaps === 0, `${templateId}: Word 可见区域不得保留 borderless grid gap`);
+  assert(grid.fullHeightBorders.length === 3, `${templateId}: 顶行必须保留三列主外框`);
+  const expectedMain = templateId.startsWith('patchouli') ? [172.667, 419.333, 659.333] : [188.667, 426, 666];
+  expectedMain.forEach((expected, index) => assert(Math.abs(grid.fullHeightBorders[index] - expected) <= 1,
+    `${templateId}: 主竖线 ${index + 1} 偏离 Word ${grid.fullHeightBorders[index]} != ${expected}`));
 }
 
-// renderScale is a horizontal page-fit factor only. Source Word font metrics
-// must stay vertical/source-faithful even for the page-scaled internal-standard sample tables.
-for (const [templateId, expectedScale] of Object.entries({
-  'patchouli-patchoulol': 0.741821993,
-  'brucea-oleic': 0.799792069
-})) {
+// 非均匀列重建不得缩小 Word 字体；源一行标签仍保持 10.5pt x 1.5。
+for (const templateId of ['patchouli-patchoulol', 'brucea-oleic']) {
   await chooseTemplate(page, templateId);
   const fontMetrics = await page.locator('[data-word-table-role="sample"]').evaluate(table => {
     const labelCell = Array.from(table.rows[0].cells).find(cell => cell.textContent.includes('样品编号'));
@@ -244,15 +262,12 @@ for (const [templateId, expectedScale] of Object.entries({
     const spanStyle = span ? getComputedStyle(span) : null;
     const paragraphStyle = paragraph ? getComputedStyle(paragraph) : null;
     return {
-      renderScale: Number(table.getAttribute('data-word-render-scale')),
       text: labelCell?.innerText,
       fontSizePx: spanStyle ? Number.parseFloat(spanStyle.fontSize) : null,
       lineHeightPx: paragraphStyle ? Number.parseFloat(paragraphStyle.lineHeight) : null,
       whiteSpace: labelCell ? getComputedStyle(labelCell).whiteSpace : null
     };
   });
-  assert(Math.abs(fontMetrics.renderScale - expectedScale) <= 0.000000001,
-    `${templateId}: 样品表应保留水平 renderScale`);
   assert(Math.abs(fontMetrics.fontSizePx - 14) <= 0.1,
     `${templateId}: 样品表源标签字号不能按 renderScale 缩小 ${fontMetrics.fontSizePx}`);
   assert(Math.abs(fontMetrics.lineHeightPx - 21) <= 0.1,

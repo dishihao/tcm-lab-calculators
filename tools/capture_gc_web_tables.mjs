@@ -116,10 +116,12 @@ try {
       for (const role of ['reference', 'sample']) {
         const table = page.locator(`[data-word-table-role="${role}"]`);
         if (await table.count() !== 1) throw new Error(`${templateId}/${role}: expected exactly one semantic table`);
-        await table.screenshot({ path: path.join(target, `${role}-web.png`) });
+        const frame = page.locator(`[data-word-table-frame="${role}"]`);
+        if (await frame.count() !== 1) throw new Error(`${templateId}/${role}: expected exactly one render frame`);
+        await frame.screenshot({ path: path.join(target, `${role}-web.png`) });
         all[role] = await table.evaluate((element, roleName) => {
-          const num = value => Number.parseFloat(value) || 0, tableRect = element.getBoundingClientRect(), tableStyle = getComputedStyle(element);
-          const container = element.closest(`[data-assay-${roleName}-table]`) || element.parentElement, containerRect = container.getBoundingClientRect(), occupied = [], cells = [];
+          const num = value => Number.parseFloat(value) || 0, tableRect = element.getBoundingClientRect(), tableStyle = getComputedStyle(element), frame = element.closest('[data-word-table-frame]'), frameRect = frame.getBoundingClientRect();
+          const container = element.closest('[data-word-indent-canvas]'), containerRect = container.getBoundingClientRect(), containerPaddingLeft = num(getComputedStyle(container).paddingLeft), occupied = [], cells = [];
           const border = (style, side) => ({ widthPx: num(style[`border${side[0].toUpperCase()}${side.slice(1)}Width`]), style: style[`border${side[0].toUpperCase()}${side.slice(1)}Style`] });
           const textLines = cell => {
             const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, { acceptNode: node => node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
@@ -150,11 +152,11 @@ try {
             }
             return { count: boxes.length, rects, boxes };
           };
-          [...element.rows].forEach((row, r) => { let col = 0; while (occupied[r]?.[col]) col++; [...row.cells].forEach(cell => { while (occupied[r]?.[col]) col++; const rect = cell.getBoundingClientRect(), style = getComputedStyle(cell), rowSpan = cell.rowSpan, gridSpan = cell.colSpan, lines = textLines(cell), isGridGap = cell.classList.contains('word-grid-gap'); for (let rr = r; rr < r + rowSpan; rr++) { occupied[rr] ||= []; for (let cc = col; cc < col + gridSpan; cc++) occupied[rr][cc] = true; } cells.push({ id: `r${r + 1}c${col + 1}`, rowIndex: r + 1, gridColumnIndex: col + 1, rowSpan, gridSpan, x: rect.left - tableRect.left, y: rect.top - tableRect.top, width: rect.width, height: rect.height, text: cell.innerText, textLineCount: lines.count, textLineRects: lines.rects, textLineBoxes: lines.boxes, className: cell.className, isGridGap, borders: Object.fromEntries(['top','right','bottom','left'].map(side => [side, border(style, side)])) }); col += gridSpan; }); });
+          [...element.rows].forEach((row, r) => { let col = 0; while (occupied[r]?.[col]) col++; [...row.cells].forEach(cell => { while (occupied[r]?.[col]) col++; const rect = cell.getBoundingClientRect(), style = getComputedStyle(cell), rowSpan = cell.rowSpan, gridSpan = cell.colSpan, lines = textLines(cell), isGridGap = cell.classList.contains('word-grid-gap'); for (let rr = r; rr < r + rowSpan; rr++) { occupied[rr] ||= []; for (let cc = col; cc < col + gridSpan; cc++) occupied[rr][cc] = true; } cells.push({ id: `r${r + 1}c${col + 1}`, rowIndex: r + 1, gridColumnIndex: col + 1, rowSpan, gridSpan, x: rect.left - tableRect.left, y: rect.top - tableRect.top, width: rect.width, height: rect.height, text: cell.innerText, fixedSemantic: cell.getAttribute('data-fixed-semantic'), textLineCount: lines.count, textLineRects: lines.rects, textLineBoxes: lines.boxes, className: cell.className, isGridGap, borders: Object.fromEntries(['top','right','bottom','left'].map(side => [side, border(style, side)])) }); col += gridSpan; }); });
           // isGridGap is a structural occupancy sentinel, not a Word data cell.
           // Keep it for correct HTML-table coordinate allocation but exclude it
           // from source-vs-web semantic records.
-          return { dpi: 96, outer: { width: tableRect.width, height: tableRect.height }, placement: { tableLeftInContainerPx: tableRect.left - containerRect.left, tableTopInContainerPx: tableRect.top - containerRect.top, tableMarginLeftPx: num(tableStyle.marginLeft), containerPaddingLeftPx: num(getComputedStyle(container).paddingLeft) }, columns: [...element.querySelectorAll('col')].map((col, i) => ({ index: i + 1, widthPx: col.getBoundingClientRect().width })), rows: [...element.rows].map((row, i) => { const rect = row.getBoundingClientRect(); return { index: i + 1, y: rect.top - tableRect.top, heightPx: rect.height }; }), cells: cells.filter(cell => !cell.isGridGap) };
+          return { dpi: 96, outer: { width: frameRect.width, height: frameRect.height }, placement: { tableLeftInContainerPx: frameRect.left - containerRect.left - containerPaddingLeft, tableTopInContainerPx: frameRect.top - containerRect.top, frameMarginLeftPx: num(getComputedStyle(frame).marginLeft), containerPaddingLeftPx: containerPaddingLeft }, columns: [...element.querySelectorAll('col')].map((col, i) => ({ index: i + 1, widthPx: col.getBoundingClientRect().width })), rows: [...element.rows].map((row, i) => { const rect = row.getBoundingClientRect(); return { index: i + 1, y: rect.top - tableRect.top, heightPx: rect.height }; }), cells: cells.filter(cell => !cell.isGridGap) };
         }, role);
       fs.writeFileSync(path.join(target, `${role}-web.json`), JSON.stringify(all[role], null, 2));
     }

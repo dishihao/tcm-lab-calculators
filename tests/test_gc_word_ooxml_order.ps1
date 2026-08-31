@@ -73,6 +73,20 @@ Assert-Equal 'cell text order' $cell.text "A`nx`nB"
 $cellMathRun = @($cell.paragraphs.runs | Where-Object { $_.kind -eq 'math' })[0]
 Assert-Equal 'cell math OOXML retained' ([bool]$cellMathRun.mathOoxml) $true
 
+[xml]$unknownRunDocument = @'
+<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:r><w:footnoteReference w:id="7"/></w:r>
+</w:p>
+'@
+try {
+  Convert-Paragraph $unknownRunDocument.DocumentElement (New-NamespaceManager $unknownRunDocument) 1 $null | Out-Null
+  $failures.Add('unknown visible run child was silently accepted')
+} catch {
+  if ($_.Exception.Message -notmatch 'unsupported visible/non-text run child w:footnoteReference') {
+    $failures.Add("unknown visible run child failed for wrong reason: $($_.Exception.Message)")
+  }
+}
+
 if ($failures.Count) {
   throw "Synthetic OOXML order regression:`n$($failures -join "`n")"
 }

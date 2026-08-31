@@ -1,5 +1,7 @@
 # Task 7A - GC Word-table geometry/content repair report
 
+> **Superseded QA notice (2026-08-31):** The readiness and independence claims below describe the archived pre-final-review gate and are not valid release evidence. That gate reused public production geometry, treated mixed indents as warning-only, omitted 95 visible legacy objects, and did not independently compare current Word PNG border segments. The authoritative corrected evidence and conclusions are in `final-fix-report.md`; the old run paths below remain only as diagnostic history.
+
 Status: verified and ready to commit. The strict gate now passes on a fresh 66-table Word export and browser capture without relaxing the 1 CSS px threshold.
 
 ## Baseline

@@ -74,12 +74,7 @@ const EXPECTED_NEEDLE_SLOT_COUNTS = Object.freeze({
   'pine-alpha-pinene': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
 });
 
-const EXPECTED_UNBOUND_NON_GAP_BLANKS = Object.freeze({
-  'patchouli-patchoulol': ['reference-r10c1', 'reference-r10c2'],
-  'patchouli-patchoulol-finished': ['reference-r10c1', 'reference-r10c2'],
-  'brucea-oleic': ['reference-r10c1', 'reference-r10c2'],
-  'brucea-oleic-finished': ['reference-r10c1', 'reference-r10c2'],
-});
+const EXPECTED_UNBOUND_NON_GAP_BLANKS = Object.freeze({});
 
 assert.ok(Array.isArray(entries), 'manifest.entries must be an array');
 assert.equal(entries.length, EXPECTED_TEMPLATE_IDS.length);
@@ -99,6 +94,17 @@ for (const entry of entries) {
   assert.ok(Number.isInteger(entry.referenceTableIndex) && entry.referenceTableIndex > 0);
   assert.ok(Number.isInteger(entry.sampleTableIndex) && entry.sampleTableIndex > 0);
   assert.ok(entry.referenceTableIndex < entry.sampleTableIndex);
+}
+const recoveryEntries = entries.filter(entry => entry.tempRecovery);
+assert.deepEqual(recoveryEntries.map(entry => entry.templateId), [
+  'homalomena-linalool-finished',
+  'brucea-oleic-finished',
+]);
+for (const entry of recoveryEntries) {
+  assert.deepEqual(entry.tempRecovery, {
+    reason: 'ole-compound-doc-with-docx-extension',
+    temporarySuffix: '.doc',
+  });
 }
 
 const totalTables = entries.reduce((sum, entry) => sum + 2, 0);
@@ -417,7 +423,9 @@ if (requireAsset) {
       }
       const boundCellIds = new Set(layout.bindings.map(({ cellId }) => cellId));
       for (const cell of table.cells) {
-        if (!cell.isGridGap && !String(cell.text ?? '').trim() && !boundCellIds.has(cell.id)) {
+        const hasFixedSemantic = (cell.paragraphs ?? []).some(paragraph =>
+          (paragraph.runs ?? []).some(run => run.kind === 'math'));
+        if (!cell.isGridGap && !String(cell.text ?? '').trim() && !hasFixedSemantic && !boundCellIds.has(cell.id)) {
           unboundNonGapBlankIds.push(cell.id);
         }
       }

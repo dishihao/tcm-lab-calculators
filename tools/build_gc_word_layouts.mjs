@@ -3,6 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const EMBEDDED_REGISTRY = JSON.parse(fs.readFileSync(
+  path.join(MODULE_DIR, 'gc-word-embedded-object-semantics.json'), 'utf8',
+));
+if (EMBEDDED_REGISTRY.version !== 1 || EMBEDDED_REGISTRY.entries.length !== 95) {
+  throw new Error('embedded-object registry must be reviewed version 1 with 95 entries');
+}
+const EMBEDDED_BY_IDENTITY = new Map(EMBEDDED_REGISTRY.entries.map(entry => [entry.identity, entry]));
+
 const INTERNAL_REFERENCE_LABELS = Object.freeze({
   '正十八烷批号': { type: 'single', role: 'input', field: 'assay.internalBatch', inputMode: 'text' },
   '百秋李醇批号': { type: 'single', role: 'input', field: 'assay.refBatch', inputMode: 'text' },
@@ -62,7 +71,11 @@ const SAMPLE_LABELS = Object.freeze({
 });
 
 const FIXED_ONLY_LABELS = new Set(['样品编号', '1', '2']);
-const RAW_KEYS = new Set(['ooxml', 'mathOoxml', 'wordOpenXml', 'sourceOoxml', 'internalQaImage']);
+const RAW_KEYS = new Set([
+  'ooxml', 'mathOoxml', 'wordOpenXml', 'sourceOoxml', 'internalQaImage',
+  'sourceFile', 'sourceOoxmlHash', 'objectHash', 'objectIdentity',
+  'usedTempRecovery', 'recoveryReason', 'temporarySuffix',
+]);
 
 function cleanLabel(value) {
   return String(value ?? '').replace(/\s+$/u, '').replace(/^\s+/u, '');
@@ -170,19 +183,67 @@ export function normalizeOfficeMath(mathOoxml) {
   return { ast: sequence(astChildren), unresolved: [...unresolved].sort() };
 }
 
+export function normalizeEmbeddedObjectRun(run, expectedIdentity) {
+  const approved = EMBEDDED_BY_IDENTITY.get(expectedIdentity);
+  if (!approved || !run?.approved || run.objectIdentity !== expectedIdentity
+      || run.objectHash !== approved.objectHash) {
+    throw new Error(`${expectedIdentity}: unknown embedded object hash ${String(run?.objectHash)}`);
+  }
+  const ast = EMBEDDED_REGISTRY.semanticAsts[approved.semanticType];
+  if (!ast) throw new Error(`${expectedIdentity}: approved semantic AST missing`);
+  return { kind: 'math', math: structuredClone(ast) };
+}
+
 function normalizeParagraph(paragraph, cellId, unresolved) {
   return {
     text: paragraph.text ?? '',
     properties: sanitize(paragraph.properties),
-    runs: (paragraph.runs ?? []).map(run => {
+    runs: (paragraph.runs ?? []).flatMap(run => {
+      if (run.kind === 'sourceObject') return [];
       if (run.kind !== 'math') {
-        return { kind: 'text', text: run.text ?? '', properties: sanitize(run.properties) };
+        return [{ kind: 'text', text: run.text ?? '', properties: sanitize(run.properties) }];
       }
       const math = normalizeOfficeMath(run.mathOoxml);
       for (const node of math.unresolved) unresolved.push({ type: 'unsupported-math-node', cellId, node });
-      return { kind: 'math', text: run.text ?? '', math: math.ast };
+      return [{ kind: 'math', text: run.text ?? '', math: math.ast }];
     }),
   };
+}
+
+function injectApprovedSemantic(cell, approval) {
+  const ast = EMBEDDED_REGISTRY.semanticAsts[approval.semanticType];
+  if (!ast) throw new Error(`${approval.identity}: approved semantic AST missing`);
+  if (!cell.paragraphs.length) cell.paragraphs.push({ text: '', properties: null, runs: [] });
+  const mathRun = { kind: 'math', math: structuredClone(ast) };
+  if (approval.semanticType === 'externalSampleAverage') {
+    const needle = approval.consumeAdjacentText?.value;
+    for (let paragraphIndex = cell.paragraphs.length - 1; paragraphIndex >= 0; paragraphIndex -= 1) {
+      const runs = cell.paragraphs[paragraphIndex].runs;
+      for (let runIndex = runs.length - 1; runIndex >= 0; runIndex -= 1) {
+        const run = runs[runIndex];
+        if (run.kind !== 'text' || !needle) continue;
+        const at = run.text.lastIndexOf(needle);
+        if (at < 0) continue;
+        const before = { ...run, text: run.text.slice(0, at) };
+        const after = { ...run, text: run.text.slice(at + needle.length) };
+        runs.splice(runIndex, 1, ...([before.text ? before : null, mathRun, after.text ? after : null].filter(Boolean)));
+        cell.semanticContent = `样品平均峰面积|overline(A)`;
+        return;
+      }
+    }
+    throw new Error(`${approval.identity}: reviewed adjacent text ${JSON.stringify(needle)} not found`);
+  }
+  const paragraph = cell.paragraphs[0];
+  if (approval.semanticType === 'sampleMean') {
+    const suffixIndex = paragraph.runs.findIndex(run => run.kind === 'text' && /[（(]%/.test(run.text));
+    paragraph.runs.splice(suffixIndex < 0 ? paragraph.runs.length : suffixIndex, 0, mathRun);
+    cell.semanticContent = `平均含量|overline(X)|（%）`;
+    return;
+  }
+  paragraph.runs.push(mathRun);
+  cell.semanticContent = approval.semanticType === 'externalReferenceAverage'
+    ? '对照品平均峰面积|subscript(overline(A),对)'
+    : '校正因子f＝fraction(A_sub_S／C_sub_S,A_sub_R／C_sub_R)';
 }
 
 export function normalizeWordTable(rawTable, context = {}) {
@@ -226,6 +287,17 @@ export function normalizeWordTable(rawTable, context = {}) {
     };
     cells.push(cell);
     if (rawCell.verticalMerge === 'restart') verticalOwners.set(mergeKey, cell);
+  }
+
+  for (const object of rawTable.embeddedObjects ?? []) {
+    const approval = EMBEDDED_BY_IDENTITY.get(object.objectIdentity);
+    if (!approval || !object.approved || approval.objectHash !== object.objectHash
+        || approval.targetCellId !== object.targetCellId) {
+      throw new Error(`templateId=${templateId} tableRole=${tableRole} unknown embedded object hash ${String(object.objectHash)}`);
+    }
+    const target = cells.find(cell => cell.id === approval.targetCellId);
+    if (!target) throw new Error(`${approval.identity}: target cell missing`);
+    injectApprovedSemantic(target, approval);
   }
 
   const occupied = Array.from({ length: rowCount }, () => Array(columnCount).fill(false));
@@ -381,6 +453,20 @@ export function buildBindings(table, tableRole, templateMeta) {
     });
   }
 
+  for (const formulaCell of table.cells.filter(cell =>
+    cell.semanticContent?.startsWith('校正因子f＝fraction('))) {
+    fixedLabels.push({ cellId: formulaCell.id, text: formulaCell.semanticContent });
+    const targets = targetCells(table, formulaCell);
+    if (targets.length !== 1) {
+      unresolved.push({ type: 'binding-cardinality', tableRole, cellId: formulaCell.id,
+        label: formulaCell.semanticContent, expected: 1, actual: targets.length });
+      continue;
+    }
+    bindings.push({ cellId: targets[0].id, role: 'output', field: 'assay.out.factor',
+      sourceLabel: formulaCell.semanticContent });
+    matchedTargetIds.add(targets[0].id);
+  }
+
   for (const [label, count] of labelCounts) {
     if (count !== 1) {
       throw new Error(`templateId=${templateId} tableRole=${tableRole} cellId=multiple label=${JSON.stringify(label)} expected exactly one match; found ${count}`);
@@ -392,7 +478,7 @@ export function buildBindings(table, tableRole, templateMeta) {
     if (count !== 1) unresolved.push({ type: 'duplicate-field', tableRole, field, count });
   }
   const unmappedBlankCells = table.cells
-    .filter(cell => !cell.isGridGap && !cleanLabel(cell.text) && !matchedTargetIds.has(cell.id))
+    .filter(cell => !cell.isGridGap && !cleanLabel(cell.text) && !cell.semanticContent && !matchedTargetIds.has(cell.id))
     .map(cell => ({ cellId: cell.id, row: cell.row, column: cell.column, colSpan: cell.colSpan, rowSpan: cell.rowSpan }));
   return { bindings, fixedLabels, needleCounts, unmappedBlankCells, unresolved };
 }

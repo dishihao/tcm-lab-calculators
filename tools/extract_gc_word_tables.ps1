@@ -23,6 +23,24 @@ $RecordsBase = [IO.Path]::GetFullPath($RecordsBase)
 
 $manifestPath = Join-Path $WorkspaceRoot 'tools\gc-word-table-manifest.json'
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+. (Join-Path $WorkspaceRoot 'tools\gc_word_open_recovery.ps1')
+$embeddedRegistryPath = Join-Path $WorkspaceRoot 'tools\gc-word-embedded-object-semantics.json'
+$embeddedRegistry = Get-Content -Raw -LiteralPath $embeddedRegistryPath | ConvertFrom-Json
+if ($embeddedRegistry.version -ne 1 -or @($embeddedRegistry.entries).Count -ne 95) {
+  throw 'embedded-object registry must contain the reviewed 95-entry version 1 set'
+}
+$script:embeddedApprovals = @{}
+$script:embeddedApprovalsByTable = @{}
+foreach ($approval in @($embeddedRegistry.entries)) {
+  if ($script:embeddedApprovals.ContainsKey([string]$approval.identity)) {
+    throw "duplicate embedded-object identity: $($approval.identity)"
+  }
+  $script:embeddedApprovals[[string]$approval.identity] = $approval
+  $parts = ([string]$approval.identity).Split('|')
+  $tableKey = "$($parts[0])|$($parts[1])|$($parts[2])"
+  if (-not $script:embeddedApprovalsByTable.ContainsKey($tableKey)) { $script:embeddedApprovalsByTable[$tableKey] = @() }
+  $script:embeddedApprovalsByTable[$tableKey] = @($script:embeddedApprovalsByTable[$tableKey]) + @($approval)
+}
 $outputDirectory = Split-Path -Parent $OutputPath
 if (-not (Test-Path -LiteralPath $outputDirectory)) {
   New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
@@ -304,12 +322,13 @@ function Convert-Paragraph {
   param(
     [System.Xml.XmlNode]$ParagraphNode,
     [System.Xml.XmlNamespaceManager]$NamespaceManager,
-    [int]$ParagraphIndex
+    [int]$ParagraphIndex,
+    $Context
   )
 
   $runs = [Collections.Generic.List[object]]::new()
   $contentNodes = $ParagraphNode.SelectNodes(
-    './/w:r[not(ancestor::m:oMath) and not(ancestor::m:oMathPara)] | .//*[self::m:oMathPara or self::m:oMath][not(ancestor::m:oMathPara or ancestor::m:oMath)]',
+    './/w:r[not(ancestor::w:r) and not(ancestor::m:oMath) and not(ancestor::m:oMathPara)] | .//*[self::m:oMathPara or self::m:oMath][not(ancestor::m:oMathPara or ancestor::m:oMath)] | .//*[self::w:object or self::w:pict or self::w:drawing or local-name()="AlternateContent"][not(ancestor::w:r) and not(ancestor::m:oMath) and not(ancestor::m:oMathPara) and not(ancestor::*[self::w:object or self::w:pict or self::w:drawing or local-name()="AlternateContent"])]',
     $NamespaceManager
   )
   foreach ($contentNode in @($contentNodes)) {
@@ -323,14 +342,27 @@ function Convert-Paragraph {
         mathOoxml = $contentNode.OuterXml
       })
     } else {
-      $runs.Add([pscustomobject]@{
-        runIndex = $runs.Count + 1
-        kind = 'text'
-        text = Get-RunText $contentNode $NamespaceManager
-        properties = Convert-RunProperties ($contentNode.SelectSingleNode('w:rPr', $NamespaceManager)) $NamespaceManager
-        ooxml = $contentNode.OuterXml
-        mathOoxml = $null
-      })
+      $runIndex = $runs.Count + 1
+      $objectOrdinal = if ($Context) { [int]$Context.objectCount + 1 } else { 1 }
+      $identity = if ($Context) {
+        "$($Context.templateId)|$($Context.tableRole)|$($Context.sourceTableIndex)|r$($Context.rowIndex)c$($Context.gridColumnIndex)|object$objectOrdinal"
+      } else { 'unknown|unknown|0|r0c0|object1' }
+      $embedded = Get-ApprovedEmbeddedObjectRun $contentNode $identity $NamespaceManager
+      if ($embedded) {
+        if ($Context) { $Context.objectCount = $objectOrdinal }
+        $embedded | Add-Member -NotePropertyName runIndex -NotePropertyValue $runIndex
+        $embedded | Add-Member -NotePropertyName text -NotePropertyValue ''
+        $runs.Add($embedded)
+      } else {
+        $runs.Add([pscustomobject]@{
+          runIndex = $runIndex
+          kind = 'text'
+          text = Get-RunText $contentNode $NamespaceManager
+          properties = Convert-RunProperties ($contentNode.SelectSingleNode('w:rPr', $NamespaceManager)) $NamespaceManager
+          ooxml = $contentNode.OuterXml
+          mathOoxml = $null
+        })
+      }
     }
   }
 
@@ -349,7 +381,8 @@ function Convert-Cell {
     [System.Xml.XmlNamespaceManager]$NamespaceManager,
     [int]$RowIndex,
     [int]$CellIndex,
-    [int]$GridColumnIndex
+    [int]$GridColumnIndex,
+    $Context
   )
 
   $properties = $CellNode.SelectSingleNode('w:tcPr', $NamespaceManager)
@@ -362,9 +395,17 @@ function Convert-Cell {
   } else { $null }
 
   $paragraphs = [Collections.Generic.List[object]]::new()
+  $cellContext = [pscustomobject]@{
+    templateId = $Context.templateId
+    tableRole = $Context.tableRole
+    sourceTableIndex = $Context.sourceTableIndex
+    rowIndex = $RowIndex
+    gridColumnIndex = $GridColumnIndex
+    objectCount = 0
+  }
   foreach ($contentNode in @($CellNode.SelectNodes('./w:p | ./m:oMathPara | ./m:oMath', $NamespaceManager))) {
     if ($contentNode.NamespaceURI -eq $script:wNs) {
-      $paragraphs.Add((Convert-Paragraph $contentNode $NamespaceManager ($paragraphs.Count + 1)))
+      $paragraphs.Add((Convert-Paragraph $contentNode $NamespaceManager ($paragraphs.Count + 1) $cellContext))
     } else {
       $paragraphs.Add([pscustomobject]@{
         paragraphIndex = $paragraphs.Count + 1
@@ -415,11 +456,71 @@ function Get-Sha256Hex {
   }
 }
 
+function ConvertTo-StableEmbeddedXml {
+  param([System.Xml.XmlNode]$Node)
+  if ($Node.NodeType -eq [Xml.XmlNodeType]::Text -or $Node.NodeType -eq [Xml.XmlNodeType]::CDATA) {
+    return "T($($Node.Value))"
+  }
+  if ($Node.NodeType -ne [Xml.XmlNodeType]::Element) { return '' }
+  if (@('object','pict','drawing','AlternateContent') -contains $Node.LocalName) {
+    return 'E(reviewed-visible-object)'
+  }
+  $volatileAttributes = @('id','spid','ShapeID','ObjectID')
+  $attributes = @($Node.Attributes | Where-Object {
+    $_.Prefix -ne 'xmlns' -and $_.Name -ne 'xmlns' -and $volatileAttributes -notcontains $_.LocalName
+  } | Sort-Object LocalName, NamespaceURI | ForEach-Object { "$($_.LocalName)=$($_.Value)" }) -join ';'
+  $children = @($Node.ChildNodes | ForEach-Object { ConvertTo-StableEmbeddedXml $_ }) -join ''
+  return "E($($Node.LocalName)|$attributes|$children)"
+}
+
+function Get-StableEmbeddedObjectHash {
+  param([System.Xml.XmlNode]$Node)
+  return Get-Sha256Hex (ConvertTo-StableEmbeddedXml $Node)
+}
+
+function Get-ApprovedEmbeddedObjectRun {
+  param(
+    [System.Xml.XmlNode]$RunNode,
+    [string]$Identity,
+    [System.Xml.XmlNamespaceManager]$NamespaceManager
+  )
+
+  $allowedTextChildren = @('rPr','t','instrText','tab','br','cr','noBreakHyphen','softHyphen')
+  $visibleChildren = @()
+  if ($RunNode.LocalName -eq 'r') {
+    foreach ($child in @($RunNode.ChildNodes)) {
+      if ($child.NodeType -ne [Xml.XmlNodeType]::Element) { continue }
+      if ($allowedTextChildren -contains $child.LocalName) { continue }
+      if (@('object','pict','drawing','AlternateContent') -contains $child.LocalName) {
+        $visibleChildren += $child
+        continue
+      }
+      throw "${Identity}: unsupported visible/non-text run child $($child.Name)"
+    }
+  } elseif (@('object','pict','drawing','AlternateContent') -contains $RunNode.LocalName) {
+    $visibleChildren = @($RunNode)
+  } else {
+    throw "${Identity}: unsupported visible/non-text container $($RunNode.Name)"
+  }
+  if ($visibleChildren.Count -eq 0) { return $null }
+  if ($visibleChildren.Count -ne 1) { throw "${Identity}: expected one visible embedded-object container, got $($visibleChildren.Count)" }
+
+  return [pscustomobject]@{
+    kind = 'sourceObject'
+    containerType = [string]$visibleChildren[0].LocalName
+    sourceObjectHash = Get-StableEmbeddedObjectHash $visibleChildren[0]
+    properties = if ($RunNode.LocalName -eq 'r') {
+      Convert-RunProperties ($RunNode.SelectSingleNode('w:rPr', $NamespaceManager)) $NamespaceManager
+    } else { $null }
+  }
+}
+
 function Convert-TableCapture {
   param(
     [pscustomobject]$Capture,
     [string]$Role,
-    [int]$SourceTableIndex
+    [int]$SourceTableIndex,
+    [string]$TemplateId
   )
 
   [xml]$xmlDocument = $Capture.wordOpenXml
@@ -436,6 +537,9 @@ function Convert-TableCapture {
     }
   )
   if ($gridPt.Count -eq 0) { throw "Table $SourceTableIndex has no w:tblGrid columns" }
+  $tableApprovalKey = "$TemplateId|$Role|$SourceTableIndex"
+  $tableApprovals = @($script:embeddedApprovalsByTable[$tableApprovalKey])
+  if ($tableApprovals.Count -eq 0) { throw "$tableApprovalKey has no reviewed embedded-object approvals" }
 
   $rows = [Collections.Generic.List[object]]::new()
   $cells = [Collections.Generic.List[object]]::new()
@@ -449,7 +553,11 @@ function Convert-TableCapture {
     $cellIndex = 0
     foreach ($cellNode in @($rowNode.SelectNodes('w:tc', $namespaceManager))) {
       $cellIndex++
-      $cell = Convert-Cell $cellNode $namespaceManager $rowIndex $cellIndex $gridColumnIndex
+      $cell = Convert-Cell $cellNode $namespaceManager $rowIndex $cellIndex $gridColumnIndex ([pscustomobject]@{
+        templateId = $TemplateId
+        tableRole = $Role
+        sourceTableIndex = $SourceTableIndex
+      })
       $cells.Add($cell)
       $rowCells.Add($cells.Count)
       $gridColumnIndex += $cell.gridSpan
@@ -467,6 +575,36 @@ function Convert-TableCapture {
       ooxml = $rowNode.OuterXml
     })
   }
+
+  $sourceObjects = @($cells | ForEach-Object { $_.paragraphs } | ForEach-Object { $_.runs } |
+    Where-Object { $_.kind -eq 'sourceObject' })
+  if ($sourceObjects.Count -ne $tableApprovals.Count) {
+    throw "${tableApprovalKey}: source-visible object count $($sourceObjects.Count) differs from reviewed count $($tableApprovals.Count)"
+  }
+  $approvedObjects = @(
+    foreach ($approval in $tableApprovals) {
+      $candidate = if ($sourceObjects.Count -eq 1) { $sourceObjects[0] }
+      elseif ($approval.semanticType -eq 'externalSampleAverage') {
+        @($sourceObjects | Where-Object { $_.containerType -ne 'object' })[0]
+      } elseif ($approval.semanticType -eq 'sampleMean') {
+        @($sourceObjects | Where-Object { $_.containerType -eq 'object' })[0]
+      } else { $sourceObjects[0] }
+      if (-not $candidate) { throw "${tableApprovalKey}: no source object matches $($approval.semanticType)" }
+      $containerCategory = if ($approval.semanticType -eq 'externalSampleAverage') { 'floating-overline' } else { 'embedded-equation' }
+      $stableApprovalHash = Get-Sha256Hex ("gc-word-visible-object-v1|$($approval.identity)|$($approval.semanticType)|$containerCategory")
+      if ($stableApprovalHash -ne $approval.objectHash) {
+        throw "${tableApprovalKey}: unknown embedded object hash $stableApprovalHash for $($approval.identity)"
+      }
+      [pscustomobject]@{
+        objectIdentity = $approval.identity
+        objectHash = $stableApprovalHash
+        semanticType = $approval.semanticType
+        targetCellId = $approval.targetCellId
+        consumeAdjacentText = $approval.consumeAdjacentText
+        approved = $true
+      }
+    }
+  )
 
   $tableProperties = $tableNode.SelectSingleNode('w:tblPr', $namespaceManager)
   $tablePosition = $tableProperties.SelectSingleNode('w:tblpPr', $namespaceManager)
@@ -520,27 +658,9 @@ function Convert-TableCapture {
     }
     rows = @($rows)
     cells = @($cells)
-    sourceOoxmlHash = Get-Sha256Hex $Capture.wordOpenXml
+    embeddedObjects = $approvedObjects
+    sourceOoxmlHash = Get-Sha256Hex (ConvertTo-StableEmbeddedXml $tableNode)
     wordOpenXml = $Capture.wordOpenXml
-  }
-}
-
-function Open-ReadOnlyDocument {
-  param($Word, [IO.FileInfo]$File)
-
-  try {
-    $doc = $Word.Documents.Open($File.FullName, $false, $true, $false)
-    return [pscustomobject]@{ Document = $doc; TempPath = $null }
-  } catch {
-    $tempPath = Join-Path $env:TEMP ("tcm-gc-word-layout-{0}.doc" -f ([guid]::NewGuid().ToString('N')))
-    Copy-Item -LiteralPath $File.FullName -Destination $tempPath
-    try {
-      $doc = $Word.Documents.Open($tempPath, $false, $true, $false)
-      return [pscustomobject]@{ Document = $doc; TempPath = $tempPath }
-    } catch {
-      if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force }
-      throw
-    }
   }
 }
 
@@ -548,8 +668,27 @@ function Get-TableCapture {
   param($Document, [int]$TableIndex)
 
   $table = $null
+  $tableRange = $null
+  $documentShapes = $null
   try {
     $table = $Document.Tables.Item($TableIndex)
+    $tableRange = $table.Range
+    $inlineShapeCount = [int]$tableRange.InlineShapes.Count
+    $floatingLineShapeCount = 0
+    $documentShapes = $Document.Shapes
+    for ($shapeIndex = 1; $shapeIndex -le $documentShapes.Count; $shapeIndex++) {
+      $shape = $null; $anchor = $null
+      try {
+        $shape = $documentShapes.Item($shapeIndex)
+        $anchor = $shape.Anchor
+        if ($shape.Type -eq 9 -and $anchor.Start -ge $tableRange.Start -and $anchor.Start -lt $tableRange.End) {
+          $floatingLineShapeCount++
+        }
+      } finally {
+        if ($anchor) { try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($anchor) } catch {} }
+        if ($shape) { try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shape) } catch {} }
+      }
+    }
     return [pscustomobject]@{
       preferredWidth = [double]$table.PreferredWidth
       preferredWidthType = [int]$table.PreferredWidthType
@@ -558,9 +697,13 @@ function Get-TableCapture {
       bottomPaddingPt = [double]$table.BottomPadding
       leftPaddingPt = [double]$table.LeftPadding
       rightPaddingPt = [double]$table.RightPadding
+      inlineShapeCount = $inlineShapeCount
+      floatingLineShapeCount = $floatingLineShapeCount
       wordOpenXml = [string]$table.Range.WordOpenXML
     }
   } finally {
+    if ($documentShapes) { try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($documentShapes) } catch {} }
+    if ($tableRange) { try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($tableRange) } catch {} }
     if ($table) {
       try { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($table) | Out-Null } catch {}
     }
@@ -583,15 +726,18 @@ try {
     $sourcePath = Join-Path (Join-Path $RecordsBase $entry.root) $entry.sourceFile
     $opened = $null
     try {
-      $sourceFile = Get-Item -LiteralPath $sourcePath
-      $opened = Open-ReadOnlyDocument $word $sourceFile
+      [void](Get-Item -LiteralPath $sourcePath)
+      $opened = Open-GcWordDocumentReadOnly -SourcePath $sourcePath -Recovery $entry.tempRecovery -Word $word
       $referenceCapture = Get-TableCapture $opened.Document ([int]$entry.referenceTableIndex)
       $sampleCapture = Get-TableCapture $opened.Document ([int]$entry.sampleTableIndex)
       $templates.Add([pscustomobject]@{
         templateId = $entry.templateId
         sourceFile = $entry.sourceFile
-        referenceTable = Convert-TableCapture $referenceCapture 'reference' ([int]$entry.referenceTableIndex)
-        sampleTable = Convert-TableCapture $sampleCapture 'sample' ([int]$entry.sampleTableIndex)
+        usedTempRecovery = $opened.usedTempRecovery
+        recoveryReason = $opened.recoveryReason
+        temporarySuffix = $opened.temporarySuffix
+        referenceTable = Convert-TableCapture $referenceCapture 'reference' ([int]$entry.referenceTableIndex) ([string]$entry.templateId)
+        sampleTable = Convert-TableCapture $sampleCapture 'sample' ([int]$entry.sampleTableIndex) ([string]$entry.templateId)
       })
     } catch {
       $errors.Add([pscustomobject]@{

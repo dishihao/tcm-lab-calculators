@@ -613,9 +613,13 @@ td.spanall{background:#fdfdfd}
 .word-table-scroll{
   max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;
 }
+.word-record-frame{
+  box-sizing:border-box; max-width:none; overflow:visible;
+}
 .word-record-table{
   table-layout:fixed; border-collapse:collapse; max-width:none; min-width:0;
 }
+.word-border-overhang{z-index:2}
 .word-table-scroll .word-record-table{min-width:0}
 .word-record-table .word-cell-input{
   width:100%; box-sizing:border-box; border:0; background:transparent;

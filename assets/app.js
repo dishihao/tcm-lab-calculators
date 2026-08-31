@@ -1284,7 +1284,6 @@ function renderAssaySheet(){
         <span class="judge none" id="assay.rsdJudge">—</span></span>
       <span>理论板数应不低于 ${ii('platesLim', platesDef, 'w120')}；实测 ${ic('plates')}
         <span class="judge none" id="assay.platesJudge">—</span></span>
-      ${mode === 'internal' ? `<span>校正因子 f：${outCell('assay.out.factor')}</span>` : ''}
     </div>` : '';
   const referenceBlock = preciseLayout
     ? `<div class="tscroll word-table-scroll" data-assay-reference-table>${renderAssayReferenceTable(tpl)}</div>${preciseChecks}`
