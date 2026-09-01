@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('C:/Users/37475/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
@@ -92,6 +93,7 @@ const outputRoot = path.resolve(args[index + 1]);
 const runs = fs.readdirSync(outputRoot, { withFileTypes: true }).filter(x => x.isDirectory() && x.name.startsWith('visual-qa-')).map(x => path.join(outputRoot, x.name)).sort();
 if (!runs.length) throw new Error(`no visual-qa-* export run under ${outputRoot}`);
 const run = runs.at(-1), pageUrl = new URL('../index.html', import.meta.url).href;
+const semanticCapturePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'gc_word_rendered_semantic_capture.js');
 
 const chooseTemplate = async (page, id) => {
   const template = await page.evaluate(x => ASSAY_TEMPLATES.find(y => y.id === x), id);
@@ -109,6 +111,7 @@ try {
     await page.goto(pageUrl); await page.waitForLoadState('networkidle');
     await page.evaluate(() => { localStorage.clear(); document.body.style.zoom = '100%'; });
     await page.reload(); await page.waitForLoadState('networkidle'); await page.locator('[data-tab="assay"]').click();
+    await page.addScriptTag({ path: semanticCapturePath });
     const ids = await page.evaluate(() => GC_TEMPLATES.map(x => x.id));
   if (ids.length !== 33) throw new Error(`expected 33 GC templates, got ${ids.length}`);
     for (const templateId of ids) {
@@ -152,7 +155,7 @@ try {
             }
             return { count: boxes.length, rects, boxes };
           };
-          [...element.rows].forEach((row, r) => { let col = 0; while (occupied[r]?.[col]) col++; [...row.cells].forEach(cell => { while (occupied[r]?.[col]) col++; const rect = cell.getBoundingClientRect(), style = getComputedStyle(cell), rowSpan = cell.rowSpan, gridSpan = cell.colSpan, lines = textLines(cell), isGridGap = cell.classList.contains('word-grid-gap'); for (let rr = r; rr < r + rowSpan; rr++) { occupied[rr] ||= []; for (let cc = col; cc < col + gridSpan; cc++) occupied[rr][cc] = true; } cells.push({ id: `r${r + 1}c${col + 1}`, rowIndex: r + 1, gridColumnIndex: col + 1, rowSpan, gridSpan, x: rect.left - tableRect.left, y: rect.top - tableRect.top, width: rect.width, height: rect.height, text: cell.innerText, fixedSemantic: cell.getAttribute('data-fixed-semantic'), textLineCount: lines.count, textLineRects: lines.rects, textLineBoxes: lines.boxes, className: cell.className, isGridGap, borders: Object.fromEntries(['top','right','bottom','left'].map(side => [side, border(style, side)])) }); col += gridSpan; }); });
+          [...element.rows].forEach((row, r) => { let col = 0; while (occupied[r]?.[col]) col++; [...row.cells].forEach(cell => { while (occupied[r]?.[col]) col++; const rect = cell.getBoundingClientRect(), style = getComputedStyle(cell), rowSpan = cell.rowSpan, gridSpan = cell.colSpan, lines = textLines(cell), isGridGap = cell.classList.contains('word-grid-gap'); for (let rr = r; rr < r + rowSpan; rr++) { occupied[rr] ||= []; for (let cc = col; cc < col + gridSpan; cc++) occupied[rr][cc] = true; } cells.push({ id: `r${r + 1}c${col + 1}`, rowIndex: r + 1, gridColumnIndex: col + 1, rowSpan, gridSpan, x: rect.left - tableRect.left, y: rect.top - tableRect.top, width: rect.width, height: rect.height, text: cell.innerText, renderedSemantic: GcWordRenderedSemanticCapture.parseCell(cell), textLineCount: lines.count, textLineRects: lines.rects, textLineBoxes: lines.boxes, className: cell.className, isGridGap, borders: Object.fromEntries(['top','right','bottom','left'].map(side => [side, border(style, side)])) }); col += gridSpan; }); });
           // isGridGap is a structural occupancy sentinel, not a Word data cell.
           // Keep it for correct HTML-table coordinate allocation but exclude it
           // from source-vs-web semantic records.

@@ -157,10 +157,6 @@ assert(visibleTechs.length > 0 && visibleTechs.every(tech => tech === 'gc'), '�
 
 for (const templateId of audit.gcIds) {
   const template = await chooseTemplate(page, templateId);
-  const expectedTables = await page.evaluate(id => {
-    const layout = GC_WORD_TABLE_LAYOUTS[id];
-    return [layout.referenceTable.sourceTableIndex, layout.sampleTable.sourceTableIndex];
-  }, templateId);
   assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
   assert(await field(page, 'assay.mode').inputValue() === template.mode, `${templateId}: 定量方法错误`);
@@ -173,10 +169,14 @@ for (const templateId of audit.gcIds) {
   assert(await exactTables.count() === 2, `${templateId}: 未渲染两张Word精确表`);
   assert(await page.locator('.generic-assay-table').count() === 0,
     `${templateId}: 气相混入通用含量表`);
-  assert(await exactTables.nth(0).getAttribute('data-source-table-index') === String(expectedTables[0]),
-    `${templateId}: 对照品源表索引错误`);
-  assert(await exactTables.nth(1).getAttribute('data-source-table-index') === String(expectedTables[1]),
-    `${templateId}: 供试品源表索引错误`);
+  assert(await exactTables.nth(0).getAttribute('data-word-template-id') === templateId
+    && await exactTables.nth(0).getAttribute('data-word-table-role') === 'reference',
+  `${templateId}: 对照品运行时路由标识错误`);
+  assert(await exactTables.nth(1).getAttribute('data-word-template-id') === templateId
+    && await exactTables.nth(1).getAttribute('data-word-table-role') === 'sample',
+  `${templateId}: 供试品运行时路由标识错误`);
+  assert(await exactTables.evaluateAll(tables => tables.every(table => !table.hasAttribute('data-source-table-index'))),
+    `${templateId}: 公共 DOM 泄露源表索引`);
 }
 
 // Word 原件的可见矩形是精确 GC 路径的合同。所有数值均为从固定的
@@ -296,10 +296,8 @@ assert((await page.locator('.standard-quote').innerText()).includes('不得少�
 
 // 对照品和供试品表格必须按每份气相记录切换，不能继续共用固定布局。
 await chooseTemplate(page, 'clove-eugenol');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '6',
-  '丁香原料对照品源表不是索引6');
-assert(await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '7',
-  '丁香原料供试品源表不是索引7');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'clove-eugenol',
+  '丁香原料对照品运行时模板路由错误');
 assert((await page.locator('[data-assay-reference-table]').innerText()).includes('对照品批号'),
   '丁香原料对照品表缺少记录中的批号行');
 assert((await page.locator('[data-assay-reference-table]').innerText()).includes('对照品进样量'),
@@ -310,10 +308,8 @@ assert(await field(page, 'assay.sampleInjection.1').count() === 1,
   '丁香原料供试品表缺少第一份样品进样量');
 
 await chooseTemplate(page, 'clove-eugenol-finished');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '6',
-  '丁香成品对照品源表不是索引6');
-assert(await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '7',
-  '丁香成品供试品源表不是索引7');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'clove-eugenol-finished',
+  '丁香成品对照品运行时模板路由错误');
 assert(await field(page, 'assay.dryBasis').isChecked() === false,
   '丁香成品计算口径不应被表格布局改写');
 assert((await page.locator('[data-assay-sample-table]').innerText()).includes('水分Q'),
@@ -411,21 +407,17 @@ await page.emulateMedia({ media: 'screen' });
 await page.setViewportSize({ width: 1440, height: 1000 });
 
 await chooseTemplate(page, 'mugwort-eucalyptol');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '7'
-  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '8',
-  '艾叶桉油精没有显示源表7/8');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'mugwort-eucalyptol',
+  '艾叶桉油精运行时路由错误');
 await chooseTemplate(page, 'mugwort-borneol');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '9'
-  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '10',
-  '艾叶龙脑没有显示源表9/10');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'mugwort-borneol',
+  '艾叶龙脑运行时路由错误');
 await chooseTemplate(page, 'flax-linoleic');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '3'
-  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '4',
-  '亚麻子亚油酸没有显示源表3/4');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'flax-linoleic',
+  '亚麻子亚油酸运行时路由错误');
 await chooseTemplate(page, 'flax-linolenic');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-source-table-index') === '5'
-  && await page.locator('[data-assay-sample-table] .word-record-table').getAttribute('data-source-table-index') === '6',
-  '亚麻子亚麻酸没有显示源表5/6');
+assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'flax-linolenic',
+  '亚麻子亚麻酸运行时路由错误');
 
 await chooseTemplate(page, 'patchouli-patchoulol');
 const patchouliReferenceTable = await page.locator('[data-assay-reference-table]').innerText();

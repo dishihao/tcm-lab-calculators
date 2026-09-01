@@ -20,10 +20,10 @@ $structureByKey = @{}; foreach ($template in @($extract.templates)) { $structure
 $embeddedRegistry = Get-Content -Raw -LiteralPath (Join-Path $workspaceRoot 'tools\gc-word-embedded-object-semantics.json') | ConvertFrom-Json
 $semanticByTarget = @{}
 $semanticText = @{
-  externalReferenceAverage = '对照品平均峰面积|subscript(overline(A),对)'
-  externalSampleAverage = '样品平均峰面积|overline(A)'
-  sampleMean = '平均含量|overline(X)|（%）'
-  internalCorrectionFactor = '校正因子f＝fraction(A_sub_S／C_sub_S,A_sub_R／C_sub_R)'
+  externalReferenceAverage = 'text("对照品平均峰面积")|overline(text("A"))|subscript(text("对"))'
+  externalSampleAverage = 'text("样品平均峰面积")|overline(text("A"))'
+  sampleMean = 'text("平均含量")|overline(text("X"))|text("（%）")'
+  internalCorrectionFactor = 'text("校正因子f＝")|fraction(text("A")|subscript(text("S"))|text("／C")|subscript(text("S")),text("A")|subscript(text("R"))|text("／C")|subscript(text("R")))'
 }
 foreach ($item in @($embeddedRegistry.entries)) {
   $parts = ([string]$item.identity).Split('|')
@@ -46,7 +46,7 @@ function Get-WordCellTextLineCount($wordTable, $cellMetric) {
   } finally { if ($range) { Release-Com $range }; if ($cell) { Release-Com $cell } }
 }
 function Select-SourceStructure($table, $wordTable, [string]$templateId, [string]$role) {
-  [pscustomobject]@{ sourceTableIndex = $table.sourceTableIndex; widthPt = $table.widthPt; indentPt = $table.indentPt; gridPt = @($table.gridPt); rows = @($table.rows | ForEach-Object { [pscustomobject]@{ rowIndex = $_.rowIndex; heightPt = $_.heightPt; heightRule = $_.heightRule } }); cells = @($table.cells | ForEach-Object { $cellId = "${role}-r$($_.rowIndex)c$($_.gridColumnIndex)"; [pscustomobject]@{ rowIndex = $_.rowIndex; cellIndex = $_.cellIndex; gridColumnIndex = $_.gridColumnIndex; gridSpan = $_.gridSpan; verticalMerge = $_.verticalMerge; borders = $_.borders; text = $_.text; semanticContent = $semanticByTarget["${templateId}|${role}|${cellId}"]; paragraphCount = @($_.paragraphs).Count; textLineCount = (Get-WordCellTextLineCount $wordTable $_) } }) }
+  [pscustomobject]@{ sourceTableIndex = $table.sourceTableIndex; widthPt = $table.widthPt; indentPt = $table.indentPt; gridPt = @($table.gridPt); rows = @($table.rows | ForEach-Object { [pscustomobject]@{ rowIndex = $_.rowIndex; heightPt = $_.heightPt; heightRule = $_.heightRule } }); cells = @($table.cells | ForEach-Object { $cellId = "${role}-r$($_.rowIndex)c$($_.gridColumnIndex)"; [pscustomobject]@{ rowIndex = $_.rowIndex; cellIndex = $_.cellIndex; gridColumnIndex = $_.gridColumnIndex; gridSpan = $_.gridSpan; verticalMerge = $_.verticalMerge; borders = $_.borders; text = $_.text; renderedSemanticExpected = $semanticByTarget["${templateId}|${role}|${cellId}"]; paragraphCount = @($_.paragraphs).Count; textLineCount = (Get-WordCellTextLineCount $wordTable $_) } }) }
 }
 function Assert-OnlyIntendedTable($document, $table) {
   # FormattedText can include a following formula or secondary table.  The first

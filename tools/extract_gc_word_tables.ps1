@@ -1,7 +1,8 @@
 param(
   [string]$WorkspaceRoot = (Split-Path -Parent $PSScriptRoot),
   [string]$OutputPath = (Join-Path $PSScriptRoot 'gc-word-table-extract.json'),
-  [string]$RecordsBase = ''
+  [string]$RecordsBase = '',
+  [string]$ObjectEvidenceAuditPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +11,11 @@ if (-not [IO.Path]::IsPathRooted($OutputPath)) {
   $OutputPath = Join-Path $WorkspaceRoot $OutputPath
 }
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
+if ($ObjectEvidenceAuditPath) {
+  if (-not [IO.Path]::IsPathRooted($ObjectEvidenceAuditPath)) { $ObjectEvidenceAuditPath = Join-Path $WorkspaceRoot $ObjectEvidenceAuditPath }
+  $ObjectEvidenceAuditPath = [IO.Path]::GetFullPath($ObjectEvidenceAuditPath)
+}
+$script:objectEvidenceAuditMode = -not [string]::IsNullOrWhiteSpace($ObjectEvidenceAuditPath)
 
 if (-not $RecordsBase) {
   $gitCommonDir = (& git -C $WorkspaceRoot rev-parse --path-format=absolute --git-common-dir 2>$null)
@@ -347,7 +353,7 @@ function Convert-Paragraph {
       $identity = if ($Context) {
         "$($Context.templateId)|$($Context.tableRole)|$($Context.sourceTableIndex)|r$($Context.rowIndex)c$($Context.gridColumnIndex)|object$objectOrdinal"
       } else { 'unknown|unknown|0|r0c0|object1' }
-      $embedded = Get-ApprovedEmbeddedObjectRun $contentNode $identity $NamespaceManager
+      $embedded = Get-ApprovedEmbeddedObjectRun $contentNode $identity $NamespaceManager $Context
       if ($embedded) {
         if ($Context) { $Context.objectCount = $objectOrdinal }
         $embedded | Add-Member -NotePropertyName runIndex -NotePropertyValue $runIndex
@@ -456,33 +462,126 @@ function Get-Sha256Hex {
   }
 }
 
+function Get-Sha256BytesHex {
+  param([byte[]]$Bytes)
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { return [Convert]::ToHexString($sha.ComputeHash($Bytes)).ToLowerInvariant() }
+  finally { $sha.Dispose() }
+}
+
 function ConvertTo-StableEmbeddedXml {
-  param([System.Xml.XmlNode]$Node)
+  param([System.Xml.XmlNode]$Node, [bool]$CollapseVisibleObjects = $true)
   if ($Node.NodeType -eq [Xml.XmlNodeType]::Text -or $Node.NodeType -eq [Xml.XmlNodeType]::CDATA) {
     return "T($($Node.Value))"
   }
   if ($Node.NodeType -ne [Xml.XmlNodeType]::Element) { return '' }
-  if (@('object','pict','drawing','AlternateContent') -contains $Node.LocalName) {
-    return 'E(reviewed-visible-object)'
+  if ($CollapseVisibleObjects -and @('object','pict','drawing','AlternateContent') -contains $Node.LocalName) {
+    # The table-structure hash deliberately separates object payloads; every
+    # object is authenticated below by source identity + source-derived digest.
+    return 'E(source-object-authenticated-separately)'
   }
-  $volatileAttributes = @('id','spid','ShapeID','ObjectID')
+  $volatileAttributes = @('id','spid','ShapeID','ObjectID','embed','link','anchorId','editId')
   $attributes = @($Node.Attributes | Where-Object {
     $_.Prefix -ne 'xmlns' -and $_.Name -ne 'xmlns' -and $volatileAttributes -notcontains $_.LocalName
   } | Sort-Object LocalName, NamespaceURI | ForEach-Object { "$($_.LocalName)=$($_.Value)" }) -join ';'
-  $children = @($Node.ChildNodes | ForEach-Object { ConvertTo-StableEmbeddedXml $_ }) -join ''
+  $children = @($Node.ChildNodes | ForEach-Object { ConvertTo-StableEmbeddedXml $_ $CollapseVisibleObjects }) -join ''
   return "E($($Node.LocalName)|$attributes|$children)"
 }
 
-function Get-StableEmbeddedObjectHash {
-  param([System.Xml.XmlNode]$Node)
-  return Get-Sha256Hex (ConvertTo-StableEmbeddedXml $Node)
+function Get-RelatedPayloadDigests {
+  param(
+    [System.Xml.XmlNode]$ContainerNode,
+    [xml]$PackageDocument,
+    [System.Xml.XmlNamespaceManager]$NamespaceManager
+  )
+  $relationshipNamespace = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+  $relationshipIds = @($ContainerNode.SelectNodes('.//@*') | Where-Object {
+    $_.NamespaceURI -eq $relationshipNamespace -and @('id','embed','link') -contains $_.LocalName
+  } | ForEach-Object { [string]$_.Value } | Sort-Object -Unique)
+  $digests = [Collections.Generic.List[string]]::new()
+  foreach ($relationshipId in $relationshipIds) {
+    $relsPart = $PackageDocument.SelectSingleNode("/pkg:package/pkg:part[@pkg:name='/word/_rels/document.xml.rels']/pkg:xmlData", $NamespaceManager)
+    $relationship = @($relsPart.SelectNodes(".//*[local-name()='Relationship']")) | Where-Object { $_.GetAttribute('Id') -eq $relationshipId } | Select-Object -First 1
+    if (-not $relationship) { throw "source object relationship $relationshipId is missing" }
+    $target = [string]$relationship.GetAttribute('Target')
+    if ([string]::IsNullOrWhiteSpace($target) -or $target.Contains('..')) { throw "source object relationship $relationshipId has unsafe target $target" }
+    $partName = if ($target.StartsWith('/')) { $target } else { "/word/$target" }
+    $part = $PackageDocument.SelectSingleNode("/pkg:package/pkg:part[@pkg:name='$partName']", $NamespaceManager)
+    if (-not $part) { throw "source object payload part $partName is missing" }
+    $binary = $part.SelectSingleNode('pkg:binaryData', $NamespaceManager)
+    if ($binary) {
+      $bytes = [Convert]::FromBase64String(($binary.InnerText -replace '\s',''))
+      $digests.Add((Get-Sha256BytesHex $bytes))
+      continue
+    }
+    $xmlData = $part.SelectSingleNode('pkg:xmlData', $NamespaceManager)
+    if (-not $xmlData) { throw "source object payload part $partName has no content" }
+    $digests.Add((Get-Sha256Hex (ConvertTo-StableEmbeddedXml $xmlData $false)))
+  }
+  return @($digests | Sort-Object -Unique)
+}
+
+function Get-SourceObjectEvidence {
+  param(
+    [Parameter(Mandatory = $true)][System.Xml.XmlNode]$ContainerNode,
+    [Parameter(Mandatory = $true)][xml]$PackageDocument,
+    [Parameter(Mandatory = $true)][System.Xml.XmlNamespaceManager]$NamespaceManager,
+    [Parameter(Mandatory = $true)][string]$SourceIdentity,
+    [Parameter(Mandatory = $true)][string]$TemplateId,
+    [Parameter(Mandatory = $true)][string]$TableRole,
+    [Parameter(Mandatory = $true)][int]$SourceTableIndex,
+    [Parameter(Mandatory = $true)][string]$SourceCellId,
+    [Parameter(Mandatory = $true)][string]$ContainerCategory
+  )
+  if ($ContainerCategory -notin @('embedded-equation','floating-overline')) { throw "unsupported source object category $ContainerCategory" }
+  $canonical = ConvertTo-StableEmbeddedXml $ContainerNode $false
+  $payloadDigests = @(Get-RelatedPayloadDigests $ContainerNode $PackageDocument $NamespaceManager)
+  $digestMaterial = "gc-source-object-v2|$ContainerCategory|$canonical|$($payloadDigests -join '|')"
+  return [pscustomobject]@{
+    templateId = $TemplateId; tableRole = $TableRole; sourceTableIndex = $SourceTableIndex
+    sourceCellId = $SourceCellId; sourceIdentity = $SourceIdentity
+    containerCategory = $ContainerCategory; containerType = [string]$ContainerNode.LocalName
+    sourceDigest = Get-Sha256Hex $digestMaterial
+    payloadDigests = $payloadDigests
+  }
+}
+
+function Assert-ReviewedSourceObjects {
+  param(
+    [object[]]$Candidates,
+    [object[]]$Approvals,
+    [string]$TemplateId,
+    [string]$TableRole,
+    [int]$SourceTableIndex
+  )
+  $Candidates = @($Candidates); $Approvals = @($Approvals)
+  if ($Candidates.Count -ne $Approvals.Count) { throw "$TemplateId/$TableRole/$SourceTableIndex source object count $($Candidates.Count) differs from reviewed count $($Approvals.Count)" }
+  $candidateIds = @($Candidates | ForEach-Object { $_.sourceIdentity })
+  if (@($candidateIds | Sort-Object -Unique).Count -ne $candidateIds.Count) { throw "$TemplateId/$TableRole/$SourceTableIndex duplicate source object identity" }
+  foreach ($candidate in $Candidates) {
+    if ($candidate.templateId -ne $TemplateId) { throw "$TemplateId/$TableRole/$SourceTableIndex source object template context mismatch" }
+    if ($candidate.tableRole -ne $TableRole) { throw "$TemplateId/$TableRole/$SourceTableIndex source object role context mismatch" }
+    if ([int]$candidate.sourceTableIndex -ne $SourceTableIndex) { throw "$TemplateId/$TableRole/$SourceTableIndex source object table context mismatch" }
+  }
+  $result = [Collections.Generic.List[object]]::new()
+  foreach ($approval in $Approvals) {
+    $candidate = @($Candidates | Where-Object { $_.sourceIdentity -eq $approval.sourceIdentity })
+    if ($candidate.Count -ne 1) { throw "$TemplateId/$TableRole/$SourceTableIndex source identity $($approval.sourceIdentity) missing or duplicated" }
+    $candidate = $candidate[0]
+    if ($candidate.sourceCellId -ne $approval.sourceCellId) { throw "$TemplateId/$TableRole/$SourceTableIndex source object cell mismatch" }
+    if ($candidate.containerCategory -ne $approval.containerCategory) { throw "$TemplateId/$TableRole/$SourceTableIndex source object category mismatch" }
+    if ($candidate.sourceDigest -ne $approval.sourceDigest) { throw "$TemplateId/$TableRole/$SourceTableIndex source object digest mismatch" }
+    $result.Add([pscustomobject]@{ approval = $approval; candidate = $candidate })
+  }
+  return @($result)
 }
 
 function Get-ApprovedEmbeddedObjectRun {
   param(
     [System.Xml.XmlNode]$RunNode,
     [string]$Identity,
-    [System.Xml.XmlNamespaceManager]$NamespaceManager
+    [System.Xml.XmlNamespaceManager]$NamespaceManager,
+    $Context
   )
 
   $allowedTextChildren = @('rPr','t','instrText','tab','br','cr','noBreakHyphen','softHyphen')
@@ -505,14 +604,17 @@ function Get-ApprovedEmbeddedObjectRun {
   if ($visibleChildren.Count -eq 0) { return $null }
   if ($visibleChildren.Count -ne 1) { throw "${Identity}: expected one visible embedded-object container, got $($visibleChildren.Count)" }
 
-  return [pscustomobject]@{
-    kind = 'sourceObject'
-    containerType = [string]$visibleChildren[0].LocalName
-    sourceObjectHash = Get-StableEmbeddedObjectHash $visibleChildren[0]
-    properties = if ($RunNode.LocalName -eq 'r') {
+  $containerCategory = if ($visibleChildren[0].LocalName -eq 'object') { 'embedded-equation' } else { 'floating-overline' }
+  $sourceCellId = "$($Context.tableRole)-r$($Context.rowIndex)c$($Context.gridColumnIndex)"
+  $evidence = Get-SourceObjectEvidence -ContainerNode $visibleChildren[0] -PackageDocument $RunNode.OwnerDocument `
+    -NamespaceManager $NamespaceManager -SourceIdentity $Identity -TemplateId $Context.templateId `
+    -TableRole $Context.tableRole -SourceTableIndex $Context.sourceTableIndex -SourceCellId $sourceCellId `
+    -ContainerCategory $containerCategory
+  $evidence | Add-Member -NotePropertyName kind -NotePropertyValue 'sourceObject'
+  $evidence | Add-Member -NotePropertyName properties -NotePropertyValue $(if ($RunNode.LocalName -eq 'r') {
       Convert-RunProperties ($RunNode.SelectSingleNode('w:rPr', $NamespaceManager)) $NamespaceManager
-    } else { $null }
-  }
+    } else { $null })
+  return $evidence
 }
 
 function Convert-TableCapture {
@@ -578,26 +680,19 @@ function Convert-TableCapture {
 
   $sourceObjects = @($cells | ForEach-Object { $_.paragraphs } | ForEach-Object { $_.runs } |
     Where-Object { $_.kind -eq 'sourceObject' })
-  if ($sourceObjects.Count -ne $tableApprovals.Count) {
-    throw "${tableApprovalKey}: source-visible object count $($sourceObjects.Count) differs from reviewed count $($tableApprovals.Count)"
+  $authenticated = if ($script:objectEvidenceAuditMode) { @() } else {
+    @(Assert-ReviewedSourceObjects -Candidates $sourceObjects -Approvals $tableApprovals `
+      -TemplateId $TemplateId -TableRole $Role -SourceTableIndex $SourceTableIndex)
   }
   $approvedObjects = @(
-    foreach ($approval in $tableApprovals) {
-      $candidate = if ($sourceObjects.Count -eq 1) { $sourceObjects[0] }
-      elseif ($approval.semanticType -eq 'externalSampleAverage') {
-        @($sourceObjects | Where-Object { $_.containerType -ne 'object' })[0]
-      } elseif ($approval.semanticType -eq 'sampleMean') {
-        @($sourceObjects | Where-Object { $_.containerType -eq 'object' })[0]
-      } else { $sourceObjects[0] }
-      if (-not $candidate) { throw "${tableApprovalKey}: no source object matches $($approval.semanticType)" }
-      $containerCategory = if ($approval.semanticType -eq 'externalSampleAverage') { 'floating-overline' } else { 'embedded-equation' }
-      $stableApprovalHash = Get-Sha256Hex ("gc-word-visible-object-v1|$($approval.identity)|$($approval.semanticType)|$containerCategory")
-      if ($stableApprovalHash -ne $approval.objectHash) {
-        throw "${tableApprovalKey}: unknown embedded object hash $stableApprovalHash for $($approval.identity)"
-      }
+    foreach ($pair in $authenticated) {
+      $approval = $pair.approval; $candidate = $pair.candidate
       [pscustomobject]@{
         objectIdentity = $approval.identity
-        objectHash = $stableApprovalHash
+        sourceIdentity = $candidate.sourceIdentity
+        sourceDigest = $candidate.sourceDigest
+        sourceCellId = $candidate.sourceCellId
+        containerCategory = $candidate.containerCategory
         semanticType = $approval.semanticType
         targetCellId = $approval.targetCellId
         consumeAdjacentText = $approval.consumeAdjacentText
@@ -658,6 +753,14 @@ function Convert-TableCapture {
     }
     rows = @($rows)
     cells = @($cells)
+    sourceObjectEvidence = @($sourceObjects | ForEach-Object {
+      [pscustomobject]@{
+        templateId = $_.templateId; tableRole = $_.tableRole; sourceTableIndex = $_.sourceTableIndex
+        sourceCellId = $_.sourceCellId; sourceIdentity = $_.sourceIdentity
+        containerCategory = $_.containerCategory; containerType = $_.containerType
+        sourceDigest = $_.sourceDigest; payloadDigests = $_.payloadDigests
+      }
+    })
     embeddedObjects = $approvedObjects
     sourceOoxmlHash = Get-Sha256Hex (ConvertTo-StableEmbeddedXml $tableNode)
     wordOpenXml = $Capture.wordOpenXml
@@ -764,11 +867,23 @@ try {
   [GC]::WaitForPendingFinalizers()
 }
 
-[pscustomobject]@{
+$extractResult = [pscustomobject]@{
   generatedAt = [DateTime]::UtcNow.ToString('o')
   templates = @($templates)
   errors = @($errors)
-} | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $OutputPath -Encoding utf8
+}
+
+if ($script:objectEvidenceAuditMode) {
+  $auditDirectory = Split-Path -Parent $ObjectEvidenceAuditPath
+  if (-not (Test-Path -LiteralPath $auditDirectory)) { New-Item -ItemType Directory -Path $auditDirectory -Force | Out-Null }
+  $evidence = @($templates | ForEach-Object { @($_.referenceTable.sourceObjectEvidence) + @($_.sampleTable.sourceObjectEvidence) })
+  [pscustomobject]@{ version = 2; generatedAt = [DateTime]::UtcNow.ToString('o'); entries = $evidence; errors = @($errors) } |
+    ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ObjectEvidenceAuditPath -Encoding utf8
+  Write-Host ("Audited {0} source objects; {1} errors" -f $evidence.Count, $errors.Count)
+} else {
+  $extractResult | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $OutputPath -Encoding utf8
+}
 
 $tableCount = $templates.Count * 2
-Write-Host ("Extracted {0} templates / {1} tables; {2} errors" -f $templates.Count, $tableCount, $errors.Count)
+if (-not $script:objectEvidenceAuditMode) { Write-Host ("Extracted {0} templates / {1} tables; {2} errors" -f $templates.Count, $tableCount, $errors.Count) }
+if ($errors.Count) { exit 1 }

@@ -372,7 +372,6 @@
     if (!table || typeof table !== 'object' || Array.isArray(table)) throw new Error('templateId=unknown tableRole=unknown cellId=table invalid table');
     if (typeof table.templateId !== 'string' || !table.templateId) fail(table, 'table', 'invalid templateId');
     if (typeof table.tableRole !== 'string' || !table.tableRole) fail(table, 'table', 'invalid tableRole');
-    integer(table.sourceTableIndex, table, 'table', 'sourceTableIndex', { positive: true });
     finiteNumber(table.widthPt, table, 'table', 'widthPt', { nonNegative: true });
     if (!Array.isArray(table.gridPt) || !table.gridPt.length) fail(table, 'table', 'gridPt must be a non-empty array');
     if (!Array.isArray(table.rows) || !Array.isArray(table.cells)) fail(table, 'table', 'rows and cells must be arrays');
@@ -477,11 +476,11 @@
         const rowContentStyle = renderRowContentStyle(row, table, rowIndex, cell);
         if (rowContentStyle) content = `<div class="word-row-content" style="${rowContentStyle}">${content}</div>`;
         const style = renderCellStyle(cell, table);
-        return `<td data-word-cell-id="${escapeHtml(cell.id)}"${cell.semanticContent ? ` data-fixed-semantic="${escapeHtml(cell.semanticContent)}"` : ''}${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
+        return `<td data-word-cell-id="${escapeHtml(cell.id)}"${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
       }).join('');
       return `<tr data-word-row-height-rule="${heightRule}">${cells}</tr>`;
     }).join('');
-    const tableHtml = `<table class="word-record-table" data-word-table-role="${escapeHtml(table.tableRole)}" data-source-table-index="${table.sourceTableIndex}" data-word-render-scale="${escapeHtml(scale)}" data-word-render-width-pt="${escapeHtml(widthPt)}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
+    const tableHtml = `<table class="word-record-table" data-word-template-id="${escapeHtml(table.templateId)}" data-word-table-role="${escapeHtml(table.tableRole)}" data-word-render-scale="${escapeHtml(scale)}" data-word-render-width-pt="${escapeHtml(widthPt)}" style="${tableStyle}">${colgroup}<tbody>${rows}</tbody></table>`;
     const canvasWidth = table.renderCanvasWidthPt ?? widthPt;
     const canvasHeight = table.renderCanvasHeightPt ?? table.renderHeightPt?.reduce((sum, height) => sum + height, 0);
     const frameStyle = [

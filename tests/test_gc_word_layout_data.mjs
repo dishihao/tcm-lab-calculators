@@ -116,6 +116,15 @@ if (requireExtract) {
   assert.equal(extract.templates.length, 33);
   assert.deepEqual(extract.errors, []);
 
+  for (const manifestEntry of entries) {
+    const extracted = extract.templates.find(item => item.templateId === manifestEntry.templateId);
+    assert.ok(extracted, `${manifestEntry.templateId}: private extract missing`);
+    assert.equal(extracted.referenceTable.sourceTableIndex, manifestEntry.referenceTableIndex,
+      `${manifestEntry.templateId}: private reference source-table join changed`);
+    assert.equal(extracted.sampleTable.sourceTableIndex, manifestEntry.sampleTableIndex,
+      `${manifestEntry.templateId}: private sample source-table join changed`);
+  }
+
   const tables = extract.templates.flatMap(({ referenceTable, sampleTable }) => [referenceTable, sampleTable]);
   assert.equal(tables.length, 66);
 
@@ -358,6 +367,8 @@ if (requireAsset) {
 
   const context = Object.create(null);
   const source = fs.readFileSync(assetPath, 'utf8');
+  assert.doesNotMatch(source, /sourceTableIndex|sourceTableNumber|sourceTableId/,
+    'public layout asset must not contain source-table provenance');
   vm.runInNewContext(`${source}\n;this.__layouts = GC_WORD_TABLE_LAYOUTS;`, context, {
     filename: assetPath,
   });

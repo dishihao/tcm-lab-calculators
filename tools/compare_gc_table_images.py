@@ -159,7 +159,7 @@ def text_state(value: object | None) -> str:
 def content_presence_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
     mismatches = []
     for key in sorted(set(source_cells) & set(web_cells)):
-        source_text = source_cells[key].get('semanticContent') or source_cells[key].get('text')
+        source_text = source_cells[key].get('renderedSemanticExpected') or source_cells[key].get('text')
         actual_text = web_cells[key].get('text')
         source_state = text_state(source_text)
         actual_state = text_state(actual_text)
@@ -174,12 +174,12 @@ def content_presence_mismatches(source_cells: dict[str, dict], web_cells: dict[s
 def exact_content_mismatches(source_cells: dict[str, dict], web_cells: dict[str, dict]) -> list[dict]:
     mismatches = []
     for key, source in sorted(source_cells.items()):
-        expected = source.get('semanticContent')
+        expected = source.get('renderedSemanticExpected')
         if not expected:
             continue
-        actual = (web_cells.get(key) or {}).get('fixedSemantic')
+        actual = (web_cells.get(key) or {}).get('renderedSemantic')
         if expected != actual:
-            mismatches.append({'metric': 'exactFixedSemanticContent', 'cellId': key,
+            mismatches.append({'metric': 'exactRenderedSemanticContent', 'cellId': key,
                                'row': source['rowIndex'], 'column': source['gridColumnIndex'],
                                'expected': expected, 'actual': actual})
     return mismatches
@@ -371,13 +371,26 @@ def self_test() -> int:
         central = lambda image: round(np.where(mask(image)[10:90, 90:115].sum(axis=0) >= 60)[0].mean() + 90, 2)
         if abs(central(shifted) - central(web)) <= TOLERANCE: raise AssertionError('2 CSS-px rule shift passed after 144-to-96 normalization')
         if abs(central(word) - central(web)) > TOLERANCE: raise AssertionError('identical normalized fixture failed')
+        expected_semantic = 'text("x")|overline(text("A"))|fraction(text("B")|subscript(text("s")),text("C")|superscript(text("2")))'
         source = {'r1c1': {'rowIndex': 1, 'gridColumnIndex': 1, 'textLineCount': 1,
-                           'text': '', 'semanticContent': 'overline(A)'}}
-        dom = {'r1c1': {'textLineCount': 1, 'text': 'A', 'fixedSemantic': 'overline(A)'}}
+                           'text': '', 'renderedSemanticExpected': expected_semantic}}
+        dom = {'r1c1': {'textLineCount': 1, 'text': 'xABC2', 'renderedSemantic': expected_semantic,
+                        'fixedSemantic': expected_semantic}}
         if semantic_text_line_mismatches(source, dom): raise AssertionError('semantic text fixtures unexpectedly mismatched')
         if exact_content_mismatches(source, dom): raise AssertionError('matching fixed semantic content failed')
-        dom['r1c1']['fixedSemantic'] = 'plain(A)'
-        if len(exact_content_mismatches(source, dom)) != 1: raise AssertionError('semantic mismatch was not strict')
+        mutations = [
+            expected_semantic.replace('overline(', 'text("A")|ignored('),
+            expected_semantic.replace('fraction(', 'sequence('),
+            expected_semantic.replace('subscript(', 'text('),
+            expected_semantic.replace('superscript(', 'text('),
+            expected_semantic.replace('text("x")|overline', 'overline') + '|text("x")',
+            expected_semantic.replace('text("B")', 'text("D")'),
+            '',
+        ]
+        for mutation in mutations:
+            dom['r1c1']['renderedSemantic'] = mutation
+            dom['r1c1']['fixedSemantic'] = expected_semantic  # stale declaration must be irrelevant
+            if len(exact_content_mismatches(source, dom)) != 1: raise AssertionError(f'rendered semantic mutation passed: {mutation}')
         border = {'verticalSegments': [{'rowStart': 1, 'rowEnd': 1, 'positionPx': 0, 'startPx': 0, 'endPx': 20, 'thicknessPx': 1}], 'horizontalSegments': []}
         shifted_border = json.loads(json.dumps(border)); shifted_border['verticalSegments'][0]['positionPx'] = 2.01
         if compare_border_evidence(border, border): raise AssertionError('identical border evidence failed')
@@ -391,6 +404,7 @@ def audit(root: Path, strict: bool) -> int:
     runs = sorted(path for path in root.glob('visual-qa-*') if path.is_dir())
     if not runs: raise FileNotFoundError(f'no visual-qa-* run under {root}')
     run = runs[-1]; manifest = load_json(Path(__file__).with_name('gc-word-table-manifest.json')); expected_ids = [entry['templateId'] for entry in manifest['entries']]
+    manifest_by_id = {entry['templateId']: entry for entry in manifest['entries']}
     asset_path = Path(__file__).resolve().parents[1] / 'assets' / 'gc-word-table-visible-geometry.js'
     asset_source = asset_path.read_text(encoding='utf-8')
     asset_prefix = 'const GC_WORD_TABLE_VISIBLE_GEOMETRY = Object.freeze('
@@ -410,6 +424,9 @@ def audit(root: Path, strict: bool) -> int:
             required = [folder / f'{role}-word.png', folder / f'{role}-word.json', folder / f'{role}-web.png', folder / f'{role}-web.json'] if folder else []
             if not folder or not all(path.exists() for path in required): missing.append(f'{template_id}/{role}'); continue
             source_meta, web = load_json(required[1]), load_json(required[3]); word, web_image = read_normalized(required[0], source_meta), read_normalized(required[2], web)
+            expected_source_index = manifest_by_id[template_id][f'{role}TableIndex']
+            if int(source_meta.get('sourceTableIndex', -1)) != int(expected_source_index):
+                raise ValueError(f'{template_id}/{role}: private source-table join differs from manifest')
             visible = visible_asset.get(template_id, {}).get(role)
             private = private_asset.get(template_id, {}).get(role)
             if not visible or not private:

@@ -1,5 +1,7 @@
 # GC Word-table final whole-branch review fix report
 
+> **Superseded by authorized round 2 (2026-09-01):** the source-object authentication, declaration-based semantic QA and public source-table-index conclusions in this report were subsequently corrected. Use `final-fix-round2-report.md` as the authoritative final evidence.
+
 Date: 2026-08-31
 
 Status: **DONE**

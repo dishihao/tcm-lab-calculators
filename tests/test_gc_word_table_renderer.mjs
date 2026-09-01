@@ -94,7 +94,8 @@ assert.match(html, /^<div class="word-indent-canvas"/);
 assert.match(html, /<div class="word-record-frame"/);
 assert.match(html, /<table class="word-record-table"/);
 assert.match(html, /data-word-table-role="reference"/);
-assert.match(html, /data-source-table-index="7"/);
+assert.match(html, /data-word-template-id="renderer-fixture"/);
+assert.doesNotMatch(html, /data-source-table-(?:index|number|id)/i);
 assert.match(html, /<col style="width:120pt">/);
 assert.match(html, /<td[^>]*rowspan="2" colspan="2"/);
 assert.match(html, /<p style="margin:0;text-align:center;margin-top:1pt;margin-bottom:2pt;line-height:1;font-family:SimSun;font-size:10.5pt;letter-spacing:0.25pt">/);
@@ -200,7 +201,8 @@ for (const layout of Object.values(layoutsContext.layouts)) {
       output: binding => `<output data-bound="${binding.field}"></output>`,
     });
     assert.match(rendered, new RegExp(`data-word-table-role="${sourceTable.tableRole}"`));
-    assert.match(rendered, new RegExp(`data-source-table-index="${sourceTable.sourceTableIndex}"`));
+    assert.match(rendered, new RegExp(`data-word-template-id="${layout.templateId}"`));
+    assert.doesNotMatch(rendered, /data-source-table-(?:index|number|id)/i);
     assert.doesNotMatch(rendered, /undefined|null/);
   }
 }

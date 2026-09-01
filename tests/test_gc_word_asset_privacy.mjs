@@ -10,7 +10,7 @@ const assets = [
   ['assets/gc-record-table-layouts.js', 'GC_WORD_TABLE_LAYOUTS'],
   ['assets/gc-word-table-visible-geometry.js', 'GC_WORD_TABLE_VISIBLE_GEOMETRY'],
 ];
-const forbiddenKeys = /^(?:sourceFile|sourcePath|sourceSha256|sourceOoxmlHash|imageDpi|rowBoundariesPx144|outerBoundariesPx144|boundaryAssertions|recoveryReason|temporarySuffix|usedTempRecovery|wordOpenXml|ooxml|mathOoxml|objectHash)$/i;
+const forbiddenKeys = /^(?:sourceFile|sourcePath|sourceSha256|sourceOoxmlHash|sourceTableIndex|sourceTableNumber|sourceTableId|sourceIdentity|sourceDigest|sourceCellId|sourceObjectEvidence|payloadDigests|containerCategory|containerType|imageDpi|rowBoundariesPx144|outerBoundariesPx144|boundaryAssertions|recoveryReason|temporarySuffix|usedTempRecovery|wordOpenXml|ooxml|mathOoxml|objectHash)$/i;
 const forbiddenStrings = /(?:[A-Za-z]:[\\/]|(?:^|[\\/])(?:visual-qa|output)[\\/]|<w:(?:object|pict|drawing)\b|<o:OLEObject\b|<v:(?:shape|imagedata)\b|PK\u0003\u0004)/i;
 
 function inspect(value, location) {
@@ -33,5 +33,9 @@ for (const [relative, globalName] of assets) {
   vm.runInNewContext(`${source}\n;this.value = ${globalName};`, context, { filename });
   inspect(context.value, globalName);
 }
+
+const rendererSource = fs.readFileSync(path.join(root, 'assets', 'gc-word-table-renderer.js'), 'utf8');
+assert.doesNotMatch(rendererSource, /data-source-table-(?:index|number|id)/i,
+  'renderer must not emit source-table provenance into public DOM');
 
 console.log('PASS: browser-loaded GC Word assets contain runtime data only');

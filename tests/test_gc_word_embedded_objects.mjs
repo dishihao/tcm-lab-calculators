@@ -17,10 +17,13 @@ assert.equal(registry.version, 1);
 assert.equal(registry.entries.length, 95, 'all 95 source-visible legacy objects must be approved');
 assert.equal(new Set(registry.entries.map(entry => entry.identity)).size, 95,
   'source-cell identities must be unique');
-assert.equal(new Set(registry.entries.map(entry => `${entry.identity}|${entry.objectHash}`)).size, 95,
-  'identity/hash approval keys must be unique');
+assert.equal(new Set(registry.entries.map(entry => `${entry.sourceIdentity}|${entry.sourceDigest}`)).size, 95,
+  'source identity/digest approval keys must be unique');
 for (const entry of registry.entries) {
-  assert.match(entry.objectHash, /^[a-f0-9]{64}$/);
+  assert.match(entry.sourceDigest, /^[a-f0-9]{64}$/);
+  assert.match(entry.sourceIdentity, new RegExp(`^${entry.templateId}\\|${entry.tableRole}\\|${entry.sourceTableIndex}\\|`));
+  assert.ok(entry.sourceCellId.startsWith(`${entry.tableRole}-r`));
+  assert.ok(['embedded-equation', 'floating-overline'].includes(entry.containerCategory));
   assert.ok(['externalReferenceAverage', 'externalSampleAverage', 'sampleMean', 'internalCorrectionFactor']
     .includes(entry.semanticType), `${entry.identity}: unknown reviewed semantic type`);
   assert.ok(registry.semanticAsts?.[entry.semanticType], `${entry.identity}: semantic AST missing`);
@@ -41,23 +44,30 @@ const extractedObjects = extract.templates.flatMap(template => ['referenceTable'
   .flatMap(tableKey => template[tableKey].embeddedObjects ?? []));
 assert.equal(extractedObjects.length, 95, 'extract must preserve all 95 approved objects');
 for (const item of extractedObjects) {
-  assert.match(item.objectHash, /^[a-f0-9]{64}$/);
+  assert.match(item.sourceDigest, /^[a-f0-9]{64}$/);
+  assert.equal(typeof item.sourceIdentity, 'string');
   assert.ok(!('objectOoxml' in item), 'raw embedded OOXML must not survive extraction output');
   assert.ok(!('binary' in item), 'embedded binary data must not survive extraction output');
   assert.equal(item.approved, true, `${item.objectIdentity}: object must be registry-approved`);
+  const registryEntry = registry.entries.find(entry => entry.identity === item.objectIdentity);
+  assert.ok(registryEntry, `${item.objectIdentity}: registry entry missing`);
+  assert.equal(item.sourceIdentity, registryEntry.sourceIdentity);
+  assert.equal(item.sourceDigest, registryEntry.sourceDigest);
+  assert.equal(item.sourceCellId, registryEntry.sourceCellId);
+  assert.equal(item.containerCategory, registryEntry.containerCategory);
 }
 
 const { normalizeEmbeddedObjectRun } = await import(`${pathToFileURL(builderPath).href}?embedded=${Date.now()}`);
 const approved = registry.entries[0];
 const approvedAst = registry.semanticAsts[approved.semanticType];
 assert.deepEqual(
-  normalizeEmbeddedObjectRun({ kind: 'embeddedObject', objectHash: approved.objectHash,
-    objectIdentity: approved.identity, approved: true }, approved.identity),
+  normalizeEmbeddedObjectRun({ kind: 'embeddedObject', sourceDigest: approved.sourceDigest,
+    sourceIdentity: approved.sourceIdentity, objectIdentity: approved.identity, approved: true }, approved.identity),
   { kind: 'math', math: approvedAst },
 );
-assert.throws(() => normalizeEmbeddedObjectRun({ kind: 'embeddedObject', objectHash: '0'.repeat(64),
-  objectIdentity: approved.identity, approved: false }, approved.identity),
-/unknown embedded object hash/);
+assert.throws(() => normalizeEmbeddedObjectRun({ kind: 'embeddedObject', sourceDigest: '0'.repeat(64),
+  sourceIdentity: approved.sourceIdentity, objectIdentity: approved.identity, approved: false }, approved.identity),
+/unknown embedded object digest/);
 
 const context = Object.create(null);
 vm.runInNewContext(`${fs.readFileSync(assetPath, 'utf8')}\n;this.layouts = GC_WORD_TABLE_LAYOUTS;`, context);
@@ -74,6 +84,16 @@ for (const templateId of ['patchouli-patchoulol', 'patchouli-patchoulol-finished
   const formulaCell = table.cells.find(cell => cell.id === 'reference-r10c1');
   assert.ok(formulaCell.paragraphs.some(paragraph => paragraph.runs.some(run => run.kind === 'math')),
     `${templateId}: fixed correction-factor formula must be rendered in source cell`);
+}
+
+for (const templateId of ['amomum-bornyl-acetate', 'amomum-bornyl-acetate-finished-national',
+  'amomum-bornyl-acetate-finished-shanghai', 'amomum-bornyl-acetate-finished-beijing']) {
+  const meanCell = context.layouts[templateId].sampleTable.cells.find(cell => cell.id === 'sample-r10c1');
+  const runs = meanCell.paragraphs.flatMap(paragraph => paragraph.runs);
+  const mathIndex = runs.findIndex(run => run.kind === 'math');
+  const suffixIndex = runs.findIndex(run => run.kind === 'text' && /[（(]/u.test(run.text));
+  assert.ok(mathIndex >= 0 && suffixIndex > mathIndex,
+    `${templateId}: rendered mean overline must precede the percent suffix`);
 }
 
 console.log('PASS: 95 reviewed legacy Word objects convert to safe semantic AST and unknown objects fail closed');

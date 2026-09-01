@@ -73,7 +73,9 @@ const SAMPLE_LABELS = Object.freeze({
 const FIXED_ONLY_LABELS = new Set(['样品编号', '1', '2']);
 const RAW_KEYS = new Set([
   'ooxml', 'mathOoxml', 'wordOpenXml', 'sourceOoxml', 'internalQaImage',
-  'sourceFile', 'sourceOoxmlHash', 'objectHash', 'objectIdentity',
+  'sourceFile', 'sourceOoxmlHash', 'sourceTableIndex', 'objectHash', 'objectIdentity',
+  'sourceIdentity', 'sourceCellId', 'sourceDigest', 'sourceObjectEvidence', 'payloadDigests',
+  'containerCategory', 'containerType', 'semanticContent',
   'usedTempRecovery', 'recoveryReason', 'temporarySuffix',
 ]);
 
@@ -186,8 +188,9 @@ export function normalizeOfficeMath(mathOoxml) {
 export function normalizeEmbeddedObjectRun(run, expectedIdentity) {
   const approved = EMBEDDED_BY_IDENTITY.get(expectedIdentity);
   if (!approved || !run?.approved || run.objectIdentity !== expectedIdentity
-      || run.objectHash !== approved.objectHash) {
-    throw new Error(`${expectedIdentity}: unknown embedded object hash ${String(run?.objectHash)}`);
+      || run.sourceIdentity !== approved.sourceIdentity
+      || run.sourceDigest !== approved.sourceDigest) {
+    throw new Error(`${expectedIdentity}: unknown embedded object digest ${String(run?.sourceDigest)}`);
   }
   const ast = EMBEDDED_REGISTRY.semanticAsts[approved.semanticType];
   if (!ast) throw new Error(`${expectedIdentity}: approved semantic AST missing`);
@@ -235,7 +238,7 @@ function injectApprovedSemantic(cell, approval) {
   }
   const paragraph = cell.paragraphs[0];
   if (approval.semanticType === 'sampleMean') {
-    const suffixIndex = paragraph.runs.findIndex(run => run.kind === 'text' && /[（(]%/.test(run.text));
+    const suffixIndex = paragraph.runs.findIndex(run => run.kind === 'text' && /[（(]/u.test(run.text));
     paragraph.runs.splice(suffixIndex < 0 ? paragraph.runs.length : suffixIndex, 0, mathRun);
     cell.semanticContent = `平均含量|overline(X)|（%）`;
     return;
@@ -291,9 +294,10 @@ export function normalizeWordTable(rawTable, context = {}) {
 
   for (const object of rawTable.embeddedObjects ?? []) {
     const approval = EMBEDDED_BY_IDENTITY.get(object.objectIdentity);
-    if (!approval || !object.approved || approval.objectHash !== object.objectHash
+    if (!approval || !object.approved || approval.sourceIdentity !== object.sourceIdentity
+        || approval.sourceDigest !== object.sourceDigest
         || approval.targetCellId !== object.targetCellId) {
-      throw new Error(`templateId=${templateId} tableRole=${tableRole} unknown embedded object hash ${String(object.objectHash)}`);
+      throw new Error(`templateId=${templateId} tableRole=${tableRole} unknown embedded object digest ${String(object.sourceDigest)}`);
     }
     const target = cells.find(cell => cell.id === approval.targetCellId);
     if (!target) throw new Error(`${approval.identity}: target cell missing`);

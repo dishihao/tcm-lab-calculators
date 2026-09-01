@@ -74,7 +74,7 @@ assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].se
   '含量测定: 初始化后没有保留模板');
 
 // 精确 GC 初始化：清空新增的批次/来源/进样量/峰面积及输出，
-// 但保留模板、源固定文字、源表编号和可见布局。
+// 但保留模板、源固定文字、公开安全的模板/角色路由和可见布局。
 await field(page, 'assay.tech').selectOption('gc');
 const assayProductChange = page.locator('[data-change-assay-product]');
 if (await assayProductChange.count()) await assayProductChange.click();
@@ -92,8 +92,9 @@ const gcTemplateBeforeInit = await page.evaluate(() => {
   if (!standard) throw new Error('广藿香标准原文为空');
   if (!standard.includes('百秋李醇')) throw new Error(`百秋李醇标准原文缺失: ${standard}`);
   if (tables.length !== 2) throw new Error(`精确 GC 未渲染两张 Word 表: ${tables.length}`);
-  const sourceTables = tables.map(table => Number(table.getAttribute('data-source-table-index')));
-  if (JSON.stringify(sourceTables) !== JSON.stringify([10, 11])) throw new Error(`广藿香源表编号错误: ${sourceTables}`);
+  const routes = tables.map(table => ({ templateId: table.getAttribute('data-word-template-id'), role: table.getAttribute('data-word-table-role') }));
+  if (JSON.stringify(routes) !== JSON.stringify([{ templateId: 'patchouli-patchoulol', role: 'reference' }, { templateId: 'patchouli-patchoulol', role: 'sample' }])) throw new Error(`广藿香公开路由错误: ${JSON.stringify(routes)}`);
+  if (tables.some(table => table.hasAttribute('data-source-table-index'))) throw new Error('精确 GC DOM 泄露源表索引');
   const geometry = tables.map(table => ({
     width: Number(table.getAttribute('data-word-render-width-pt')),
     scale: Number(table.getAttribute('data-word-render-scale')),
@@ -107,7 +108,7 @@ const gcTemplateBeforeInit = await page.evaluate(() => {
     sample: [cellText(tables[1], '样品编号'), cellText(tables[1], '正十八烷峰面积'), cellText(tables[1], '百秋李醇面积')],
   };
   if (fixedLabels.reference.some(text => !text) || fixedLabels.sample.some(text => !text)) throw new Error('精确 GC 源表固定标签缺失');
-  return { id: store['assay.template'], standard, sourceTables, geometry, fixedLabels };
+  return { id: store['assay.template'], standard, routes, geometry, fixedLabels };
 });
 for (const [key, value] of Object.entries({
   'assay.refBatch': 'REF-INIT', 'assay.refSource': 'SRC-INIT', 'assay.refInjection': '0.8',
@@ -138,7 +139,7 @@ for (const key of ['assay.out.Aref', 'assay.out.A.1', 'assay.out.A.2', 'assay.ou
 const gcTemplateAfterInit = await page.evaluate(() => ({
   id: store['assay.template'],
   standard: document.querySelector('.sheet.active')?.querySelector('.standard-quote')?.innerText || '',
-  sourceTables: Array.from(document.querySelector('.sheet.active')?.querySelectorAll('.word-record-table') || []).map(table => Number(table.getAttribute('data-source-table-index'))),
+  routes: Array.from(document.querySelector('.sheet.active')?.querySelectorAll('.word-record-table') || []).map(table => ({ templateId: table.getAttribute('data-word-template-id'), role: table.getAttribute('data-word-table-role') })),
   geometry: Array.from(document.querySelector('.sheet.active')?.querySelectorAll('.word-record-table') || []).map(table => ({
     width: Number(table.getAttribute('data-word-render-width-pt')),
     scale: Number(table.getAttribute('data-word-render-scale')),
@@ -155,7 +156,7 @@ const gcTemplateAfterInit = await page.evaluate(() => ({
   })(),
 }));
 assert(JSON.stringify(gcTemplateAfterInit) === JSON.stringify(gcTemplateBeforeInit),
-  `精确气相初始化不应改变模板、标准原文、源表编号或可见布局: ${JSON.stringify(gcTemplateBeforeInit)} -> ${JSON.stringify(gcTemplateAfterInit)}`);
+  `精确气相初始化不应改变模板、标准原文、公开路由或可见布局: ${JSON.stringify(gcTemplateBeforeInit)} -> ${JSON.stringify(gcTemplateAfterInit)}`);
 
 for (const item of ['microscopy', 'tlc', 'physicochemical']) {
   const template = await page.evaluate(id => IDENTIFICATION_TEMPLATES.find(t => t.item === id), item);
