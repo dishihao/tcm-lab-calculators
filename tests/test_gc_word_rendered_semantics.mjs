@@ -46,7 +46,24 @@ try {
   assert.notEqual(await parse(goodFraction.replace('>A<', '>B<')), fractionExpected,
     'mutated visible text leaf passed');
 
-  console.log('PASS: semantic QA derives overline/fraction/subscript/superscript/text/order from rendered DOM and ignores stale declarations');
+  const visibilityFailures = [
+    ['opacity 0 semantic element', `<div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline" style="opacity:0"><span class="word-math-text">X</span></span><span>（%）</span></p></div>`, /opacity|visible ink/],
+    ['transparent semantic text', `<div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline"><span class="word-math-text" style="color:transparent">X</span></span><span>（%）</span></p></div>`, /text color|transparent/],
+    ['transparent overline rule', `<div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline" style="text-decoration-color:transparent"><span class="word-math-text">X</span></span><span>（%）</span></p></div>`, /overline color|transparent/],
+    ['transparent fraction rule', goodFraction.replace('word-math-denominator', 'word-math-denominator" style="border-top-color:transparent'), /fraction bar color|transparent/],
+    ['transparent ancestor', `<div style="opacity:0"><div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline"><span class="word-math-text">X</span></span></p></div></div>`, /opacity|ancestor|visible ink/],
+    ['hidden ancestor', `<div style="display:none"><div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline"><span class="word-math-text">X</span></span></p></div></div>`, /display|ancestor|visible ink/],
+    ['visibility-hidden ancestor', `<div style="visibility:hidden"><div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline"><span class="word-math-text">X</span></span></p></div></div>`, /visibility|ancestor|visible ink/],
+    ['filter-transparent ancestor', `<div style="filter:opacity(0)"><div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline"><span class="word-math-text">X</span></span></p></div></div>`, /opacity|ancestor|visible ink/],
+    ['zero-size semantic ink', `<div id="cell"${stale}><p><span>平均含量</span><span class="word-math-overline" style="display:inline-block;width:0;height:0;overflow:hidden;font-size:0"><span class="word-math-text">X</span></span></p></div>`, /geometry|zero|clipped|visible ink/],
+    ['fully clipped semantic ink', `<div id="cell"${stale}><p><span>平均含量</span><span style="display:inline-block;position:relative;width:4px;height:4px;overflow:hidden"><span class="word-math-overline" style="position:absolute;left:100px;top:100px"><span class="word-math-text">X</span></span></span></p></div>`, /clipped|visible ink|geometry/],
+    ['transparent text ancestor', `<div id="cell"${stale}><p style="color:rgba(0,0,0,0)"><span>平均含量</span><span class="word-math-overline"><span class="word-math-text">X</span></span></p></div>`, /text color|transparent/],
+  ];
+  for (const [name, html, error] of visibilityFailures) {
+    await assert.rejects(() => parse(html), error, `${name} self-certified with a stale declaration`);
+  }
+
+  console.log('PASS: semantic QA derives visible overline/fraction/subscript/superscript/text/order ink from rendered DOM and rejects transparent/hidden/zero/clipped ink despite stale declarations');
 } finally {
   await browser.close();
 }

@@ -426,3 +426,109 @@ PASS: 1545 个二氧化硫模板、滴定校正、计算、判定及初始化
 ## Remaining concerns
 
 None blocking. Identical source equations/line objects legitimately share one of 12 source-derived payload/metadata digests, while their 95 source identities/cells/table roles provide the required one-to-one location binding. Font rasterization differences remain within the design's permitted visual exception; exact rendered semantic structure and all table geometry are strict and green.
+
+## Authorized visibility-continuation repair — 2026-09-02
+
+Continuation base: `d3a84c00ae2fa6473c65d1d25afece99ab2c21d1`
+
+### Reproduced defect
+
+The round-two DOM parser authenticated semantic node type/order and direct `display`/`visibility`, but structurally correct nodes could still self-certify without visible ink when hidden through:
+
+- element or ancestor `opacity:0`;
+- CSS `filter:opacity(0)`;
+- transparent effective text color;
+- transparent overline decoration color;
+- transparent fraction-border color;
+- hidden/display-none/content-hidden ancestor;
+- zero-size geometry;
+- full clipping by an overflow ancestor.
+
+Initial live-Chrome RED:
+
+```text
+AssertionError: Missing expected rejection: opacity 0 semantic element self-certified with a stale declaration
+```
+
+Every negative fixture retained the stale `data-fixed-semantic` declaration so a declaration-based fallback could not satisfy the test.
+
+### Focused fix
+
+Only the QA-only parser and its live-browser test changed. Production rendering, assets, calculation/state code, extraction, source authentication, public privacy, border/indent geometry and recovery were untouched.
+
+The parser now fails closed unless semantic ink has all of the following:
+
+- every element and ancestor has visible `display`, `visibility` and `content-visibility`;
+- multiplied element/ancestor opacity and `filter:opacity()` remain greater than zero;
+- effective text color has nonzero alpha;
+- overline `text-decoration-color` has nonzero alpha;
+- fraction border style/width/color describe a visible rule;
+- text, overline, fraction, subscript and superscript nodes have measurable nonzero client/range rectangles;
+- at least part of each semantic ink/rule rectangle survives every ancestor `overflow-x`/`overflow-y` clipping intersection;
+- unsupported `clip-path` or legacy CSS `clip` fails closed rather than being guessed.
+
+Viewport position itself is not treated as invisibility because the production tables are intentionally scrollable; CSS clipping ancestors are authoritative.
+
+Live Chromium negative cases now cover:
+
+- semantic-element opacity zero;
+- transparent semantic text;
+- transparent overline rule;
+- transparent fraction bar;
+- transparent ancestor;
+- display-none ancestor;
+- visibility-hidden ancestor;
+- filter-opacity-zero ancestor;
+- transparent inherited text ancestor;
+- zero-size semantic ink;
+- semantic ink positioned fully outside an overflow-hidden ancestor.
+
+The existing overline/fraction/subscript/superscript/text/order/nesting/omission cases remain.
+
+Focused GREEN:
+
+```text
+PASS: semantic QA derives visible overline/fraction/subscript/superscript/text/order ink from rendered DOM and rejects transparent/hidden/zero/clipped ink despite stale declarations
+```
+
+Capture/comparator self-tests:
+
+```text
+SELF-TEST GREEN: fixed-Chrome sub/sup counted once; empty double-bordered cell counted 0; genuine two-line wrap counted 2
+SELF-TEST GREEN: normalized pixels, exact semantic content, and independent 1px border evidence are strict
+```
+
+### Fresh authoritative capture/strict evidence
+
+The existing fresh Word export and private source sidecars under `visual-qa-20260901-072039` were unchanged. A new browser capture was generated with the hardened parser and compared strictly:
+
+```text
+Captured 33 templates / 66 tables in ...\visual-qa-20260901-072039
+66/66 tables geometry matched; 0 border-run mismatches; 0 indent mismatches; 0 cell-wrap mismatches; 0 exact-content mismatches; warnings=0; unexpected dirs=0
+```
+
+`summary.json` remains:
+
+```text
+tablesCompared=66
+geometryMatched=66
+shiftedBorders=0
+indentMismatches=0
+wrapMismatches=0
+contentPresenceMismatches=0
+exactContentMismatches=0
+warningOnlyExclusions=0
+```
+
+All focused GC Word tests and the existing environment, GC/HPLC, identification, initialization, quality-search and sulfur-dioxide regression suites passed. `git diff --check` remained clean.
+
+### Continuation self-review and concerns
+
+- The change is confined to `tools/gc_word_rendered_semantic_capture.js`, `tests/test_gc_word_rendered_semantics.mjs` and this report.
+- Antialiasing differences remain permitted; the parser gates existence/visibility/structure of ink, not raster color similarity.
+- Partially clipped but still measurable ink remains valid; fully clipped or zero-area ink fails.
+- Stale declaration attributes are never read by the capture path.
+- No source file, public asset, runtime renderer, calculation, manifest mapping, threshold or recovery behavior changed.
+- No merge or push was performed.
+
+Remaining concerns: none.
