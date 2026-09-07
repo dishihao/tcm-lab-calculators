@@ -166,6 +166,10 @@ for (const templateId of audit.gcIds) {
   assert((await page.locator('.standard-quote').innerText()).includes(template.standardText),
     `${templateId}: 标准规定原文错误`);
   const exactTables = page.locator('.word-record-table');
+  for (const [key, expected] of Object.entries({ 'assay.refDrying': '——', 'assay.refSource': '中检院' })) {
+    const input = field(page, key);
+    if (await input.count()) assert(await input.inputValue() === expected, `${templateId}: ${key} 默认值错误`);
+  }
   assert(await exactTables.count() === 2, `${templateId}: 未渲染两张Word精确表`);
   assert(await page.locator('.generic-assay-table').count() === 0,
     `${templateId}: 气相混入通用含量表`);

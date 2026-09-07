@@ -817,9 +817,11 @@ function gcWordTableView(layout, tableRole){
 
 function assayWordInput(binding){
   const key = assayBindingField(binding.field);
+  const defaults = { 'assay.refDrying': '——', 'assay.refSource': '中检院' };
+  const value = store[key] === undefined ? (defaults[key] || '') : get(key);
   const inputMode = binding.inputMode === 'decimal' ? ' inputmode="decimal"' : '';
   return `<input class="cell word-cell-input" type="text"${inputMode} autocomplete="off"
-    data-k="${esc(key)}" value="${esc(get(key))}" aria-label="${esc(binding.sourceLabel || key)}">`;
+    data-k="${esc(key)}" value="${esc(value)}" aria-label="${esc(binding.sourceLabel || key)}">`;
 }
 
 function assayWordOutput(binding){

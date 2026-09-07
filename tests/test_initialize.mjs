@@ -130,12 +130,13 @@ for (const key of [
   'assay.smpIS.1.0', 'assay.smpIS.1.1', 'assay.smpIS.2.0', 'assay.smpIS.2.1',
 ]) assert(await field(page, key).inputValue() === '', `精确气相初始化后没有清空 ${key}`);
 for (const key of [
-  'assay.refBatch', 'assay.refSource', 'assay.refInjection', 'assay.internalBatch',
+  'assay.refBatch', 'assay.refInjection', 'assay.internalBatch',
   'assay.sampleInjection.1', 'assay.sampleInjection.2', 'assay.refA.0', 'assay.refA.4',
   'assay.smpA.1.0', 'assay.smpA.2.2',
 ]) assert(await field(page, key).inputValue() === '', `精确气相初始化后没有清空 ${key}`);
 for (const key of ['assay.out.Aref', 'assay.out.A.1', 'assay.out.A.2', 'assay.out.MEAN'])
   assert(await page.locator(`#${key.replaceAll('.', '\\.')}`).innerText() === '', `精确气相初始化后没有清空 ${key}`);
+assert(await field(page, 'assay.refSource').inputValue() === '中检院', '初始化后对照品来源应恢复默认值');
 const gcTemplateAfterInit = await page.evaluate(() => ({
   id: store['assay.template'],
   standard: document.querySelector('.sheet.active')?.querySelector('.standard-quote')?.innerText || '',
