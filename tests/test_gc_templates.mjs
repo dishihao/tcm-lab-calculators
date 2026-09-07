@@ -167,8 +167,9 @@ for (const templateId of audit.gcIds) {
     `${templateId}: 标准规定原文错误`);
   const exactTables = page.locator('.word-record-table');
   for (const [key, expected] of Object.entries({ 'assay.refDrying': '——', 'assay.refSource': '中检院' })) {
-    const input = field(page, key);
-    if (await input.count()) assert(await input.inputValue() === expected, `${templateId}: ${key} 默认值错误`);
+    assert(await field(page, key).count() === 0, `${templateId}: ${key} 不应为可填参数`);
+    const fixed = page.locator(`[data-fixed-field="${key}"]`);
+    if (await fixed.count()) assert(await fixed.innerText() === expected, `${templateId}: ${key} 固定文字错误`);
   }
   assert(await exactTables.count() === 2, `${templateId}: 未渲染两张Word精确表`);
   assert(await page.locator('.generic-assay-table').count() === 0,
@@ -432,7 +433,7 @@ assert(patchouliReferenceTable.includes('正十八烷来源') && patchouliRefere
 // 精确 GC 表中的批次/来源/进样量/峰面积都必须进入现有 assay.<field>
 // 状态快照；切换到另一份记录后不能串值。
 await field(page, 'assay.refBatch').fill('REF-PATCHOULI');
-await field(page, 'assay.refSource').fill('SRC-PATCHOULI');
+await page.evaluate(() => { store['assay.refSource'] = 'SRC-PATCHOULI'; store['assay.refDrying'] = 'OLD'; });
 await field(page, 'assay.refInjection').fill('0.8');
 await fillPeaks(page, 'assay.refA', [101, 102, 103, 104, 105]);
 await field(page, 'assay.internalBatch').fill('IS-PATCHOULI');
@@ -446,7 +447,6 @@ const bruceaReferenceTable = await page.locator('[data-assay-reference-table]').
 assert(bruceaReferenceTable.includes('苯甲酸苯酯批号') && bruceaReferenceTable.includes('油酸批号'),
   '鸦胆子内标法对照品表没有切换为本记录物质名称');
 await field(page, 'assay.refBatch').fill('REF-BRUCEA');
-await field(page, 'assay.refSource').fill('SRC-BRUCEA');
 await field(page, 'assay.refInjection').fill('0.9');
 await fillPeaks(page, 'assay.refA', [201, 202, 203, 204, 205]);
 await field(page, 'assay.internalBatch').fill('IS-BRUCEA');
@@ -455,7 +455,7 @@ await field(page, 'assay.sampleInjection.2').fill('2.1');
 await fillPeaks(page, 'assay.smpA.1', [31, 32, 33]);
 await fillPeaks(page, 'assay.smpA.2', [41, 42, 43]);
 assert(await field(page, 'assay.refBatch').inputValue() === 'REF-BRUCEA'
-  && await field(page, 'assay.refSource').inputValue() === 'SRC-BRUCEA'
+  && await page.locator('[data-fixed-field="assay.refSource"]').innerText() === '中检院'
   && await field(page, 'assay.sampleInjection.1').inputValue() === '2.0'
   && await field(page, 'assay.sampleInjection.2').inputValue() === '2.1'
   && await field(page, 'assay.refA.0').inputValue() === '201'
@@ -463,7 +463,7 @@ assert(await field(page, 'assay.refBatch').inputValue() === 'REF-BRUCEA'
   '鸦胆子切回前哨兵值没有正确写入');
 await chooseTemplate(page, 'patchouli-patchoulol');
 assert(await field(page, 'assay.refBatch').inputValue() === 'REF-PATCHOULI'
-  && await field(page, 'assay.refSource').inputValue() === 'SRC-PATCHOULI'
+  && await page.locator('[data-fixed-field="assay.refSource"]').innerText() === '中检院'
   && await field(page, 'assay.refInjection').inputValue() === '0.8',
   '切回广藿香后没有恢复其对照品批号、来源和进样量');
 assert(await field(page, 'assay.internalBatch').inputValue() === 'IS-PATCHOULI',

@@ -111,7 +111,7 @@ const gcTemplateBeforeInit = await page.evaluate(() => {
   return { id: store['assay.template'], standard, routes, geometry, fixedLabels };
 });
 for (const [key, value] of Object.entries({
-  'assay.refBatch': 'REF-INIT', 'assay.refSource': 'SRC-INIT', 'assay.refInjection': '0.8',
+  'assay.refBatch': 'REF-INIT', 'assay.refInjection': '0.8',
   'assay.internalBatch': 'IS-INIT', 'assay.sampleInjection.1': '1.0', 'assay.sampleInjection.2': '1.1',
   'assay.refA.0': '101', 'assay.refA.1': '102', 'assay.refA.2': '103', 'assay.refA.3': '104', 'assay.refA.4': '105',
   'assay.Cref': '2', 'assay.Cis': '1', 'assay.Q': '0',
@@ -136,7 +136,8 @@ for (const key of [
 ]) assert(await field(page, key).inputValue() === '', `精确气相初始化后没有清空 ${key}`);
 for (const key of ['assay.out.Aref', 'assay.out.A.1', 'assay.out.A.2', 'assay.out.MEAN'])
   assert(await page.locator(`#${key.replaceAll('.', '\\.')}`).innerText() === '', `精确气相初始化后没有清空 ${key}`);
-assert(await field(page, 'assay.refSource').inputValue() === '中检院', '初始化后对照品来源应恢复默认值');
+assert(await field(page, 'assay.refSource').count() === 0, '对照品来源不应为可填参数');
+assert(await page.locator('[data-fixed-field="assay.refSource"]').innerText() === '中检院', '初始化后对照品来源固定文字错误');
 const gcTemplateAfterInit = await page.evaluate(() => ({
   id: store['assay.template'],
   standard: document.querySelector('.sheet.active')?.querySelector('.standard-quote')?.innerText || '',
