@@ -55,7 +55,8 @@ const expectedStandard = template.standardText.replace(/^\d*\.?\s*标准规定\s
 assert((await page.locator('.sheet.active .standard-quote').innerText()).includes(expectedStandard),
   '标准规定原文未显示');
 
-await field(page, 'sulfur.C').fill('0.01');
+await field(page, 'sulfur.C.1').fill('0.01');
+await field(page, 'sulfur.C.2').fill('0.01');
 await field(page, 'sulfur.Vblank').fill('0.50');
 await field(page, 'sulfur.VblankCorr').fill('-0.01');
 await field(page, 'sulfur.Ws.1').fill('10');
@@ -71,10 +72,13 @@ assert(await page.locator('#sulfur\\.out\\.X\\.1').innerText() === '32.6', '供�
 assert(await page.locator('#sulfur\\.out\\.X\\.2').innerText() === '32.6', '供试品2计算错误');
 assert(await page.locator('#sulfur\\.out\\.MEAN').innerText() === '33', '平均含量修约错误');
 assert((await page.locator('#sulfur\\.judge').innerText()) === '符合规定', '限度判定错误');
+await field(page, 'sulfur.C.2').fill('0.02');
+assert(await page.locator('#sulfur\\.out\\.X\\.1').innerText() === '32.6', '修改样品2浓度不应影响样品1');
+assert(await page.locator('#sulfur\\.out\\.X\\.2').innerText() === '65.3', '样品2应使用本列滴定液浓度');
 
 page.once('dialog', dialog => dialog.accept());
 await page.locator('[data-initialize-project="sulfur"]').click();
-for (const key of ['sulfur.C', 'sulfur.Vblank', 'sulfur.Ws.1', 'sulfur.Vsample.1']) {
+for (const key of ['sulfur.C.1', 'sulfur.C.2', 'sulfur.Vblank', 'sulfur.Ws.1', 'sulfur.Vsample.1']) {
   assert(await field(page, key).inputValue() === '', `初始化未清空 ${key}`);
 }
 assert(await field(page, 'sulfur.limval').inputValue() === template.limit, '初始化后未保留模板限度');

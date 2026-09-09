@@ -52,7 +52,7 @@ for (const item of qualityItems) {
 
 await page.locator('[data-tab="assay"]').click();
 const assayTemplate = await page.evaluate(() =>
-  HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText)
+  HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText && HPLC_RECORD_LAYOUTS.templates[t.id]?.status === 'mapped')
 );
 await page.locator('[data-assay-search]').fill(assayTemplate.product);
 await page.locator(`[data-assay-product-choice="${assayTemplate.product}"]`).click();
@@ -167,13 +167,12 @@ for (const item of ['microscopy', 'tlc', 'physicochemical']) {
   await page.locator(`[data-identification-search="${item}"]`).fill(template.baseProduct);
   await page.locator(`[data-identification-product="${template.baseProduct}"]`).click();
   await page.locator(`[data-identification-template="${template.id}"]`).click();
-  await field(page, `${item}.sampleNo`).fill('TEST-001');
-  await field(page, `${item}.result`).fill('测试填写内容');
-  await field(page, `${item}.conclusion`).selectOption('符合规定');
+  await page.evaluate(project => {
+    store[`${project}.sampleNo`]='TEST-001';store[`${project}.result`]='测试填写内容';store[`${project}.conclusion`]='符合规定';
+  },item);
   await acceptInitialize(page, item);
-  assert(await field(page, `${item}.sampleNo`).inputValue() === '', `${item}: 样品编号没有清空`);
-  assert(await field(page, `${item}.result`).inputValue() === '', `${item}: 检验结果没有清空`);
-  assert(await field(page, `${item}.conclusion`).inputValue() === '', `${item}: 结论没有清空`);
+  assert(await page.evaluate(project => ['sampleNo','result','conclusion'].every(key => !store[`${project}.${key}`]), item), `${item}: 初始化没有清空历史录入数据`);
+  assert(await field(page, `${item}.result`).count() === 0, `${item}: 初始化不应创建原记录没有的填写表`);
   assert(await page.locator(`[data-identification-template="${template.id}"].selected`).count() === 1,
     `${item}: 初始化后没有保留鉴别模板`);
 }

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const s={window:{}};vm.runInNewContext(fs.readFileSync(new URL('../assets/gc-word-table-renderer.js',import.meta.url),'utf8'),s);
+const table={templateId:'source-test',tableRole:'result',widthPt:100,indentPt:0,gridPt:[100],rowCount:1,columnCount:1,rows:[{}],cells:[{id:'r1c1',row:0,column:0,rowSpan:1,colSpan:1,paragraphs:[{runs:[{kind:'text',text:'C标',properties:{fonts:{ascii:'Arial'},underline:{value:'single'}}},{kind:'input',field:'moisture.t1',widthEm:3,properties:{fontSizePt:12}},{kind:'text',text:'℃'}]}]}]};
+const html=s.window.GcWordTableRenderer.render(table,{inlineInput:b=>`<input data-k="${b.field}">`});
+assert.match(html,/font-family:Arial/);
+assert.match(html,/text-decoration:underline/);
+assert.match(html,/data-k="moisture.t1"/);
+assert.match(html,/℃/);
+assert.throws(()=>s.window.GcWordTableRenderer.render(table,{}),/missing inlineInput adapter/);
+const hostile=structuredClone(table);hostile.cells[0].paragraphs[0].runs[0].properties.fonts.ascii='Arial; color:red';
+assert.throws(()=>s.window.GcWordTableRenderer.render(hostile,{inlineInput:()=>''}),/unsupported font family/);
+console.log('PASS additional source fonts, source underline, inline field ordering, no CSS injection');

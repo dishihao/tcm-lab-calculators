@@ -10,6 +10,11 @@
     '宋体': 'SimSun',
     SimSun: 'SimSun',
     'Times New Roman': 'Times New Roman',
+    '仿宋_GB2312': 'FangSong_GB2312',
+    'Courier New': 'Courier New',
+    Arial: 'Arial',
+    Calibri: 'Calibri',
+    'MS Mincho': 'MS Mincho',
   });
   const BORDER_STYLES = Object.freeze({ single: 'solid', double: 'double', dotted: 'dotted', dashed: 'dashed' });
   const ALIGNMENTS = new Set(['left', 'center', 'right', 'justify', 'distribute']);
@@ -112,7 +117,9 @@
     if (cell.shading != null) {
       ensureKnownObjectKeys(cell.shading, new Set(['value', 'color', 'fill', 'themeColor', 'themeFill']), table, cell.id, 'shading');
       if (cell.shading.value !== 'clear' && cell.shading.value !== 'solid') fail(table, cell.id, 'unsupported shading value');
-      styles.push(`background-color:${cssColor(cell.shading.fill, table, cell.id, 'shading.fill')}`);
+      if (!(cell.shading.value === 'clear' && (cell.shading.fill == null || cell.shading.fill === 'auto'))) {
+        styles.push(`background-color:${cssColor(cell.shading.fill, table, cell.id, 'shading.fill')}`);
+      }
     }
     if (cell.verticalAlign != null) {
       if (!VERTICAL_ALIGNS.has(cell.verticalAlign)) fail(table, cell.id, 'unsupported vertical alignment');
@@ -204,8 +211,12 @@
     if (properties.smallCaps) styles.push('font-variant:small-caps');
     if (properties.vanish) styles.push('visibility:hidden');
     if (properties.underline != null) {
-      if (!['single', 'double', 'words', 'none'].includes(properties.underline)) fail(table, cellId, 'unsupported underline');
-      if (properties.underline !== 'none') styles.push('text-decoration:underline');
+      const underline = typeof properties.underline === 'string' ? { value:properties.underline } : properties.underline;
+      ensureKnownObjectKeys(underline, new Set(['value','color','themeColor']), table, cellId, 'underline');
+      if (!['single', 'double', 'words', 'none'].includes(underline.value)) fail(table, cellId, 'unsupported underline');
+      if (underline.value !== 'none') styles.push('text-decoration:underline');
+      if (underline.value === 'double') styles.push('text-decoration-style:double');
+      if (underline.color != null) styles.push(`text-decoration-color:${cssColor(underline.color, table, cellId, 'underline.color')}`);
     }
     ensureKnownObjectKeys(properties.fonts, new Set(['ascii', 'highAnsi', 'eastAsia', 'complexScript', 'asciiTheme', 'highAnsiTheme', 'eastAsiaTheme', 'complexScriptTheme']), table, cellId, 'run fonts');
     if (properties.fonts) {
@@ -302,7 +313,7 @@
     }
   }
 
-  function renderParagraph(paragraph, table, cellId) {
+  function renderParagraph(paragraph, table, cellId, adapters) {
     if (!paragraph || typeof paragraph !== 'object' || Array.isArray(paragraph)) fail(table, cellId, 'invalid paragraph');
     if (!Array.isArray(paragraph.runs)) fail(table, cellId, 'paragraph runs must be an array');
     const defaultRunProperties = paragraph.properties?.defaultRunProperties;
@@ -312,9 +323,22 @@
       if (run.kind === 'text') return renderTextRun({ ...run,
         properties: mergeRunProperties(defaultRunProperties, run.properties) }, table, cellId);
       if (run.kind === 'math') return renderMath(run.math, table, cellId);
+      if (run.kind === 'line') {
+        for (const key of ['x1','y1','x2','y2','weight']) finiteNumber(run[key],table,cellId,key);
+        if (run.weight<=0 || run.weight>12 || [run.x1,run.y1,run.x2,run.y2].some(value=>Math.abs(value)>=2000)) fail(table,cellId,'invalid source line');
+        return `<span style="position:relative;display:block;width:100%;height:1em"><svg aria-hidden="true" width="1" height="1" style="position:absolute;left:0;top:0;overflow:visible"><line x1="${run.x1*4/3}" y1="${run.y1*4/3}" x2="${run.x2*4/3}" y2="${run.y2*4/3}" stroke="black" stroke-width="${run.weight*4/3}"/></svg></span>`;
+      }
+      if (run.kind === 'input') {
+        if (typeof run.field !== 'string' || !run.field) fail(table, cellId, 'invalid inline input field');
+        if (typeof adapters?.inlineInput !== 'function') fail(table, cellId, 'missing inlineInput adapter');
+        const content = adapters.inlineInput(run);
+        if (typeof content !== 'string') fail(table, cellId, 'inlineInput adapter must return HTML string');
+        const runStyle = renderRunStyle(mergeRunProperties(defaultRunProperties, run.properties), table, cellId);
+        return `<span${runStyle ? ` style="${runStyle}"` : ''}>${content}</span>`;
+      }
       fail(table, cellId, `unsupported run kind ${String(run.kind)}`);
     }).join('');
-    return `<p style="${style}">${content}</p>`;
+    return `<p style="${style}">${content || '<br>'}</p>`;
   }
 
   function effectiveHeightRule(row) {
@@ -471,7 +495,7 @@
           if (typeof content !== 'string') fail(table, cell.id, `${binding.role} adapter must return HTML string`);
           content = `<div class="word-bound-content" style="${renderBoundContentStyle(cell, table)}">${content}</div>`;
         } else {
-          content = (cell.paragraphs ?? []).map(paragraph => renderParagraph(paragraph, table, cell.id)).join('');
+          content = (cell.paragraphs ?? []).map(paragraph => renderParagraph(paragraph, table, cell.id, adapters)).join('');
         }
         const rowContentStyle = renderRowContentStyle(row, table, rowIndex, cell);
         if (rowContentStyle) content = `<div class="word-row-content" style="${rowContentStyle}">${content}</div>`;

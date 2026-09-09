@@ -127,7 +127,7 @@ assert(await field(page, 'assay.tech').inputValue() === 'hplc', '默认方法不
 assert((await page.locator('[data-assay-picker] .quality-picker-title').innerText()).includes(`${audit.hplc.products} 个品名`),
   '液相品名总数没有显示');
 const hplcComplete = await page.evaluate(() =>
-  HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText)
+  HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText && HPLC_RECORD_LAYOUTS.templates[t.id]?.status === 'mapped')
 );
 const chosenHplc = await chooseTemplate(page, hplcComplete.id);
 assert(await field(page, 'assay.tech').inputValue() === 'hplc', '液相模板错误切换到气相');
@@ -135,8 +135,8 @@ assert(await field(page, 'assay.name').inputValue() === chosenHplc.name, '液相
 assert(await field(page, 'assay.limval').inputValue() === chosenHplc.limit, '液相判定限度错误');
 assert((await page.locator('.standard-quote').innerText()).includes(chosenHplc.standardText),
   '液相标准规定原文错误');
-assert(await page.locator('.word-record-table').count() === 0,
-  '液相不应混入气相Word精确表');
+assert(await page.locator('.word-record-table').count() === 2,
+  '液相应显示本记录的两张表');
 
 const rangeHplc = await page.evaluate(() => HPLC_TEMPLATES.find(t => t.limop === 'range' && t.upperLimit));
 await chooseTemplate(page, rangeHplc.id);
@@ -285,8 +285,8 @@ await chooseTemplate(page, 'patchouli-patchoulol');
 assert(await page.locator('#assay\\.out\\.Aref').innerText() === '',
   '精确 GC 未计算的输出必须保持 Word 原件空白，而非通用占位符');
 await chooseTemplate(page, hplcComplete.id);
-assert(await page.locator('#assay\\.out\\.Aref').innerText() === '—',
-  '通用 HPLC 未计算输出必须保留破折号占位符');
+assert(await page.locator('#assay\\.out\\.Aref').innerText() === '',
+  '源记录 HPLC 未计算输出应保持原表空白');
 await field(page, 'assay.tech').selectOption('gc');
 await page.locator('[data-assay-product]').fill('自定义品种');
 await page.locator('[data-assay-product]').press('Enter');
@@ -627,10 +627,10 @@ assert(missingLayoutPaths.genericTables === 2 && missingLayoutPaths.wordTables =
   '手动改变气相定量方法后没有使用两张通用表');
 
 await chooseTemplate(page, hplcComplete.id);
-assert(await page.locator('.generic-assay-table').count() === 2,
-  '液相没有继续使用两张通用含量表');
-assert(await page.locator('.word-record-table').count() === 0,
-  '液相不应混入气相Word精确表');
+assert(await page.locator('.generic-assay-table').count() === 0,
+  '已核对液相记录不应使用通用表');
+assert(await page.locator('.word-record-table').count() === 2,
+  '液相应切回本记录的两张源表');
 
 await page.screenshot({ path: 'C:/tmp/assay-templates.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);

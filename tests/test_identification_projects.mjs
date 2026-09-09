@@ -95,13 +95,12 @@ for (const item of ['microscopy', 'tlc', 'physicochemical']) {
 
   assert((await page.locator('.sheet.active .identification-source').innerText()).includes(template.label),
     `${item}: 当前模板名称错误`);
-  assert(await page.locator('.sheet.active .identification-block').count() === template.blocks.length,
-    `${item}: 正文分块数量错误`);
-  const firstBlockLines = await page.locator('.sheet.active .identification-block').first().locator('p').allInnerTexts();
-  assert(JSON.stringify(firstBlockLines) === JSON.stringify(template.blocks[0].lines),
-    `${item}: 模板正文与提取数据不一致`);
-  assert(await field(page, `${item}.result`).count() === 1, `${item}: 结果填写框缺失`);
-  assert(await field(page, `${item}.conclusion`).count() === 1, `${item}: 结论选项缺失`);
+  assert(await page.locator('.sheet.active .identification-block').count() === 0,
+    `${item}: 仅表格模式不应展示步骤正文`);
+  assert((await page.locator('.sheet.active .identification-table-status').innerText()).includes('没有独立'),
+    `${item}: 源记录无表状态没有明确显示`);
+  assert(await field(page, `${item}.result`).count() === 0, `${item}: 不应生成原记录不存在的通用填写框`);
+  assert(await field(page, `${item}.conclusion`).count() === 0, `${item}: 不应生成原记录不存在的通用结论选项`);
 }
 
 // 同名原料和成品必须作为两个独立模板出现。
@@ -132,21 +131,21 @@ assert(pairText.includes(`原料 ${pairRaw}`) && pairText.includes(`成品 ${pai
 const first = pair.templates[0];
 const second = pair.templates[1];
 await page.locator(`[data-identification-template="${first.id}"]`).click();
-await field(page, 'tlc.result').fill('模板一结果');
-await field(page, 'tlc.conclusion').selectOption('符合规定');
+await page.evaluate(() => {store['tlc.result']='模板一结果';store['tlc.conclusion']='符合规定';});
 await page.locator('[data-change-identification-product="tlc"]').click();
 await page.locator('[data-identification-search="tlc"]').fill(second.baseProduct);
 await page.locator(`[data-identification-product="${second.baseProduct}"]`).click();
 await page.locator(`[data-identification-template="${second.id}"]`).click();
-await field(page, 'tlc.result').fill('模板二结果');
+await page.evaluate(() => {store['tlc.result']='模板二结果';});
 await page.locator('[data-change-identification-product="tlc"]').click();
 await page.locator('[data-identification-search="tlc"]').fill(first.baseProduct);
 await page.locator(`[data-identification-product="${first.baseProduct}"]`).click();
 await page.locator(`[data-identification-template="${first.id}"]`).click();
-assert(await field(page, 'tlc.result').inputValue() === '模板一结果', '切回模板后填写结果没有恢复');
-assert(await field(page, 'tlc.conclusion').inputValue() === '符合规定', '切回模板后结论没有恢复');
+assert(await page.evaluate(() => store['tlc.result']) === '模板一结果', '表格模式不应破坏旧模板保存的数据');
+assert(await page.evaluate(() => store['tlc.conclusion']) === '符合规定', '表格模式不应破坏旧模板保存的结论');
+assert(await page.evaluate(() => IDENTIFICATION_TEMPLATES.every(t => window.IDENTIFICATION_RECORD_TABLES[t.id] === 'no-table')), '全部模板均需有源表审核结果');
 
 await page.screenshot({ path:'C:/tmp/identification-projects.png', fullPage:true });
 assert(errors.length === 0, `页面脚本错误：${errors.join('; ')}`);
 await browser.close();
-console.log('PASS: 2177 条显微/薄层/理化模板、搜索选择、原料成品分离及填写状态');
+console.log('PASS: 2177 条鉴别模板仅展示源表状态，原料成品选择及历史数据保留正常');

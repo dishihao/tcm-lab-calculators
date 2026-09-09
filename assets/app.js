@@ -565,8 +565,8 @@ const CALCS = [
     ],
     formula: () => `X = ${frac('(W<sub>1</sub> − W<sub>0</sub>) × V', 'W<sub>样</sub> × (1 − 水分) × V<sub>样</sub>')} × 100%`,
     compute(g, gs){
-      const Q = gs('Q');
       const x = [1,2].map(i => {
+        const Q = gs('Q', i);
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1', i), V = g('V', i), Vs = g('Vs', i);
         if (![W0, Ws, W1, V, Vs, Q].every(isFinite)) return NaN;
         const den = Ws * (1 - Q/100) * Vs;
@@ -575,8 +575,8 @@ const CALCS = [
       return { x };   // 汇总（修约→平均→偏差）统一交给 summarize()
     },
     subst(g, dp, he, gs){
-      const Q = gs('Q');
       return [1,2].map(i => {
+        const Q = gs('Q', i);
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1', i), V = g('V', i), Vs = g('Vs', i);
         if (![W0, Ws, W1, V, Vs, Q].every(isFinite)) return '';
         const den = Ws * (1 - Q/100) * Vs;
@@ -611,7 +611,6 @@ const CALCS = [
     ],
     formula: () => `X = ${frac('|V′<sub>样</sub> − V′<sub>空</sub>| × C × 0.032 × 10<sup>6</sup>', 'M')}（mg/kg）`,
     compute(g, gs){
-      const C = gs('C');
       const Vblank = gs('Vblank');
       const VblankCorrRaw = gs('VblankCorr');
       const VblankCorr = isFinite(VblankCorrRaw) ? VblankCorrRaw : 0;
@@ -622,6 +621,7 @@ const CALCS = [
         return isFinite(v) ? v + corr : NaN;
       });
       const x = [1,2].map((i, index) => {
+        const C = gs('C', i);
         const M = g('Ws', i), Vp = Vprime[index];
         if (![C, VblankPrime, Vp, M].every(isFinite) || M === 0) return NaN;
         return Math.abs(Vp - VblankPrime) * C * 0.032 * 1e6 / M;
@@ -629,12 +629,12 @@ const CALCS = [
       return { x, outputs:{ VblankPrime, Vprime } };
     },
     subst(g, dp, he, gs){
-      const C = gs('C');
       const Vblank = gs('Vblank');
       const VblankCorrRaw = gs('VblankCorr');
       const VblankCorr = isFinite(VblankCorrRaw) ? VblankCorrRaw : 0;
       const VblankPrime = isFinite(Vblank) ? Vblank + VblankCorr : NaN;
       return [1,2].map(i => {
+        const C = gs('C', i);
         const M = g('Ws', i), V = g('Vsample', i), corrRaw = g('VsampleCorr', i);
         const corr = isFinite(corrRaw) ? corrRaw : 0;
         const Vp = isFinite(V) ? V + corr : NaN;
@@ -709,6 +709,9 @@ function load(){
   try{
     const raw = localStorage.getItem(LS_KEY);
     if (raw) store = JSON.parse(raw).store || {};
+    const template = ASSAY_TEMPLATES.find(t=>t.id===store['assay.template']);
+    if (template?.originalName && store['assay.name']===template.originalName) store['assay.name']=template.name;
+    if (template?.originalDry!==undefined && store['assay.dryBasis']===(template.originalDry?'1':'0')) store['assay.dryBasis']=template.dry?'1':'0';
   }catch(e){ /* 忽略损坏的本地数据 */ }
 }
 function save(){
@@ -833,6 +836,9 @@ function assayWordOutput(binding){
 }
 
 function renderAssayWordTable(tpl, tableRole){
+  if (tpl.tech === 'hplc') return window.HplcRecordTables.render(tpl, tableRole, {
+    input: assayWordInput, output: assayWordOutput
+  });
   const layout = preciseGcLayout(tpl);
   return GcWordTableRenderer.render(gcWordTableView(layout, tableRole), {
     input: assayWordInput,
@@ -958,7 +964,7 @@ function renderQualityPicker(c){
             ${productTemplates.map(t => `
               <button type="button" class="quality-template-option${tpl && tpl.id === t.id ? ' selected' : ''}"
                 data-quality-template="${t.id}">
-                <span>${esc(t.label)}${tpl && tpl.id === t.id ? ' ✓' : ''}</span>
+                <span>${esc(t.label)}${window.QUANTITATIVE_RECORD_LAYOUTS?.templates[t.id]?.status !== 'mapped' ? '（表格待核对）' : ''}${tpl && tpl.id === t.id ? ' ✓' : ''}</span>
                 <small>${esc(t.standardText)}</small>
               </button>`).join('')}
           </div>` : ''}
@@ -1107,11 +1113,12 @@ function renderIdentificationSheet(project){
       ${template ? `
         <div class="identification-content">
           <div class="identification-source"><b>当前模板：</b>${esc(template.label)}</div>
-          ${renderIdentificationBlocks(template)}
+          <div class="identification-table-status">${window.IDENTIFICATION_RECORD_TABLES?.[template.id] === 'no-table'
+            ? '该品种原记录的本项目没有独立的填写或计算表格。'
+            : '该品种的原记录表格尚待核对。'}</div>
         </div>
-        ${renderIdentificationRecord(project)}
         <div class="note">模板原文来自 ${esc(template.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用鉴别内容。</div>`
-        : '<div class="identification-empty">选择品名和原料/成品模板后，显示对应的检验记录原文及填写区域。</div>'}
+        : '<div class="identification-empty">选择品名和原料/成品模板后，显示对应原记录中需要填写或计算的表格。</div>'}
     </section>`;
 }
 
@@ -1128,7 +1135,7 @@ function renderSheet(c){
     </div>
     ${renderQualityPicker(c)}
     <div class="method">${esc(tpl ? tpl.method : c.method)}</div>
-    ${renderTable(c)}
+    ${tpl ? window.QuantitativeRecordTables.render(tpl, get) : renderTable(c)}
     ${renderDp(c)}
     <div class="formula-wrap">
       <div class="formula">${c.formula()}</div>
@@ -1136,7 +1143,7 @@ function renderSheet(c){
     </div>
     ${renderVerdict(c)}
     ${tpl ? `<div class="note">当前模板：${esc(tpl.label)}；标准原文及法定判定限度来自 ${esc(tpl.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用标准。</div>` : ''}
-    ${c.note ? `<div class="note">${c.note}</div>` : ''}
+    ${c.note && !tpl ? `<div class="note">${c.note}</div>` : ''}
   </section>`;
 }
 
@@ -1179,7 +1186,7 @@ function renderAssayPicker(tech, tpl){
           ${productTemplates.map(template => `
             <button type="button" class="quality-template-option${tpl && tpl.id === template.id ? ' selected' : ''}"
               data-assay-template-button="${template.id}">
-              <span>${esc(templateChoiceLabel(template))}${tpl && tpl.id === template.id ? ' ✓' : ''}</span>
+              <span>${esc(templateChoiceLabel(template))}${template.tech === 'hplc' && window.HPLC_RECORD_LAYOUTS?.templates[template.id]?.status !== 'mapped' ? '（表格待核对）' : ''}${tpl && tpl.id === template.id ? ' ✓' : ''}</span>
               <small>${esc(template.standardText)}${template.incomplete ? '（自动识别不完整，请核对源文件）' : ''}</small>
             </button>`).join('')}
         </div>` : ''}
@@ -1231,7 +1238,9 @@ function renderAssaySheet(){
     </select>`;
 
   const preciseLayout = tpl && tpl.tech === 'gc' && mode === tpl.mode
-    ? preciseGcLayout(tpl) : null;
+    ? preciseGcLayout(tpl) : tpl && tpl.tech === 'hplc' && mode === tpl.mode
+      ? window.HplcRecordTables?.layout(tpl) : null;
+  const hplcPending = tpl?.tech === 'hplc' && mode === tpl.mode && !preciseLayout;
 
   const legacyRefRows = mode === 'internal' ? `
       <tr><th class="rowlab" style="width:38%">内标物名称</th>
@@ -1290,7 +1299,7 @@ function renderAssaySheet(){
       <span>理论板数应不低于 ${ii('platesLim', platesDef, 'w120')}；实测 ${ic('plates')}
         <span class="judge none" id="assay.platesJudge">—</span></span>
     </div>` : '';
-  const referenceBlock = preciseLayout
+  const referenceBlock = hplcPending ? '<div class="note hplc-record-review">该记录的成分或表格对应关系需要核对，暂不套用计算表。</div>' : preciseLayout
     ? `<div class="tscroll word-table-scroll" data-assay-reference-table>${renderAssayReferenceTable(tpl)}</div>${preciseChecks}`
     : `<div class="tscroll"><table class="form generic-assay-table" data-assay-reference-table
         data-assay-table-layout="generic">
@@ -1303,7 +1312,7 @@ function renderAssaySheet(){
                 <span class="judge none" id="assay.platesJudge">—</span></td></tr>
       </table></div>`;
   const genericSampleMeanLabel = `样品平均峰面积 <span style="text-decoration:overline">A</span>`;
-  const sampleBlock = preciseLayout
+  const sampleBlock = hplcPending ? '' : preciseLayout
     ? `<div class="tscroll word-table-scroll" data-assay-sample-table>${renderAssaySampleTable(tpl)}</div>
        ${totalRows ? `<div class="tscroll"><table class="form assay-total-table">${totalRows}</table></div>` : ''}`
     : `<div class="tscroll"><table class="form generic-assay-table" data-assay-sample-table
@@ -1343,20 +1352,23 @@ function renderAssaySheet(){
     <div class="subhead">对照品：<input class="inline w180" type="text" autocomplete="off"
         data-k="${pre}name" value="${esc(get(pre + 'name'))}" placeholder="成分名称"></div>
     ${referenceBlock}
+    ${preciseLayout?.quantification === 'curve-readback' ? '<div class="note">标准曲线方程、相关系数、RSD 及由方程读出的样品浓度按仪器结果填写；网页据 C样计算含量。</div>' : ''}
 
     <div class="subhead">供试品测量</div>
     ${sampleBlock}
 
     <div class="analyte-bar">
       <span>修约位数：含量 X ${dpSel('ind')} 位，平均含量 ${dpSel('mean')} 位，相对偏差 ${dpSel('rd')} 位</span>
-      <label class="tb-chk" style="color:#333">
+      ${preciseLayout?.quantification === 'curve-readback' ? '' : `<label class="tb-chk" style="color:#333">
         <input type="checkbox" data-k="${pre}useS" ${get(pre + 'useS') === '1' ? 'checked' : ''}>
         按纯度 S 折算 C<sub>对</sub>
-      </label>
+      </label>`}
     </div>
 
     <div class="formula-wrap">
-      <div class="formula">${ASSAY.formula()}</div>
+      <div class="formula">${preciseLayout?.quantification === 'curve-readback'
+        ? `X = ${frac('C<sub>样</sub> × f<sub>样</sub>', `W<sub>样</sub>${dry ? ' × (1 − Q/100)' : ''}`)} × ${assayUnitScale()}（${esc(unit)}）`
+        : ASSAY.formula()}</div>
       <div class="subst" id="assay.subst"></div>
     </div>
 
@@ -1380,9 +1392,9 @@ function renderAssaySheet(){
 
     <div class="note">
       ${tpl ? `当前模板：${esc(tpl.product)}（${esc(tpl.recordLabel)}）—${esc(tpl.name)}；标准规定原文与判定限度均按该条原料或成品记录预填。` : '当前为自定义模板。'}
-      ${preciseLayout ? '对照品与供试品表格按该份气相检验记录自动切换。' : ''}
+      ${preciseLayout ? '对照品与供试品表格按该份检验记录自动切换。' : ''}
       ${dry ? 'Q 为水分，按百分数填写（例：13.6 表示 13.6%），公式内自动换算。' : '本模板不按干燥品折算，公式不扣除水分。'}
-      C<sub>对</sub> 单位 mg/ml，W<sub>样</sub> 单位 g；程序按标准规定的 ${esc(unit)} 单位自动换算。
+      C<sub>对</sub> 按表格标注的单位录入，W<sub>样</sub> 单位 g；程序按标准规定的 ${esc(unit)} 单位自动换算。
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
       ${mode === 'internal' ? '内标法先由对照品与内标物的峰面积、浓度计算校正因子，再计算供试品含量。' : '气相（0521）与液相（0512）外标法公式一致。'}
       ${tpl && tpl.totalLabel ? `<br><b>${esc(tpl.totalLabel)}</b>按合计值判定：先计算当前成分，再把另一成分的平均含量填入表格。` : ''}
@@ -1435,8 +1447,17 @@ function hzHint(c){
 }
 
 function computeCalc(c){
+  const template = qualityTemplateForCalc(c.id);
+  const record = template ? window.QuantitativeRecordTables?.layout(template) : null;
+  if (template && !record) {
+    judge(`${c.id}.judge`, NaN, 'ge', NaN);
+    const substitution = document.getElementById(`${c.id}.subst`);
+    if (substitution) substitution.textContent = '';
+    return;
+  }
   const g  = (k, i) => getN(`${c.id}.${k}.${i}`);
-  const gs = k => getN(`${c.id}.${k}`);
+  const gs = (k, i) => getN(i && record?.bindings.some(b=>b.field===`${c.id}.${k}.${i}`)
+    ? `${c.id}.${k}.${i}` : `${c.id}.${k}`);
   const he = useHE();
   const indDp  = calcDp(c, 'ind');
   const meanDp = calcDp(c, 'mean');
@@ -1486,7 +1507,14 @@ function computeAssay(){
   const meanDp = assayDp('mean');
   const rdDp   = assayDp('rd');
   const shotLayout = tpl && tpl.tech === 'gc' && mode === tpl.mode
-    ? preciseGcLayout(tpl) : null;
+    ? preciseGcLayout(tpl) : tpl && tpl.tech === 'hplc' && mode === tpl.mode
+      ? window.HplcRecordTables?.layout(tpl) : null;
+  if (tpl?.tech === 'hplc' && mode === tpl.mode && !shotLayout) {
+    judge('assay.judge', NaN, 'ge', NaN);
+    const substitution = document.getElementById('assay.subst');
+    if (substitution) substitution.textContent = '';
+    return;
+  }
 
   // 标准规定那一行里的成分名，跟着上方"对照品"输入框走
   const echo = document.getElementById('assay.nameEcho');
@@ -1495,7 +1523,11 @@ function computeAssay(){
   /* 对照品 */
   const refA = assayShotFields(shotLayout, 'refA', ASSAY.refShots).map(getN).filter(isFinite);
   const Aref = mean(refA);
-  const rsd  = refA.length >= 2 ? sd(refA) / Aref * 100 : NaN;
+  const curveReadback = shotLayout?.quantification === 'curve-readback';
+  const rsd  = curveReadback ? getN(pre + 'curveRsd') : refA.length >= 2 ? sd(refA) / Aref * 100 : NaN;
+  if (curveReadback) for (const level of [1,2]) {
+    setOut(`assay.out.curveA.${level}`, fmtArea(mean(assayShotFields(shotLayout, `curveA.${level}`, 0).map(getN))));
+  }
   setOut('assay.out.Aref', fmtArea(Aref));
   setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
@@ -1512,13 +1544,14 @@ function computeAssay(){
   judge('assay.platesJudge', getN(pre + 'plates'), 'ge', platesLim);
 
   /* 供试品 */
-  let Cref = getN(pre + 'Cref');
+  let Cref = getN(shotLayout?.referenceConcentrationField || pre + 'Cref') * (shotLayout?.referenceConcentrationScale || 1);
   if (get(pre + 'useS') === '1'){
     const S = getN(pre + 'refPurity');
     if (isFinite(S)) Cref = Cref * S / 100;
   }
   const Q = getN(pre + 'Q');
-  const qFactor = dry ? (isFinite(Q) ? 1 - Q/100 : NaN) : 1;
+  const qFor = sample => shotLayout?.sampleTable?.waterPerSample ? getN(`${pre}Q.${sample}`) : Q;
+  const qFactorFor = sample => dry ? (isFinite(qFor(sample)) ? 1-qFor(sample)/100 : NaN) : 1;
   const Cis = getN(pre + 'Cis');
   const factor = mode === 'internal' && [ISref, Cref, Aref, Cis].every(isFinite) && Aref !== 0 && Cis !== 0
     ? ISref * Cref / (Aref * Cis) : NaN;
@@ -1536,7 +1569,13 @@ function computeAssay(){
   [1,2].forEach(s => setOut(`assay.out.IS.${s}`, fmtArea(AIS[s-1])));
 
   const xRaw = [1,2].map(s => {
+    const qFactor = qFactorFor(s);
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
+    if (curveReadback) {
+      const concentration = getN(`${pre}Csample.${s}`);
+      return [concentration,f,Ws,qFactor].every(isFinite) && Ws*qFactor !== 0
+        ? concentration*f/(Ws*qFactor)*unitScale : NaN;
+    }
     if (mode === 'internal'){
       const ISi = AIS[s-1];
       if (![factor, Ai, Cis, f, ISi, Ws, qFactor].every(isFinite)) return NaN;
@@ -1555,8 +1594,14 @@ function computeAssay(){
 
   /* 代入过程 */
   const lines = [1,2].map(s => {
+    const qFactor = qFactorFor(s);
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
-    const qText = dry ? ` × (1 − ${Q}%)` : '';
+    const qText = dry ? ` × (1 − ${qFor(s)}%)` : '';
+    if (curveReadback) {
+      const concentration = getN(`${pre}Csample.${s}`);
+      if (![concentration,f,Ws,qFactor].every(isFinite) || Ws*qFactor === 0) return '';
+      return `X<sub>${s}</sub> = ${frac(`${concentration} × ${f}`, `${Ws}${qText}`)} × ${unitScale} = <span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
+    }
     if (mode === 'internal'){
       const ISi = AIS[s-1];
       if (![factor, Ai, Cis, f, ISi, Ws, qFactor].every(isFinite)) return '';

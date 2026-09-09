@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": ["8961f50bf0212f2338580a0b112221233da3b5a64d8833a81de5c2ecc5252476", "9aa619e3e7490b7761d4a612afaa22f01ef1713330597bc2a5bd0747cb8fde59"],
+      "semanticType": "externalReferenceAverage",
+      "review": "Rendered exact source preview: overlined A with subscript 对; verified 2026-09-09."
+    },
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": ["9aa619e3e7490b7761d4a612afaa22f01ef1713330597bc2a5bd0747cb8fde59", "c832f4919f812f06a76bfc86fbb7ffe86b3247482f8e6e98f56fd0960998b007"],
+      "semanticType": "externalReferenceAverage",
+      "review": "Read-only Word export of 40201 reference table verifies overlined A with subscript 对; 2026-09-09."
+    },
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": ["9aa619e3e7490b7761d4a612afaa22f01ef1713330597bc2a5bd0747cb8fde59", "e87cf89407f25b3a81a34817fff5f47970bd7e93ce0fc2f542cefe7d560996d5"],
+      "semanticType": "sampleMean",
+      "review": "Read-only Word export of exact matched 39403 total-ash table shows X with overline; verified 2026-09-09. GDI preview alone is insufficient."
+    },
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": ["392902384d96f0ae344e159c6cc89454ddc3698aaf3b5040c900da211c3d1685", "9aa619e3e7490b7761d4a612afaa22f01ef1713330597bc2a5bd0747cb8fde59"],
+      "semanticType": "sampleMean",
+      "review": "Rendered exact source preview and visually verified X with overline, 2026-09-08."
+    },
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": [
+        "9675f3a80250055c334ff347b9dbba164824ab896e36572b960b2d4199ac4651",
+        "b33d8fd81498da355f3771d6f8933cf6b53e3137f0c9d2ee7127c98a2845833d"
+      ],
+      "semanticType": "internalCorrectionFactor"
+    },
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": [
+        "5235d99895010a5b4b5f7e2e21ab7b3cae2dfb94c68424b42eabca7a38e8166c",
+        "9aa619e3e7490b7761d4a612afaa22f01ef1713330597bc2a5bd0747cb8fde59"
+      ],
+      "semanticType": "sampleMean"
+    },
+    {
+      "containerCategory": "embedded-equation",
+      "payloadDigests": [
+        "3c48111d64a21a8eb8b00000e41ab6eaf710371d89810c52750ac0dfde2dfd4f",
+        "9aa619e3e7490b7761d4a612afaa22f01ef1713330597bc2a5bd0747cb8fde59"
+      ],
+      "semanticType": "externalReferenceAverage"
+    }
+  ]
+}
