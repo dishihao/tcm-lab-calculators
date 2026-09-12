@@ -44,6 +44,15 @@ function fmt(v, dp, useHE){
   return roundTo(v, dp, useHE).toFixed(dp);
 }
 
+/**
+ * 计算过程里显示的中间量：只去掉二进制浮点噪声，不改有效数字。
+ * 例：0.15 + (-0.01) → 0.13999999999999999，应显示 0.14。
+ */
+function plainNum(v){
+  if (!isFinite(v)) return '';
+  return String(Number(v.toPrecision(12)));
+}
+
 /** 样本标准差（n-1） */
 function sd(arr){
   const a = arr.filter(isFinite);
@@ -657,7 +666,7 @@ const CALCS = [
         const Vp = isFinite(V) ? V + corr : NaN;
         if (![C, VblankPrime, Vp, M].every(isFinite) || M === 0) return '';
         const result = Math.abs(Vp - VblankPrime) * C * 0.032 * 1e6 / M;
-        return `X<sub>${i}</sub> = ${frac(`|${Vp} − ${VblankPrime}| × ${C} × 0.032 × 10<sup>6</sup>`, M)} = `
+        return `X<sub>${i}</sub> = ${frac(`|${plainNum(Vp)} − ${plainNum(VblankPrime)}| × ${C} × 0.032 × 10<sup>6</sup>`, M)} = `
              + `<span class="sx">${fmt(result, dp, he)} mg/kg</span>`;
       });
     },

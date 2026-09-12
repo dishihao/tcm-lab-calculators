@@ -76,6 +76,26 @@ await field(page, 'sulfur.C.2').fill('0.02');
 assert(await page.locator('#sulfur\\.out\\.X\\.1').innerText() === '32.6', '修改样品2浓度不应影响样品1');
 assert(await page.locator('#sulfur\\.out\\.X\\.2').innerText() === '65.3', '样品2应使用本列滴定液浓度');
 
+// 计算过程不能出现二进制浮点长尾：0.15 + (-0.01) 在 JS 里是 0.13999999999999999，应显示 0.14。
+await field(page, 'sulfur.Vblank').fill('0.05');
+await field(page, 'sulfur.VblankCorr').fill('-0.01');
+await field(page, 'sulfur.Vsample.1').fill('0.15');
+await field(page, 'sulfur.VsampleCorr.1').fill('-0.01');
+await field(page, 'sulfur.Vsample.2').fill('0.20');
+await field(page, 'sulfur.VsampleCorr.2').fill('-0.05');
+assert(await page.locator('#sulfur\\.out\\.VblankPrime').innerText() === '0.040', '空白校正体积应为 0.040');
+assert(await page.locator('#sulfur\\.out\\.Vprime\\.1').innerText() === '0.140', '供试品1校正体积应为 0.140');
+const substText = await page.locator('#sulfur\\.subst').textContent();
+const longTail = substText.match(/\d+\.\d{7,}/);
+assert(!longTail, `计算过程出现浮点长尾：${longTail && longTail[0]}`);
+assert(substText.includes('0.14') && substText.includes('0.04'), '校正后体积应按 0.14 与 0.04 显示');
+await field(page, 'sulfur.Vblank').fill('');
+await field(page, 'sulfur.VblankCorr').fill('');
+await field(page, 'sulfur.Vsample.1').fill('');
+await field(page, 'sulfur.VsampleCorr.1').fill('');
+await field(page, 'sulfur.Vsample.2').fill('');
+await field(page, 'sulfur.VsampleCorr.2').fill('');
+
 page.once('dialog', dialog => dialog.accept());
 await page.locator('[data-initialize-project="sulfur"]').click();
 for (const key of ['sulfur.C.1', 'sulfur.C.2', 'sulfur.Vblank', 'sulfur.Ws.1', 'sulfur.Vsample.1']) {
