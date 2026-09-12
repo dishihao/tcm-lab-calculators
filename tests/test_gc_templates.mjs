@@ -163,7 +163,9 @@ for (const templateId of audit.gcIds) {
   assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
   assert(await field(page, 'assay.tech').inputValue() === 'gc', `${templateId}: 不是气相`);
   assert(await field(page, 'assay.mode').inputValue() === template.mode, `${templateId}: 定量方法错误`);
-  assert(await field(page, 'assay.platesLim').inputValue() === template.plates, `${templateId}: 板数错误`);
+  assert(await field(page, 'assay.platesLim').count() === 0, `${templateId}: 气相理论板数不应是可填输入格`);
+  assert((await page.locator('[data-fixed-field="assay.platesLim"]').innerText()).trim() === template.plates,
+    `${templateId}: 板数错误`);
   assert(await field(page, 'assay.limval').inputValue() === template.limit, `${templateId}: 判定限度错误`);
   assert(await field(page, 'assay.dryBasis').isChecked() === template.dry, `${templateId}: 干燥品口径错误`);
   assert((await page.locator('.standard-quote').innerText()).includes(template.standardText),

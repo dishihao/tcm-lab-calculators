@@ -31,10 +31,10 @@ assert.equal(run("dendrobium['assay.Cref']"), undefined, '内标法记录不得�
 assert.equal(run("dendrobium['assay.f.1']"), '62.5');
 run("var shanghai = {}; GcPubiaoDefaults.fill('amomum-bornyl-acetate-finished-shanghai', shanghai, GC_WORD_TABLE_LAYOUTS['amomum-bornyl-acetate-finished-shanghai']);");
 assert.equal(run("shanghai['assay.f.1']"), '25');
-assert.equal(run("shanghai['assay.refInjection']"), undefined, '上海2018记录未写进样量，不猜补');
+assert.equal(run("shanghai['assay.refInjection']"), '1', '上海2018进样量按药典砂仁同法制样固定为1');
 run("var beijing = {}; GcPubiaoDefaults.fill('amomum-bornyl-acetate-finished-beijing', beijing, GC_WORD_TABLE_LAYOUTS['amomum-bornyl-acetate-finished-beijing']);");
 assert.equal(run("beijing['assay.f.2']"), '25');
-assert.equal(run("beijing['assay.sampleInjection.1']"), undefined, '北京2023记录未写进样量，不猜补');
+assert.equal(run("beijing['assay.sampleInjection.1']"), '1', '北京2023进样量按药典砂仁同法制样固定为1');
 run("var mismatch = {}; GcPubiaoDefaults.fill('mint-menthol', mismatch, GC_WORD_TABLE_LAYOUTS['mugwort-borneol']);");
 assert.equal(run('Object.keys(mismatch).length'), 0, '不能向其他模板布局回填');
 run("var anise = {}; GcPubiaoDefaults.fill('star-anise-anethole', anise, GC_WORD_TABLE_LAYOUTS['star-anise-anethole']);");

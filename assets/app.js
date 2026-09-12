@@ -1318,9 +1318,14 @@ function renderAssaySheet(){
     : `含 <b id="assay.nameEcho"></b>${get(pre + 'formulaText') ? `（${esc(get(pre + 'formulaText'))}）` : ''}`;
   const preciseChecks = preciseLayout ? `
     <div class="analyte-bar no-print assay-system-controls">
-      <span>RSD 应不大于 ${ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%
+      ${tpl && tpl.tech === 'gc' ? `<span>对照品 <b class="word-standard-value" data-fixed-field="assay.refName">${esc(tpl.name)}</b></span>` : ''}
+      <span>RSD 应不大于 ${tpl && tpl.tech === 'gc'
+        ? `<b class="word-standard-value" data-fixed-field="assay.rsdLim">${esc(get(pre + 'rsdLim') || tpl.rsdLimit || RSD_LIM_DEFAULT)}</b>`
+        : ii('rsdLim', RSD_LIM_DEFAULT, 'w40')}%
         <span class="judge none" id="assay.rsdJudge">—</span></span>
-      <span>理论板数应不低于 ${ii('platesLim', platesDef, 'w120')}；实测 ${ic('plates')}
+      <span>理论板数应不低于 ${tpl && tpl.tech === 'gc'
+        ? `<b class="word-standard-value" data-fixed-field="assay.platesLim">${esc(get(pre + 'platesLim') || platesDef)}</b>`
+        : ii('platesLim', platesDef, 'w120')}；实测 ${ic('plates')}
         <span class="judge none" id="assay.platesJudge">—</span></span>
     </div>` : '';
   const referenceBlock = hplcPending ? '<div class="note hplc-record-review">该记录的成分或表格对应关系需要核对，暂不套用计算表。</div>' : preciseLayout
