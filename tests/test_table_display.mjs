@@ -99,6 +99,68 @@ try {
     assert(item.offset < 2, `${item.key}: 数据没有对齐列中心（偏差 ${item.offset.toFixed(1)}px）`);
   }
 
+  const dataFontStyles = await page.evaluate(() => {
+    const selectors = '.sheet.active .word-cell-input, .sheet.active .word-cell-output';
+    return [...document.querySelectorAll(selectors)].map(element => {
+      const style = getComputedStyle(element);
+      return {
+        key: element.dataset.k || element.id,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        letterSpacing: style.letterSpacing,
+      };
+    });
+  });
+  assert(dataFontStyles.length > 10, '没有取到原始记录表的数据字体');
+  assert.equal(new Set(dataFontStyles.map(style =>
+    [style.fontFamily, style.fontSize, style.fontWeight, style.lineHeight, style.letterSpacing].join('|')
+  )).size, 1, `原始记录表的填写值与计算结果字体不统一：${JSON.stringify(dataFontStyles)}`);
+
+  // 通用含量表的峰面积输入、其他填写值和已计算结果也使用同一套字体格式。
+  await page.evaluate(() => {
+    applyAssayProduct('自定义字体测试品种');
+    Object.assign(store, {
+      'assay.name': '测试成分', 'assay.Cref': '1', 'assay.Ws.1': '1', 'assay.Ws.2': '1',
+      'assay.f.1': '1', 'assay.f.2': '1', 'assay.plates': '10000', 'assay.limval': '0',
+    });
+    for (let i = 0; i < 5; i++) store[`assay.refA.${i}`] = '100';
+    for (const sample of [1, 2]) for (let i = 0; i < 2; i++) store[`assay.smpA.${sample}.${i}`] = '50';
+    computeAssay();
+    showTab('assay');
+  });
+  const genericFontStyles = await page.evaluate(() => {
+    const selector = '.sheet.active .generic-assay-table input.cell, .sheet.active .generic-assay-table input.inline,'
+      + ' .sheet.active .generic-assay-table .peaks input, .sheet.active .generic-assay-table .out:not(.empty)';
+    return [...document.querySelectorAll(selector)].map(element => {
+      const style = getComputedStyle(element);
+      return {
+        key: element.dataset.k || element.id,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        letterSpacing: style.letterSpacing,
+      };
+    });
+  });
+  assert(genericFontStyles.length > 10, '没有取到通用含量表的数据字体');
+  assert.equal(new Set(genericFontStyles.map(style =>
+    [style.fontFamily, style.fontSize, style.fontWeight, style.lineHeight, style.letterSpacing].join('|')
+  )).size, 1, `通用含量表的填写值与计算结果字体不统一：${JSON.stringify(genericFontStyles)}`);
+
+  await page.setViewportSize({ width: 480, height: 1000 });
+  const mobileGenericFontStyles = await page.evaluate(() => {
+    const selector = '.sheet.active .generic-assay-table input.cell, .sheet.active .generic-assay-table input.inline,'
+      + ' .sheet.active .generic-assay-table .peaks input, .sheet.active .generic-assay-table .out:not(.empty)';
+    return [...document.querySelectorAll(selector)].map(element => {
+      const style = getComputedStyle(element);
+      return [style.fontFamily, style.fontSize, style.fontWeight, style.lineHeight, style.letterSpacing].join('|');
+    });
+  });
+  assert.equal(new Set(mobileGenericFontStyles).size, 1, '手机端通用含量表的数据字体不统一');
+
   // 通用计算表（未套用原记录表时）也保持居中。
   assert.equal(await page.locator('.sheet.active .word-cell-input[style*="width"]').count(), 0,
     '数据格不应再使用固定宽度导致不居中');

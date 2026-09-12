@@ -437,7 +437,7 @@ assert(patchouliReferenceTable.includes('正十八烷批号') && patchouliRefere
   '广藿香内标法对照品表没有按记录显示两种物质的批号');
 assert(patchouliReferenceTable.includes('正十八烷来源') && patchouliReferenceTable.includes('百秋李醇来源'),
   '广藿香内标法对照品表没有按记录显示两种物质的来源');
-// 精确 GC 表中的批号、称样量和峰面积必须进入现有 assay.<field> 状态快照；
+// 精确 GC 表中的批号、称样量和峰面积必须进入现有 assay.<field> 状态；
 // 进样量与稀释倍数是标准固定参数，在表里是不可编辑的黑体文字。
 await field(page, 'assay.refBatch').fill('REF-PATCHOULI');
 await page.evaluate(() => { store['assay.refSource'] = 'SRC-PATCHOULI'; store['assay.refDrying'] = 'OLD'; });
@@ -452,6 +452,11 @@ await chooseTemplate(page, 'brucea-oleic');
 const bruceaReferenceTable = await page.locator('[data-assay-reference-table]').innerText();
 assert(bruceaReferenceTable.includes('苯甲酸苯酯批号') && bruceaReferenceTable.includes('油酸批号'),
   '鸦胆子内标法对照品表没有切换为本记录物质名称');
+assert(await field(page, 'assay.refBatch').inputValue() === ''
+  && await field(page, 'assay.Ws.1').inputValue() === ''
+  && await field(page, 'assay.refA.0').inputValue() === ''
+  && await field(page, 'assay.smpA.1.0').inputValue() === '',
+  '更换气相品种后不应保留广藿香的上一批数据');
 await field(page, 'assay.refBatch').fill('REF-BRUCEA');
 await field(page, 'assay.Ws.1').fill('2.21');
 await field(page, 'assay.Ws.2').fill('2.22');
@@ -466,20 +471,20 @@ assert(await field(page, 'assay.refBatch').inputValue() === 'REF-BRUCEA'
   && await field(page, 'assay.smpA.2.2').inputValue() === '43',
   '鸦胆子切回前哨兵值没有正确写入');
 await chooseTemplate(page, 'patchouli-patchoulol');
-assert(await field(page, 'assay.refBatch').inputValue() === 'REF-PATCHOULI'
+assert(await field(page, 'assay.refBatch').inputValue() === ''
   && await page.locator('[data-fixed-field="assay.refSource"]').innerText() === '中检院'
-  && await field(page, 'assay.Ws.1').inputValue() === '1.11',
-  '切回广藿香后没有恢复其对照品批号、来源和称样量');
-assert(await field(page, 'assay.internalBatch').inputValue() === 'IS-PATCHOULI',
-  '切回广藿香后没有恢复其对照品表数据');
+  && await field(page, 'assay.Ws.1').inputValue() === '',
+  '切回广藿香后不应恢复上一批对照品批号和称样量');
+assert(await field(page, 'assay.internalBatch').inputValue() === '',
+  '切回广藿香后不应恢复上一批对照品表数据');
 assert(await page.locator('[data-fixed-field="assay.f.1"]').innerText() === '10'
   && await page.locator('[data-fixed-field="assay.refInjection"]').innerText() === '1',
   '固定参数应按当前模板显示广藿香标准值');
-assert(await field(page, 'assay.refA.0').inputValue() === '101'
-  && await field(page, 'assay.refA.4').inputValue() === '105'
-  && await field(page, 'assay.smpA.1.0').inputValue() === '11'
-  && await field(page, 'assay.smpA.2.2').inputValue() === '23',
-  '切回广藿香后没有恢复对照品及两份供试品峰面积');
+assert(await field(page, 'assay.refA.0').inputValue() === ''
+  && await field(page, 'assay.refA.4').inputValue() === ''
+  && await field(page, 'assay.smpA.1.0').inputValue() === ''
+  && await field(page, 'assay.smpA.2.2').inputValue() === '',
+  '切回广藿香后不应恢复上一批对照品及两份供试品峰面积');
 
 // 手动改变定量方法时是自定义路径，恢复模板方法后重新使用精确表。
 await field(page, 'assay.mode').selectOption('external');
@@ -535,14 +540,14 @@ assert(await page.locator('#assay\\.out\\.A\\.1').innerText() === '100'
   && await page.locator('#assay\\.out\\.A\\.2').innerText() === '100',
   '内标法没有使用布局中全部三针计算样品平均峰面积');
 
-// 不同模板的数据应隔离保存。
+// 更换不同模板时，当前项目的上一批数据必须清空；切回也不能恢复旧数据。
 await field(page, 'assay.Cref').fill('9');
 await chooseTemplate(page, 'mint-menthol');
 await field(page, 'assay.Cref').fill('8');
 await chooseTemplate(page, 'patchouli-patchoulol');
-assert(await field(page, 'assay.Cref').inputValue() === '9', '广藿香数据未恢复');
+assert(await field(page, 'assay.Cref').inputValue() === '', '切换到广藿香后没有清空上一模板数据');
 await chooseTemplate(page, 'mint-menthol');
-assert(await field(page, 'assay.Cref').inputValue() === '8', '薄荷数据未恢复');
+assert(await field(page, 'assay.Cref').inputValue() === '', '切回薄荷后恢复了上一模板数据');
 
 // 两成分总量模板。
 await chooseTemplate(page, 'flax-linoleic');

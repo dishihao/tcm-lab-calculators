@@ -730,6 +730,7 @@ const ASSAY = {
 const LS_KEY = 'tcm-lab-calc-v2';
 let store = {};
 let curTab = 'impurity';
+let projectResetting = false;
 
 function load(){
   try{
@@ -1720,37 +1721,75 @@ function recompute(){
 
 /* ---------------------------------------------------------------- 挂载 */
 
-/** 在不同品种模板之间切换时分别保存已填数据，避免互相覆盖。 */
-function assaySnapshot(){
-  const snap = {};
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(AP) && k !== AP + 'template') snap[k] = store[k];
+/** 品种或模板切换时，当前项目不再沿用上一批的录入状态。 */
+function clearProjectStore(prefix){
+  Object.keys(store).forEach(key => {
+    if (key.startsWith(prefix)) delete store[key];
   });
-  return snap;
+}
+
+function clearTemplateStates(states, prefix){
+  Object.keys(states).forEach(key => {
+    if (key === prefix || key.startsWith(`${prefix}:`)) delete states[key];
+  });
+}
+
+function clearQualityProjectData(calcId){
+  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
+    ? store.__qualityTemplateStates : {};
+  clearTemplateStates(states, calcId);
+  clearProjectStore(`${calcId}.`);
+  store.__qualityTemplateStates = states;
+  return states;
+}
+
+function clearAssayProjectData(){
+  const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
+    ? store.__assayTemplateStates : {};
+  Object.keys(states).forEach(key => delete states[key]);
+  clearProjectStore(AP);
+  store.__assayTemplateStates = states;
+  return states;
+}
+
+function clearIdentificationProjectData(projectId){
+  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
+    ? store.__identificationTemplateStates : {};
+  clearTemplateStates(states, projectId);
+  clearProjectStore(`${projectId}.`);
+  store.__identificationTemplateStates = states;
+  return states;
+}
+
+function rebuildAfterProjectChange(projectId){
+  const wasResetting = projectResetting;
+  projectResetting = true;
+  try {
+    build();
+    showTab(projectId);
+  } finally {
+    projectResetting = wasResetting;
+  }
 }
 
 function applyAssayTemplate(id, customProductName){
-  const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
-    ? store.__assayTemplateStates : {};
   const oldId = get(AP + 'template') || 'custom';
   const newId = id || 'custom';
   const t = assayTemplate(id);
-  if (oldId === newId){
+  const currentProduct = String(get(AP + 'productName') || '').trim();
+  const targetProduct = t ? t.product : String(customProductName || '').trim();
+  if (oldId === newId && (t || currentProduct === targetProduct)){
     store[AP + 'productName'] = t ? t.product : (customProductName || '');
     store[AP + 'selectedProduct'] = t ? t.product : '';
-    build();
-    showTab('assay');
+    rebuildAfterProjectChange('assay');
     return;
   }
 
-  states[oldId] = assaySnapshot();
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(AP)) delete store[k];
-  });
-
-  const restored = states[newId];
-  if (restored) Object.assign(store, restored);
-  if (t && !restored){
+  const tech = techOf();
+  const mode = assayMode();
+  const dryBasis = get(AP + 'dryBasis');
+  const states = clearAssayProjectData();
+  if (t){
     store[AP + 'tech'] = t.tech;
     store[AP + 'mode'] = t.mode;
     store[AP + 'dryBasis'] = t.dry ? '1' : '0';
@@ -1763,13 +1802,16 @@ function applyAssayTemplate(id, customProductName){
     store[AP + 'limval'] = t.limit;
     store[AP + 'limmax'] = t.upperLimit || '';
     store[AP + 'unit'] = t.unit || '%';
+  } else {
+    store[AP + 'tech'] = tech;
+    store[AP + 'mode'] = mode;
+    if (dryBasis !== undefined && dryBasis !== '') store[AP + 'dryBasis'] = dryBasis;
   }
   store[AP + 'productName'] = t ? t.product : (customProductName || '');
   store[AP + 'selectedProduct'] = t ? t.product : '';
   store[AP + 'template'] = id || '';
   store.__assayTemplateStates = states;
-  build();
-  showTab('assay');
+  rebuildAfterProjectChange('assay');
 }
 
 function applyAssayProduct(value){
@@ -1801,100 +1843,63 @@ function selectAssayProduct(productName){
   const product = String(productName || '').trim();
   if (!product || !templatesForProduct(product).length) return;
   const tech = techOf();
-  const current = assayTemplate(get(AP + 'template'));
-  if (current){
-    const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
-      ? store.__assayTemplateStates : {};
-    states[current.id] = assaySnapshot();
-    store.__assayTemplateStates = states;
-  }
-  Object.keys(store).forEach(key => {
-    if (key.startsWith(AP)) delete store[key];
-  });
+  const mode = assayMode();
+  const dryBasis = get(AP + 'dryBasis');
+  const states = clearAssayProjectData();
   store[AP + 'tech'] = tech;
+  store[AP + 'mode'] = mode;
+  if (dryBasis !== undefined && dryBasis !== '') store[AP + 'dryBasis'] = dryBasis;
   store[AP + 'template'] = '';
   store[AP + 'selectedProduct'] = product;
-  build();
-  showTab('assay');
+  rebuildAfterProjectChange('assay');
 }
 
 function changeAssayProduct(){
   const tech = techOf();
-  const current = assayTemplate(get(AP + 'template'));
-  if (current){
-    const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
-      ? store.__assayTemplateStates : {};
-    states[current.id] = assaySnapshot();
-    store.__assayTemplateStates = states;
-  }
-  Object.keys(store).forEach(key => {
-    if (key.startsWith(AP)) delete store[key];
-  });
+  const mode = assayMode();
+  const dryBasis = get(AP + 'dryBasis');
+  const states = clearAssayProjectData();
   store[AP + 'tech'] = tech;
+  store[AP + 'mode'] = mode;
+  if (dryBasis !== undefined && dryBasis !== '') store[AP + 'dryBasis'] = dryBasis;
   store[AP + 'template'] = '';
-  build();
-  showTab('assay');
+  rebuildAfterProjectChange('assay');
 }
 
 function switchAssayTech(nextTech){
   const tech = TECH[nextTech] ? nextTech : 'hplc';
   const current = assayTemplate(get(AP + 'template'));
   if (current && current.tech !== tech){
-    const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
-      ? store.__assayTemplateStates : {};
-    states[current.id] = assaySnapshot();
-    Object.keys(store).forEach(k => {
-      if (k.startsWith(AP)) delete store[k];
-    });
-    const restored = states.custom;
-    if (restored) Object.assign(store, restored);
+    const mode = assayMode();
+    const dryBasis = get(AP + 'dryBasis');
+    const states = clearAssayProjectData();
     store[AP + 'tech'] = tech;
+    store[AP + 'mode'] = mode;
+    if (dryBasis !== undefined && dryBasis !== '') store[AP + 'dryBasis'] = dryBasis;
     store[AP + 'template'] = '';
     store.__assayTemplateStates = states;
   } else {
     store[AP + 'tech'] = tech;
   }
   delete store[AP + 'selectedProduct'];
-  build();
-  showTab('assay');
-}
-
-function qualitySnapshot(calcId){
-  const snap = {};
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(calcId + '.') && k !== `${calcId}.template`) snap[k] = store[k];
-  });
-  return snap;
+  rebuildAfterProjectChange('assay');
 }
 
 function applyQualityTemplate(calcId, templateId){
   const template = qualityTemplate(templateId);
   if (!template || template.item !== calcId) return;
 
-  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
-    ? store.__qualityTemplateStates : {};
   const oldId = get(`${calcId}.template`) || 'custom';
-  const oldKey = `${calcId}:${oldId}`;
-  const newKey = `${calcId}:${templateId}`;
   if (oldId === templateId) return;
 
-  states[oldKey] = qualitySnapshot(calcId);
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(calcId + '.')) delete store[k];
-  });
-
-  const restored = states[newKey];
-  if (restored) Object.assign(store, restored);
-  if (!restored){
-    store[`${calcId}.limop`] = template.limop;
-    store[`${calcId}.limval`] = template.limit;
-  }
+  const states = clearQualityProjectData(calcId);
+  store[`${calcId}.limop`] = template.limop;
+  store[`${calcId}.limval`] = template.limit;
   store[`${calcId}.template`] = templateId;
   store[`${calcId}.productName`] = template.label;
   store[`${calcId}.selectedProduct`] = template.baseProduct || template.product;
   store.__qualityTemplateStates = states;
-  build();
-  showTab(calcId);
+  rebuildAfterProjectChange(calcId);
 }
 
 function clearQualityTemplate(calcId){
@@ -1902,19 +1907,11 @@ function clearQualityTemplate(calcId){
   if (!current) return;
   const template = qualityTemplate(current);
   const selectedProduct = template ? (template.baseProduct || template.product) : get(`${calcId}.selectedProduct`);
-  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
-    ? store.__qualityTemplateStates : {};
-  states[`${calcId}:${current}`] = qualitySnapshot(calcId);
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(calcId + '.')) delete store[k];
-  });
-  const restored = states[`${calcId}:custom`];
-  if (restored) Object.assign(store, restored);
+  const states = clearQualityProjectData(calcId);
   store[`${calcId}.template`] = '';
   store[`${calcId}.selectedProduct`] = selectedProduct;
   store.__qualityTemplateStates = states;
-  build();
-  showTab(calcId);
+  rebuildAfterProjectChange(calcId);
 }
 
 function selectQualityProduct(calcId, productName){
@@ -1923,41 +1920,22 @@ function selectQualityProduct(calcId, productName){
   const current = qualityTemplateForCalc(calcId);
   if (current && (current.baseProduct || current.product) === product){
     store[`${calcId}.selectedProduct`] = product;
-    build();
-    showTab(calcId);
+    rebuildAfterProjectChange(calcId);
     return;
   }
 
-  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
-    ? store.__qualityTemplateStates : {};
-  const oldId = get(`${calcId}.template`) || 'custom';
-  states[`${calcId}:${oldId}`] = qualitySnapshot(calcId);
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(calcId + '.')) delete store[k];
-  });
-  const restored = states[`${calcId}:custom`];
-  if (restored) Object.assign(store, restored);
+  const states = clearQualityProjectData(calcId);
   store[`${calcId}.template`] = '';
   store[`${calcId}.selectedProduct`] = product;
   store.__qualityTemplateStates = states;
-  build();
-  showTab(calcId);
+  rebuildAfterProjectChange(calcId);
 }
 
 function changeQualityProduct(calcId){
   const current = get(`${calcId}.template`);
-  if (current){
-    const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
-      ? store.__qualityTemplateStates : {};
-    states[`${calcId}:${current}`] = qualitySnapshot(calcId);
-    store.__qualityTemplateStates = states;
-  }
-  Object.keys(store).forEach(k => {
-    if (k.startsWith(calcId + '.')) delete store[k];
-  });
+  const states = clearQualityProjectData(calcId);
   store[`${calcId}.template`] = '';
-  build();
-  showTab(calcId);
+  rebuildAfterProjectChange(calcId);
 }
 
 function renderQualitySearchResults(calcId, query){
@@ -1989,39 +1967,16 @@ function renderQualitySearchResults(calcId, query){
   box.hidden = false;
 }
 
-function identificationSnapshot(projectId){
-  const snapshot = {};
-  Object.keys(store).forEach(key => {
-    if (key.startsWith(projectId + '.') &&
-        key !== `${projectId}.template` && key !== `${projectId}.selectedProduct`){
-      snapshot[key] = store[key];
-    }
-  });
-  return snapshot;
-}
-
-function clearIdentificationProjectStore(projectId){
-  Object.keys(store).forEach(key => {
-    if (key.startsWith(projectId + '.')) delete store[key];
-  });
-}
-
 function applyIdentificationTemplate(projectId, templateId){
   const template = identificationTemplate(templateId);
   if (!template || template.item !== projectId) return;
-  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
-    ? store.__identificationTemplateStates : {};
   const oldId = get(`${projectId}.template`) || 'unselected';
   if (oldId === templateId) return;
-  states[`${projectId}:${oldId}`] = identificationSnapshot(projectId);
-  clearIdentificationProjectStore(projectId);
-  const restored = states[`${projectId}:${templateId}`];
-  if (restored) Object.assign(store, restored);
+  const states = clearIdentificationProjectData(projectId);
   store[`${projectId}.template`] = templateId;
   store[`${projectId}.selectedProduct`] = template.baseProduct || template.product;
   store.__identificationTemplateStates = states;
-  build();
-  showTab(projectId);
+  rebuildAfterProjectChange(projectId);
 }
 
 function selectIdentificationProduct(projectId, productName){
@@ -2030,33 +1985,22 @@ function selectIdentificationProduct(projectId, productName){
   const current = identificationTemplateForProject(projectId);
   if (current && (current.baseProduct || current.product) === product){
     store[`${projectId}.selectedProduct`] = product;
-    build();
-    showTab(projectId);
+    rebuildAfterProjectChange(projectId);
     return;
   }
-  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
-    ? store.__identificationTemplateStates : {};
-  const oldId = get(`${projectId}.template`) || 'unselected';
-  states[`${projectId}:${oldId}`] = identificationSnapshot(projectId);
-  clearIdentificationProjectStore(projectId);
+  const states = clearIdentificationProjectData(projectId);
   store[`${projectId}.template`] = '';
   store[`${projectId}.selectedProduct`] = product;
   store.__identificationTemplateStates = states;
-  build();
-  showTab(projectId);
+  rebuildAfterProjectChange(projectId);
 }
 
 function changeIdentificationProduct(projectId){
   if (!IDENTIFICATION_PROJECT_BY_ID.has(projectId)) return;
-  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
-    ? store.__identificationTemplateStates : {};
-  const current = get(`${projectId}.template`) || 'unselected';
-  states[`${projectId}:${current}`] = identificationSnapshot(projectId);
-  clearIdentificationProjectStore(projectId);
+  const states = clearIdentificationProjectData(projectId);
   store[`${projectId}.template`] = '';
   store.__identificationTemplateStates = states;
-  build();
-  showTab(projectId);
+  rebuildAfterProjectChange(projectId);
 }
 
 function clearIdentificationTemplate(projectId){
@@ -2064,15 +2008,11 @@ function clearIdentificationTemplate(projectId){
   const current = identificationTemplate(currentId);
   if (!current) return;
   const selectedProduct = current.baseProduct || current.product;
-  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
-    ? store.__identificationTemplateStates : {};
-  states[`${projectId}:${currentId}`] = identificationSnapshot(projectId);
-  clearIdentificationProjectStore(projectId);
+  const states = clearIdentificationProjectData(projectId);
   store[`${projectId}.template`] = '';
   store[`${projectId}.selectedProduct`] = selectedProduct;
   store.__identificationTemplateStates = states;
-  build();
-  showTab(projectId);
+  rebuildAfterProjectChange(projectId);
 }
 
 function renderIdentificationSearchResults(projectId, query){
@@ -2112,13 +2052,7 @@ function initializeQualityProject(calcId){
   const selectedProduct = template
     ? (template.baseProduct || template.product)
     : get(`${calcId}.selectedProduct`);
-  const states = store.__qualityTemplateStates && typeof store.__qualityTemplateStates === 'object'
-    ? store.__qualityTemplateStates : {};
-
-  delete states[`${calcId}:${templateId || 'custom'}`];
-  Object.keys(store).forEach(key => {
-    if (key.startsWith(calcId + '.')) delete store[key];
-  });
+  const states = clearQualityProjectData(calcId);
 
   if (template){
     store[`${calcId}.template`] = templateId;
@@ -2132,8 +2066,7 @@ function initializeQualityProject(calcId){
     store[`${calcId}.limop`] = calcId === 'extract' ? 'ge' : 'le';
   }
   store.__qualityTemplateStates = states;
-  build();
-  showTab(calcId);
+  rebuildAfterProjectChange(calcId);
 }
 
 function initializeAssayProject(){
@@ -2144,13 +2077,7 @@ function initializeAssayProject(){
   const tech = techOf();
   const mode = assayMode();
   const dryBasis = get(AP + 'dryBasis');
-  const states = store.__assayTemplateStates && typeof store.__assayTemplateStates === 'object'
-    ? store.__assayTemplateStates : {};
-
-  delete states[templateId || 'custom'];
-  Object.keys(store).forEach(key => {
-    if (key.startsWith(AP)) delete store[key];
-  });
+  const states = clearAssayProjectData();
 
   if (template){
     store[AP + 'tech'] = template.tech;
@@ -2182,8 +2109,7 @@ function initializeAssayProject(){
     store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
   }
   store.__assayTemplateStates = states;
-  build();
-  showTab('assay');
+  rebuildAfterProjectChange('assay');
 }
 
 function initializeIdentificationProject(projectId){
@@ -2193,16 +2119,12 @@ function initializeIdentificationProject(projectId){
   const selectedProduct = template
     ? (template.baseProduct || template.product)
     : get(`${projectId}.selectedProduct`);
-  const states = store.__identificationTemplateStates && typeof store.__identificationTemplateStates === 'object'
-    ? store.__identificationTemplateStates : {};
-  delete states[`${projectId}:${templateId || 'unselected'}`];
-  clearIdentificationProjectStore(projectId);
+  const states = clearIdentificationProjectData(projectId);
   if (template) store[`${projectId}.template`] = templateId;
   else store[`${projectId}.template`] = '';
   if (selectedProduct) store[`${projectId}.selectedProduct`] = selectedProduct;
   store.__identificationTemplateStates = states;
-  build();
-  showTab(projectId);
+  rebuildAfterProjectChange(projectId);
 }
 
 function initializeProject(projectId){
@@ -2232,7 +2154,7 @@ function build(){
   if (typeof GcPubiaoDefaults !== 'undefined' && gcTemplate?.tech === 'gc'
       && get(AP + 'mode') === gcTemplate.mode && GcPubiaoDefaults.entries[gcTemplate.id]) {
     // 标准固定参数每次渲染都按标准同步；它们在表里是不可编辑的黑体文字。
-    // 上一版误填进空格的浓度只撤除一次，之后就随各模板快照保存。
+    // 上一版误填进空格的浓度只撤除一次；品种或模板切换时批次字段不再沿用旧快照。
     GcPubiaoDefaults.fill(gcTemplate.id, store, GC_WORD_TABLE_LAYOUTS[gcTemplate.id],
       store[AP + '__pubiaoDefaultsVersion']);
     store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
@@ -2278,6 +2200,8 @@ function showTab(id){
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if (projectResetting) return;
+  if (!t.isConnected) return;
   if (t.matches('[data-identification-search]')){
     renderIdentificationSearchResults(t.dataset.identificationSearch, t.value);
     return;
@@ -2293,6 +2217,8 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (projectResetting) return;
+  if (!t.isConnected) return;
   if (t.matches('[data-assay-search]')){
     if (t.value) selectAssayProduct(t.value);
     return;

@@ -11,6 +11,11 @@
   --ok:#127a3c;
   --bad:#c02626;
   --accent:#1f5fbf;
+  --table-data-font-family:"Microsoft YaHei","微软雅黑","PingFang SC","Noto Sans CJK SC",sans-serif;
+  --table-data-font-size:17px;
+  --table-data-font-weight:700;
+  --table-data-line-height:1.3;
+  --table-data-letter-spacing:.01em;
 }
 
 *{box-sizing:border-box}
@@ -122,9 +127,10 @@ table.form td{text-align:center}
 
 /* ---------- 输入 / 结果 ---------- */
 input.cell,input.inline{
-  font-family:"KaiTi","楷体","Kaiti SC","SimSun",serif;
+  font-family:var(--table-data-font-family);
   color:var(--pen);
-  font-size:17px; font-weight:700;
+  font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
+  line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
   background:transparent;
   border:none;
   outline:none;
@@ -144,9 +150,10 @@ input.inline.w120{width:120px}
 input.inline.w180{width:180px}
 
 .out{
-  font-family:"KaiTi","楷体","Kaiti SC",serif;
+  font-family:var(--table-data-font-family);
   color:var(--calc);
-  font-size:17px; font-weight:700;
+  font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
+  line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
   min-height:24px;
 }
 .out.empty{color:#c8c8c8; font-weight:400}
@@ -226,7 +233,9 @@ td.spanall{background:#fdfdfd}
 /* ---------- 含量测定：多针进样 ---------- */
 .peaks{display:flex; flex-wrap:wrap; gap:4px; justify-content:center}
 .peaks input{
-  font-family:"KaiTi","楷体",serif; color:var(--pen); font-size:15px;
+  font-family:var(--table-data-font-family); color:var(--pen);
+  font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
+  line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
   width:88px; text-align:center;
   border:none; border-bottom:1px solid #bbb; background:transparent; outline:none;
 }
@@ -583,7 +592,7 @@ select.quality-search{cursor:pointer; min-height:32px}
   table.form th,table.form td{padding:5px 4px}
   .formula{font-size:16px}
   .subst{font-size:12px}
-  input.cell{font-size:15px}
+  :root{--table-data-font-size:15px}
   .judge{margin-left:0; margin-top:6px}
   .env-hero{padding:25px 20px; align-items:flex-start}
   .env-hero h2{font-size:23px}
@@ -632,13 +641,15 @@ select.quality-search{cursor:pointer; min-height:32px}
 .word-table-scroll .word-record-table{min-width:0}
 .word-record-table .word-cell-input{
   width:100%; box-sizing:border-box; border:0; background:transparent;
-  color:var(--pen); font:inherit; text-align:center;
-  font-size:1.06em; font-weight:700; letter-spacing:.01em;
+  color:var(--pen); font-family:var(--table-data-font-family); text-align:center;
+  font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
+  line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
 }
 .word-record-table .word-cell-output{
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;
-  background:transparent; color:var(--calc); font:inherit; text-align:center;
-  font-size:1.06em; font-weight:700; letter-spacing:.01em;
+  background:transparent; color:var(--calc); font-family:var(--table-data-font-family); text-align:center;
+  font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
+  line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
 }
 /* 标准／原记录确定的固定参数：不需要检验人员修改或填写，用黑体与手填值区分。 */
 .word-record-table .word-standard-value{

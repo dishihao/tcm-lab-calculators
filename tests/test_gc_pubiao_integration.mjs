@@ -30,11 +30,11 @@ try {
   await page.evaluate(()=>applyAssayTemplate('star-anise-anethole'));
   assert.equal(await fixed('refInjection').innerText(),'2');
   await page.evaluate(()=>applyAssayTemplate('mint-menthol'));
-  assert.equal(await field('Cref').inputValue(),'0.2031');
-  assert.equal(await field('Ws.1').inputValue(),'2.0145');
+  assert.equal(await field('Cref').inputValue(),'','更换气相模板后不应恢复上一模板的对照品浓度');
+  assert.equal(await field('Ws.1').inputValue(),'','更换气相模板后不应恢复上一模板的称样量');
   assert.equal(await fixed('refInjection').innerText(),'1','固定参数跟随当前模板显示标准值');
   await page.reload();
-  assert.equal(await field('Cref').inputValue(),'0.2031');
+  assert.equal(await field('Cref').inputValue(),'','刷新后不应恢复已切换模板的旧对照品浓度');
   assert.equal(await fixed('refInjection').innerText(),'1');
   // Old saved records must gain missing defaults once without replacing measurements.
   await page.evaluate(()=>{
@@ -49,7 +49,7 @@ try {
   assert.equal(await field('Ws.1').inputValue(),'2.012');
   assert.equal(await fixed('f.1').innerText(),'50');
   await page.evaluate(()=>applyAssayTemplate('mugwort-borneol'));
-  assert.equal(await field('Cref').inputValue(),'0.102');
+  assert.equal(await field('Cref').inputValue(),'','更换气相模板后不应恢复上一模板的对照品浓度');
   assert.equal(await fixed('f.1').innerText(),'10');
   await page.evaluate(()=>{
     store.__assayTemplateStates['patchouli-patchoulol']={'assay.tech':'gc','assay.mode':'external'};
