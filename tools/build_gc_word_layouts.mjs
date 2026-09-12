@@ -7,8 +7,8 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const EMBEDDED_REGISTRY = JSON.parse(fs.readFileSync(
   path.join(MODULE_DIR, 'gc-word-embedded-object-semantics.json'), 'utf8',
 ));
-if (EMBEDDED_REGISTRY.version !== 1 || EMBEDDED_REGISTRY.entries.length !== 95) {
-  throw new Error('embedded-object registry must be reviewed version 1 with 95 entries');
+if (EMBEDDED_REGISTRY.version !== 1 || EMBEDDED_REGISTRY.entries.length !== 101) {
+  throw new Error('embedded-object registry must be reviewed version 1 with 101 entries');
 }
 const EMBEDDED_BY_IDENTITY = new Map(EMBEDDED_REGISTRY.entries.map(entry => [entry.identity, entry]));
 
@@ -515,11 +515,11 @@ function auditProjection(entry) {
 }
 
 function buildAll(extract, manifest) {
-  if (!Array.isArray(manifest.entries) || manifest.entries.length !== 33) throw new Error('manifest must contain exactly 33 entries');
-  if (!Array.isArray(extract.templates) || extract.templates.length !== 33) throw new Error('extract must contain exactly 33 templates');
+  if (!Array.isArray(manifest.entries) || manifest.entries.length !== 35) throw new Error('manifest must contain exactly 35 entries');
+  if (!Array.isArray(extract.templates) || extract.templates.length !== 35) throw new Error('extract must contain exactly 35 templates');
   if (!Array.isArray(extract.errors) || extract.errors.length !== 0) throw new Error(`extract has ${extract.errors?.length ?? 'unknown'} errors`);
   const extractById = new Map(extract.templates.map(template => [template.templateId, template]));
-  if (extractById.size !== 33) throw new Error('extract templateId values must be unique');
+  if (extractById.size !== 35) throw new Error('extract templateId values must be unique');
   const layouts = {};
   const auditTemplates = [];
 
@@ -563,7 +563,7 @@ function buildAll(extract, manifest) {
     audit.auditDigest = sha256(JSON.stringify(auditProjection(audit)));
     auditTemplates.push(audit);
   }
-  if (Object.keys(layouts).length !== 33) throw new Error('layouts must use 33 unique template.id keys');
+  if (Object.keys(layouts).length !== 35) throw new Error('layouts must use 35 unique template.id keys');
   return { layouts, auditTemplates };
 }
 
@@ -596,11 +596,11 @@ function writeAudit(auditTemplates, outputPath, inputPath, manifestPath) {
 }
 
 function verifyApprovedAudit(approved, currentTemplates) {
-  if (approved.schemaVersion !== 1 || approved.templateCount !== 33 || !Array.isArray(approved.templates)) {
+  if (approved.schemaVersion !== 1 || approved.templateCount !== 35 || !Array.isArray(approved.templates)) {
     throw new Error('approved audit has invalid schema or template count');
   }
   const approvedById = new Map(approved.templates.map(entry => [entry.templateId, entry]));
-  if (approvedById.size !== 33) throw new Error('approved audit templateId values must be unique');
+  if (approvedById.size !== 35) throw new Error('approved audit templateId values must be unique');
   let reviewedCount = 0;
   let unresolvedCount = 0;
   for (const current of currentTemplates) {
@@ -621,8 +621,8 @@ function verifyApprovedAudit(approved, currentTemplates) {
       throw new Error(`templateId=${current.templateId} approved audit content changed`);
     }
   }
-  if (reviewedCount !== 33 || unresolvedCount !== 0) {
-    throw new Error(`approved audit has ${reviewedCount}/33 reviewed and ${unresolvedCount} unresolved`);
+  if (reviewedCount !== 35 || unresolvedCount !== 0) {
+    throw new Error(`approved audit has ${reviewedCount}/35 reviewed and ${unresolvedCount} unresolved`);
   }
   return { reviewedCount, unresolvedCount };
 }

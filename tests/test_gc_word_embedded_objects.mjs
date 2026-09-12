@@ -14,10 +14,10 @@ const assetPath = path.join(root, 'assets', 'gc-record-table-layouts.js');
 assert.ok(fs.existsSync(registryPath), 'reviewed embedded-object semantic registry is required');
 const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
 assert.equal(registry.version, 1);
-assert.equal(registry.entries.length, 95, 'all 95 source-visible legacy objects must be approved');
-assert.equal(new Set(registry.entries.map(entry => entry.identity)).size, 95,
+assert.equal(registry.entries.length, 101, 'all 101 source-visible legacy objects must be approved');
+assert.equal(new Set(registry.entries.map(entry => entry.identity)).size, 101,
   'source-cell identities must be unique');
-assert.equal(new Set(registry.entries.map(entry => `${entry.sourceIdentity}|${entry.sourceDigest}`)).size, 95,
+assert.equal(new Set(registry.entries.map(entry => `${entry.sourceIdentity}|${entry.sourceDigest}`)).size, 101,
   'source identity/digest approval keys must be unique');
 for (const entry of registry.entries) {
   assert.match(entry.sourceDigest, /^[a-f0-9]{64}$/);
@@ -33,16 +33,16 @@ const semanticCounts = Object.fromEntries(Object.entries(Object.groupBy(
 )).map(([key, values]) => [key, values.length]));
 assert.deepEqual(semanticCounts, {
   internalCorrectionFactor: 4,
-  sampleMean: 33,
-  externalReferenceAverage: 29,
-  externalSampleAverage: 29,
+  sampleMean: 35,
+  externalReferenceAverage: 31,
+  externalSampleAverage: 31,
 });
 
 assert.ok(fs.existsSync(extractPath), 'fresh GC Word extract is required');
 const extract = JSON.parse(fs.readFileSync(extractPath, 'utf8'));
 const extractedObjects = extract.templates.flatMap(template => ['referenceTable', 'sampleTable']
   .flatMap(tableKey => template[tableKey].embeddedObjects ?? []));
-assert.equal(extractedObjects.length, 95, 'extract must preserve all 95 approved objects');
+assert.equal(extractedObjects.length, 101, 'extract must preserve all 101 approved objects');
 for (const item of extractedObjects) {
   assert.match(item.sourceDigest, /^[a-f0-9]{64}$/);
   assert.equal(typeof item.sourceIdentity, 'string');
@@ -74,7 +74,7 @@ vm.runInNewContext(`${fs.readFileSync(assetPath, 'utf8')}\n;this.layouts = GC_WO
 const publicMathRuns = Object.values(context.layouts).flatMap(layout =>
   [layout.referenceTable, layout.sampleTable].flatMap(table => table.cells.flatMap(cell =>
     (cell.paragraphs ?? []).flatMap(paragraph => (paragraph.runs ?? []).filter(run => run.kind === 'math')))));
-assert.equal(publicMathRuns.length, 95, 'browser asset must contain all 95 safe semantic conversions');
+assert.equal(publicMathRuns.length, 101, 'browser asset must contain all 101 safe semantic conversions');
 const publicSource = fs.readFileSync(assetPath, 'utf8');
 assert.doesNotMatch(publicSource, /<w:(?:object|pict|drawing)\b|<o:OLEObject\b|<v:(?:shape|imagedata)\b/i);
 assert.doesNotMatch(publicSource, /Equation\.(?:3|KSEE3)|[A-Za-z]:\\/i);
@@ -96,4 +96,4 @@ for (const templateId of ['amomum-bornyl-acetate', 'amomum-bornyl-acetate-finish
     `${templateId}: rendered mean overline must precede the percent suffix`);
 }
 
-console.log('PASS: 95 reviewed legacy Word objects convert to safe semantic AST and unknown objects fail closed');
+console.log('PASS: 101 reviewed legacy Word objects convert to safe semantic AST and unknown objects fail closed');

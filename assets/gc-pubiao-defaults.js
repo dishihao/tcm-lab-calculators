@@ -84,6 +84,10 @@ const GcPubiaoDefaults = (() => {
   addRecord(['amomum-bornyl-acetate-finished-beijing'], '31604砂仁米成品检验记录（北京2023年版）',
     {'assay.f.1':'25','assay.f.2':'25'},
     '砂仁米（北京2023）：取粉末约1 g，精密加入无水乙醇25 ml，等效样品体积25 ml。该记录测定法未写进样量，不猜补。');
+  addRecord(['gecko-dichlorobenzene','gecko-dichlorobenzene-finished'],
+    '620蛤蚧原料／成品检验记录（上海炮规2018）',
+    {'assay.f.1':'10','assay.f.2':'10'},
+    '蛤蚧对二氯苯：取样品5 g，精密加入环己烷10 ml，等效样品体积10 ml。两份记录的测定法都未写进样量，不猜补；标准是“不得检出”，无含量限度。');
 
   function fill(id, state, layout, fromVersion) {
     const entry = entries[id];

@@ -63,7 +63,7 @@ const visibleGeometryAsset = await page.evaluate(() => ({
     ? [] : Object.keys(GC_WORD_TABLE_VISIBLE_GEOMETRY),
 }));
 assert(visibleGeometryAsset.present, '缺少经 Word PNG 审计的可见几何资产');
-assert(visibleGeometryAsset.layouts.length === 33,
+assert(visibleGeometryAsset.layouts.length === 35,
   `可见几何资产模板数量错误: ${visibleGeometryAsset.layouts.length}`);
 const visibleGeometryCoverage = await page.evaluate(() => Object.entries(GC_WORD_TABLE_VISIBLE_GEOMETRY).flatMap(([templateId, roles]) =>
   ['reference', 'sample'].map(role => {
@@ -82,7 +82,7 @@ const visibleGeometryCoverage = await page.evaluate(() => Object.entries(GC_WORD
     };
   })
 ));
-assert(visibleGeometryCoverage.length === 66, `可见几何资产表格数量错误: ${visibleGeometryCoverage.length}`);
+assert(visibleGeometryCoverage.length === 70, `可见几何资产表格数量错误: ${visibleGeometryCoverage.length}`);
 for (const item of visibleGeometryCoverage) {
   assert(Number.isFinite(item.renderWidthPt) && item.renderWidthPt > 0,
     `${item.templateId}:${item.role} 缺少有效的 Word 可见宽度`);
@@ -116,10 +116,10 @@ assert(audit.hplc.templates === 1037, '液相成分模板总数错误');
 assert(audit.hplc.products === 385, '液相去重品名数错误');
 assert(audit.hplcProducts === audit.hplc.products, '液相品名统计不一致');
 assert(new Set(audit.hplcIds).size === audit.hplcIds.length, '液相模板 ID 不唯一');
-assert(audit.gcIds.length === 33, '气相成分模板数量不正确');
-assert(audit.gcRecords === 28, '气相原料/成品记录数量不正确');
-assert(audit.gcRawRecords === 14, '气相原料记录数量不正确');
-assert(audit.gcFinishedRecords === 14, '气相成品记录数量不正确');
+assert(audit.gcIds.length === 35, '气相成分模板数量不正确');
+assert(audit.gcRecords === 30, '气相原料/成品记录数量不正确');
+assert(audit.gcRawRecords === 15, '气相原料记录数量不正确');
+assert(audit.gcFinishedRecords === 15, '气相成品记录数量不正确');
 assert(audit.invalidTech.length === 0, '存在未区分液相/气相的模板');
 
 // 默认液相：先选品名，再显示该品名的原料/成品及成分模板。
@@ -149,7 +149,7 @@ await page.screenshot({ path: 'C:/tmp/hplc-template-selected.png', fullPage: tru
 await field(page, 'assay.tech').selectOption('gc');
 assert(await page.locator('select[data-assay-search]').count() === 1, '切换气相后没有品名下拉选择');
 const gcProductOptions = await page.locator('[data-assay-search] option').allTextContents();
-assert(gcProductOptions.length === 15 && gcProductOptions[0] === '请选择品名（共 14 个）',
+assert(gcProductOptions.length === 16 && gcProductOptions[0] === '请选择品名（共 15 个）',
   `气相品名下拉应列出14个品名，实际 ${JSON.stringify(gcProductOptions)}`);
 assert(!gcProductOptions.includes('薄荷脑'), '气相下拉不应出现成分名');
 await page.locator('[data-assay-search]').selectOption('薄荷');
@@ -636,4 +636,4 @@ assert(await page.locator('.word-record-table').count() === 2,
 await page.screenshot({ path: 'C:/tmp/assay-templates.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log(`PASS: ${audit.hplc.templates} 个液相模板/603 条记录，33 个气相模板，方法分离、标准原文及计算`);
+console.log(`PASS: ${audit.hplc.templates} 个液相模板/603 条记录，35 个气相模板，方法分离、标准原文及计算`);

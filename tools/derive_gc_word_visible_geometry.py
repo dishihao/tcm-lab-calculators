@@ -281,8 +281,8 @@ def build_all(run: Path, manifest_path: Path) -> tuple[dict, dict]:
             if not word_json.exists():
                 raise FileNotFoundError(f'missing trusted Word sidecar: {word_json}')
             runtime[template_id][role], private[template_id][role] = derive_runtime_and_provenance(word_json)
-    if len(runtime) != 33 or sum(map(len, runtime.values())) != 66:
-        raise ValueError('expected 33 templates / 66 tables')
+    if len(runtime) != 35 or sum(map(len, runtime.values())) != 70:
+        raise ValueError('expected 35 templates / 70 tables')
     return runtime, private
 
 
@@ -305,7 +305,7 @@ def main() -> int:
     public_source = f'const GC_WORD_TABLE_VISIBLE_GEOMETRY = Object.freeze({json.dumps(runtime, ensure_ascii=False, separators=(",", ":"), sort_keys=True)});\n'
     args.public_output.write_text(public_source, encoding='utf-8')
     args.private_output.write_text(json.dumps(private, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    print(f'Derived 33 templates / 66 tables; public={args.public_output}; private={args.private_output}')
+    print(f'Derived 35 templates / 70 tables; public={args.public_output}; private={args.private_output}')
     return 0
 
 

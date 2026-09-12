@@ -33,7 +33,8 @@ const EXPECTED_TEMPLATE_IDS = [
   'flax-linoleic','flax-linolenic',
   'elsholtzia-thymol','elsholtzia-carvacrol',
   'elsholtzia-thymol-finished','elsholtzia-carvacrol-finished',
-  'pine-alpha-pinene'
+  'pine-alpha-pinene',
+  'gecko-dichlorobenzene','gecko-dichlorobenzene-finished'
 ];
 
 // This source-authoritative map is deliberately independent from the builder's
@@ -72,6 +73,8 @@ const EXPECTED_NEEDLE_SLOT_COUNTS = Object.freeze({
   'elsholtzia-thymol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
   'elsholtzia-carvacrol-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
   'pine-alpha-pinene': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'gecko-dichlorobenzene': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
+  'gecko-dichlorobenzene-finished': { refA: 5, refIS: 0, smpA: [2, 2], smpIS: [0, 0] },
 });
 
 const EXPECTED_UNBOUND_NON_GAP_BLANKS = Object.freeze({});
@@ -79,10 +82,10 @@ const EXPECTED_UNBOUND_NON_GAP_BLANKS = Object.freeze({});
 assert.ok(Array.isArray(entries), 'manifest.entries must be an array');
 assert.equal(entries.length, EXPECTED_TEMPLATE_IDS.length);
 assert.deepEqual(entries.map(({ templateId }) => templateId), EXPECTED_TEMPLATE_IDS);
-assert.equal(new Set(entries.map(({ templateId }) => templateId)).size, 33);
-assert.equal(new Set(entries.map(({ recordKey }) => recordKey)).size, 28);
-assert.equal(new Set(entries.filter(({ kind }) => kind === '原料').map(({ recordKey }) => recordKey)).size, 14);
-assert.equal(new Set(entries.filter(({ kind }) => kind === '成品').map(({ recordKey }) => recordKey)).size, 14);
+assert.equal(new Set(entries.map(({ templateId }) => templateId)).size, 35);
+assert.equal(new Set(entries.map(({ recordKey }) => recordKey)).size, 30);
+assert.equal(new Set(entries.filter(({ kind }) => kind === '原料').map(({ recordKey }) => recordKey)).size, 15);
+assert.equal(new Set(entries.filter(({ kind }) => kind === '成品').map(({ recordKey }) => recordKey)).size, 15);
 
 for (const entry of entries) {
   assert.equal(typeof entry.templateId, 'string');
@@ -113,7 +116,7 @@ if (requireExtract) {
   assert.ok(fs.existsSync(extractPath), 'gc-word-table-extract.json is required');
 
   const extract = JSON.parse(fs.readFileSync(extractPath, 'utf8'));
-  assert.equal(extract.templates.length, 33);
+  assert.equal(extract.templates.length, 35);
   assert.deepEqual(extract.errors, []);
 
   for (const manifestEntry of entries) {
@@ -126,7 +129,7 @@ if (requireExtract) {
   }
 
   const tables = extract.templates.flatMap(({ referenceTable, sampleTable }) => [referenceTable, sampleTable]);
-  assert.equal(tables.length, 66);
+  assert.equal(tables.length, 70);
 
   for (const table of tables) {
     assert.ok(Number.isFinite(table.widthPt) && table.widthPt > 0, `${table.role} widthPt must be finite and positive`);
@@ -288,7 +291,7 @@ if (requireBuilder) {
         cells: [{ rowIndex: 1, cellIndex: 1, gridColumnIndex: 1, gridSpan: 1,
           verticalMerge: null, text: '1', paragraphs: [] }],
       };
-    const fixtureEntries = Array.from({ length: 33 }, (_, index) => {
+    const fixtureEntries = Array.from({ length: 35 }, (_, index) => {
       const templateId = `cli-fixture-${index + 1}`;
       return {
         manifest: {
@@ -314,7 +317,7 @@ if (requireBuilder) {
       '--audit-only', fixtureAuditPath,
     ], { encoding: 'utf8' });
     assert.equal(auditResult.status, 0, `${auditResult.stdout}${auditResult.stderr}`);
-    assert.match(`${auditResult.stdout}${auditResult.stderr}`, /AUDIT: 33 templates; 0 reviewed; 0 unresolved/);
+    assert.match(`${auditResult.stdout}${auditResult.stderr}`, /AUDIT: 35 templates; 0 reviewed; 0 unresolved/);
     const approvedAudit = JSON.parse(fs.readFileSync(fixtureAuditPath, 'utf8'));
     const originalDigests = approvedAudit.templates.map(({ auditDigest }) => auditDigest);
     approvedAudit.templates.forEach(entry => { entry.reviewed = true; });
@@ -375,7 +378,7 @@ if (requireAsset) {
   const layouts = context.__layouts;
 
   assert.deepEqual(Object.keys(layouts), EXPECTED_TEMPLATE_IDS);
-  assert.equal(Object.keys(layouts).length, 33);
+  assert.equal(Object.keys(layouts).length, 35);
   assert.deepEqual(Object.keys(EXPECTED_NEEDLE_SLOT_COUNTS), EXPECTED_TEMPLATE_IDS);
 
   let unresolvedCount = 0;

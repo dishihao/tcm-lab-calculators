@@ -112,7 +112,7 @@ try {
     await page.reload(); await page.waitForLoadState('networkidle'); await page.locator('[data-tab="assay"]').click();
     await page.addScriptTag({ path: semanticCapturePath });
     const ids = await page.evaluate(() => GC_TEMPLATES.map(x => x.id));
-  if (ids.length !== 33) throw new Error(`expected 33 GC templates, got ${ids.length}`);
+  if (ids.length !== 35) throw new Error(`expected 35 GC templates, got ${ids.length}`);
     for (const templateId of ids) {
       await chooseTemplate(page, templateId); const target = path.join(run, templateId); fs.mkdirSync(target, { recursive: true }); const all = {};
       for (const role of ['reference', 'sample']) {
@@ -164,5 +164,5 @@ try {
     }
     fs.writeFileSync(path.join(target, 'web-metrics.json'), JSON.stringify({ templateId, ...all }, null, 2));
   }
-  console.log(`Captured 33 templates / 66 tables in ${run}`);
+  console.log(`Captured 35 templates / 70 tables in ${run}`);
 } finally { await browser.close(); }

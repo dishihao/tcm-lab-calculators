@@ -32,8 +32,8 @@ $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 . (Join-Path $WorkspaceRoot 'tools\gc_word_open_recovery.ps1')
 $embeddedRegistryPath = Join-Path $WorkspaceRoot 'tools\gc-word-embedded-object-semantics.json'
 $embeddedRegistry = Get-Content -Raw -LiteralPath $embeddedRegistryPath | ConvertFrom-Json
-if ($embeddedRegistry.version -ne 1 -or @($embeddedRegistry.entries).Count -ne 95) {
-  throw 'embedded-object registry must contain the reviewed 95-entry version 1 set'
+if ($embeddedRegistry.version -ne 1 -or @($embeddedRegistry.entries).Count -ne 101) {
+  throw 'embedded-object registry must contain the reviewed 101-entry version 1 set'
 }
 $script:embeddedApprovals = @{}
 $script:embeddedApprovalsByTable = @{}

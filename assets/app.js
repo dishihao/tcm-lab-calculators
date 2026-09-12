@@ -289,7 +289,20 @@ const GC_TEMPLATES = [
     recordKey:'pine-raw', product:'油松节', recordLabel:'原料', mode:'external',
     dry:true, plates:'25000',
     standardText:'本品按干燥品计算，含α-蒎烯（C10H16）不得少于0.10%。'
-  }, [{ id:'pine-alpha-pinene', name:'α-蒎烯', formulaText:'C₁₀H₁₆', limit:'0.10' }])
+  }, [{ id:'pine-alpha-pinene', name:'α-蒎烯', formulaText:'C₁₀H₁₆', limit:'0.10' }]),
+
+  // 蛤蚧：上海炮规2018 对二氯苯检查，标准是“应不得检出”，没有含量限度，
+  // 因此限度留空、由检验人员按“不得检出”自行判定；表格与其余外标法记录同构。
+  ...gcRecord({
+    recordKey:'gecko-raw', product:'蛤蚧', recordLabel:'原料（上海炮规2018）', mode:'external',
+    dry:true, plates:'2000',
+    standardText:'照气相色谱法（通则0521）测定，应不得检出对二氯苯。'
+  }, [{ id:'gecko-dichlorobenzene', name:'对二氯苯', formulaText:'C₆H₄Cl₂', limit:'' }]),
+  ...gcRecord({
+    recordKey:'gecko-finished', product:'蛤蚧', recordLabel:'成品（上炮2018）', mode:'external',
+    dry:true, plates:'2000',
+    standardText:'照气相色谱法（通则0521）测定，应不得检出对二氯苯。'
+  }, [{ id:'gecko-dichlorobenzene-finished', name:'对二氯苯', formulaText:'C₆H₄Cl₂', limit:'' }])
 ];
 
 const ASSAY_TEMPLATES = [...HPLC_TEMPLATES, ...GC_TEMPLATES];

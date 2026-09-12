@@ -32,6 +32,8 @@
     {"templateId":"elsholtzia-carvacrol","recordKey":"elsholtzia-raw","kind":"原料","root":"原料检验记录","sourceFile":"516香薷原料检验记录.doc","referenceTableIndex":9,"sampleTableIndex":10},
     {"templateId":"elsholtzia-thymol-finished","recordKey":"elsholtzia-finished","kind":"成品","root":"成品检验记录","sourceFile":"51601香薷成品检验记录.doc","referenceTableIndex":8,"sampleTableIndex":9},
     {"templateId":"elsholtzia-carvacrol-finished","recordKey":"elsholtzia-finished","kind":"成品","root":"成品检验记录","sourceFile":"51601香薷成品检验记录.doc","referenceTableIndex":10,"sampleTableIndex":11},
-    {"templateId":"pine-alpha-pinene","recordKey":"pine-raw","kind":"原料","root":"原料检验记录","sourceFile":"606油松节原料检验记录（第一增补本）.doc","referenceTableIndex":4,"sampleTableIndex":5}
+    {"templateId":"pine-alpha-pinene","recordKey":"pine-raw","kind":"原料","root":"原料检验记录","sourceFile":"606油松节原料检验记录（第一增补本）.doc","referenceTableIndex":4,"sampleTableIndex":5},
+    {"templateId":"gecko-dichlorobenzene","recordKey":"gecko-raw","kind":"原料","root":"原料检验记录","sourceFile":"620蛤蚧原料检验记录（上海炮规2018）.doc","referenceTableIndex":5,"sampleTableIndex":6},
+    {"templateId":"gecko-dichlorobenzene-finished","recordKey":"gecko-finished","kind":"成品","root":"成品检验记录","sourceFile":"62001蛤蚧成品检验记录（上炮2018）.doc","referenceTableIndex":7,"sampleTableIndex":8}
   ]
 }

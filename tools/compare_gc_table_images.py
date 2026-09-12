@@ -337,8 +337,8 @@ def write_artifacts(word: Image.Image, web: Image.Image, output: Path) -> None:
 
 def write_contact_sheet(run: Path, artifact: str, output_name: str) -> None:
     files = sorted(run.glob(f'*/*/{artifact}.png'))
-    if len(files) != 66:
-        raise ValueError(f'{artifact} contact sheet expected 66 images, got {len(files)}')
+    if len(files) != 70:
+        raise ValueError(f'{artifact} contact sheet expected 70 images, got {len(files)}')
     columns, tile_width, tile_height, label_height = 6, 240, 180, 18
     rows = math.ceil(len(files) / columns)
     sheet = Image.new('RGB', (columns * tile_width, rows * tile_height), 'white')
@@ -445,10 +445,10 @@ def audit(root: Path, strict: bool) -> int:
     failures = [item for item in tables if item['geometryMismatch'] or item['wrapMismatch'] or item['contentPresenceMismatch'] or item['exactContentMismatch'] or item['warnings']]
     write_contact_sheet(run, 'overlay', 'overlay-contact-sheet.png')
     write_contact_sheet(run, 'diff', 'diff-contact-sheet.png')
-    summary = {'run': str(run), 'strict': strict, 'tablesExpected': 66, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'indentMismatches': sum(any(m.get('metric') == 'tableIndentInContainerPx' for m in x['geometryMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'exactContentMismatches': sum(bool(x['exactContentMismatch']) for x in tables), 'warningOnlyExclusions': sum(bool(x['warnings']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}
+    summary = {'run': str(run), 'strict': strict, 'tablesExpected': 70, 'tablesCompared': len(tables), 'geometryMatched': sum(not x['geometryMismatch'] for x in tables), 'shiftedBorders': sum(bool(x['borderMismatches']) for x in tables), 'indentMismatches': sum(any(m.get('metric') == 'tableIndentInContainerPx' for m in x['geometryMismatches']) for x in tables), 'wrapMismatches': sum(bool(x['wrapMismatch']) for x in tables), 'contentPresenceMismatches': sum(bool(x['contentPresenceMismatch']) for x in tables), 'exactContentMismatches': sum(bool(x['exactContentMismatch']) for x in tables), 'warningOnlyExclusions': sum(bool(x['warnings']) for x in tables), 'missing': missing, 'unexpectedDirectories': unexpected, 'mismatches': failures, 'tables': tables}
     (run/'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"{summary['geometryMatched']}/66 tables geometry matched; {summary['shiftedBorders']} border-run mismatches; {summary['indentMismatches']} indent mismatches; {summary['wrapMismatches']} cell-wrap mismatches; {summary['exactContentMismatches']} exact-content mismatches; warnings={summary['warningOnlyExclusions']}; unexpected dirs={len(unexpected)}")
-    return 1 if strict and (len(tables) != 66 or missing or failures) else 0
+    print(f"{summary['geometryMatched']}/70 tables geometry matched; {summary['shiftedBorders']} border-run mismatches; {summary['indentMismatches']} indent mismatches; {summary['wrapMismatches']} cell-wrap mismatches; {summary['exactContentMismatches']} exact-content mismatches; warnings={summary['warningOnlyExclusions']}; unexpected dirs={len(unexpected)}")
+    return 1 if strict and (len(tables) != 70 or missing or failures) else 0
 
 
 def main() -> int:

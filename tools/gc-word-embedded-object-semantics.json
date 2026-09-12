@@ -1455,6 +1455,92 @@
       "containerCategory": "embedded-equation",
       "containerType": "object",
       "sourceDigest": "b01ca5a34d5f3414e53b3abce6629e9823f6dd89541fb69af8e0e18ce3ea2667"
+    },
+    {
+      "identity": "gecko-dichlorobenzene|reference|5|reference-r5c1",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1",
+      "templateId": "gecko-dichlorobenzene",
+      "tableRole": "reference",
+      "sourceTableIndex": 5,
+      "sourceIdentity": "gecko-dichlorobenzene|reference|5|r5c1|object1",
+      "sourceCellId": "reference-r5c1",
+      "containerCategory": "embedded-equation",
+      "containerType": "object",
+      "sourceDigest": "a27f93f89ea2e44b394770e191e73c148c83bcab3aaf1c26fa7154a8d916223e"
+    },
+    {
+      "identity": "gecko-dichlorobenzene|sample|6|sample-r10c1",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1",
+      "templateId": "gecko-dichlorobenzene",
+      "tableRole": "sample",
+      "sourceTableIndex": 6,
+      "sourceIdentity": "gecko-dichlorobenzene|sample|6|r10c1|object1",
+      "sourceCellId": "sample-r10c1",
+      "containerCategory": "embedded-equation",
+      "containerType": "object",
+      "sourceDigest": "08195a51d641fad0b8986f7c390bb5c2fe257c1ffc84918467ab0d2ba5c40503"
+    },
+    {
+      "identity": "gecko-dichlorobenzene|sample|6|sample-r7c1",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      },
+      "templateId": "gecko-dichlorobenzene",
+      "tableRole": "sample",
+      "sourceTableIndex": 6,
+      "sourceIdentity": "gecko-dichlorobenzene|sample|6|r7c1|object1",
+      "sourceCellId": "sample-r7c1",
+      "containerCategory": "floating-overline",
+      "containerType": "pict",
+      "sourceDigest": "8cb9d2c723641742eb9c79a6ee1f3bb5224cdb642bcbe8b826c98716d56963ee"
+    },
+    {
+      "identity": "gecko-dichlorobenzene-finished|reference|7|reference-r5c1",
+      "semanticType": "externalReferenceAverage",
+      "targetCellId": "reference-r5c1",
+      "templateId": "gecko-dichlorobenzene-finished",
+      "tableRole": "reference",
+      "sourceTableIndex": 7,
+      "sourceIdentity": "gecko-dichlorobenzene-finished|reference|7|r5c1|object1",
+      "sourceCellId": "reference-r5c1",
+      "containerCategory": "embedded-equation",
+      "containerType": "object",
+      "sourceDigest": "1c7a28c25d3bbe0d5eed15596a8f188f88962d939287171027aa12d6811a5869"
+    },
+    {
+      "identity": "gecko-dichlorobenzene-finished|sample|8|sample-r10c1",
+      "semanticType": "sampleMean",
+      "targetCellId": "sample-r10c1",
+      "templateId": "gecko-dichlorobenzene-finished",
+      "tableRole": "sample",
+      "sourceTableIndex": 8,
+      "sourceIdentity": "gecko-dichlorobenzene-finished|sample|8|r10c1|object1",
+      "sourceCellId": "sample-r10c1",
+      "containerCategory": "embedded-equation",
+      "containerType": "object",
+      "sourceDigest": "b01ca5a34d5f3414e53b3abce6629e9823f6dd89541fb69af8e0e18ce3ea2667"
+    },
+    {
+      "identity": "gecko-dichlorobenzene-finished|sample|8|sample-r7c1",
+      "semanticType": "externalSampleAverage",
+      "targetCellId": "sample-r7c1",
+      "consumeAdjacentText": {
+        "value": "A",
+        "occurrence": "last"
+      },
+      "templateId": "gecko-dichlorobenzene-finished",
+      "tableRole": "sample",
+      "sourceTableIndex": 8,
+      "sourceIdentity": "gecko-dichlorobenzene-finished|sample|8|r7c1|object1",
+      "sourceCellId": "sample-r7c1",
+      "containerCategory": "floating-overline",
+      "containerType": "pict",
+      "sourceDigest": "d77f9b8d9acc19fe9203d964172a3abdf87338db2f5fd5f240c1f541b480d826"
     }
   ]
 }
