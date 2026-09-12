@@ -259,6 +259,7 @@ td.spanall{background:#fdfdfd}
   font-family:inherit; font-size:13px;
 }
 .quality-search:focus{outline:2px solid #c9daf8; border-color:var(--accent)}
+select.quality-search{cursor:pointer; min-height:32px}
 .quality-search-row button{
   padding:6px 12px; cursor:pointer;
   border:1px solid #aaa; border-radius:4px; background:#fff; color:#444;

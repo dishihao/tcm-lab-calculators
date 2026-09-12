@@ -54,8 +54,7 @@ await page.locator('[data-tab="assay"]').click();
 const assayTemplate = await page.evaluate(() =>
   HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText && HPLC_RECORD_LAYOUTS.templates[t.id]?.status === 'mapped')
 );
-await page.locator('[data-assay-search]').fill(assayTemplate.product);
-await page.locator(`[data-assay-product-choice="${assayTemplate.product}"]`).click();
+await page.locator('[data-assay-search]').selectOption(assayTemplate.product);
 await page.locator(`[data-assay-template-button="${assayTemplate.id}"]`).click();
 await field(page, 'assay.Cref').fill('0.5');
 await field(page, 'assay.refA.0').fill('12345');
@@ -78,9 +77,7 @@ assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].se
 await field(page, 'assay.tech').selectOption('gc');
 const assayProductChange = page.locator('[data-change-assay-product]');
 if (await assayProductChange.count()) await assayProductChange.click();
-await page.locator('[data-assay-search]').fill('广藿香');
-await page.waitForTimeout(100);
-await page.locator('[data-assay-product-choice="广藿香"]').click();
+await page.locator('[data-assay-search]').selectOption('广藿香');
 await page.waitForTimeout(100);
 await page.evaluate(() => applyAssayTemplate('patchouli-patchoulol'));
 const gcTemplateBeforeInit = await page.evaluate(() => {

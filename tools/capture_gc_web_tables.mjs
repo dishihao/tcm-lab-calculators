@@ -100,8 +100,7 @@ const chooseTemplate = async (page, id) => {
   if (!template) throw new Error(`template not found: ${id}`);
   if (await page.locator('[data-k="assay.tech"]').inputValue() !== template.tech) await page.locator('[data-k="assay.tech"]').selectOption(template.tech);
   const change = page.locator('[data-change-assay-product]'); if (await change.count()) await change.click();
-  await page.locator('[data-assay-search]').fill(template.product);
-  await page.locator(`[data-assay-product-choice="${template.product}"]`).click();
+  await page.locator('[data-assay-search]').selectOption(template.product);
   await page.locator(`[data-assay-template-button="${template.id}"]`).click();
 };
 

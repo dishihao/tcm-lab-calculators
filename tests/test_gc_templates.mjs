@@ -23,10 +23,10 @@ const chooseTemplate = async (page, templateId) => {
   }
   const change = page.locator('[data-change-assay-product]');
   if (await change.count()) await change.click();
-  await page.locator('[data-assay-search]').fill(template.product);
-  const product = page.locator(`[data-assay-product-choice="${template.product}"]`);
-  assert(await product.count() === 1, `品名搜索中找不到 ${template.product}`);
-  await product.click();
+  const product = page.locator('[data-assay-search]');
+  const options = await product.locator('option').allTextContents();
+  assert(options.includes(template.product), `品名下拉中找不到 ${template.product}`);
+  await product.selectOption(template.product);
   const button = page.locator(`[data-assay-template-button="${template.id}"]`);
   assert(await button.count() === 1, `${template.product} 下找不到模板 ${template.id}`);
   await button.click();
@@ -147,9 +147,12 @@ await page.screenshot({ path: 'C:/tmp/hplc-template-selected.png', fullPage: tru
 
 // 方法切换必须分开列表，不能让当前方法显示另一种方法的模板。
 await field(page, 'assay.tech').selectOption('gc');
-assert(await page.locator('[data-assay-search]').count() === 1, '切换气相后没有品名搜索');
-await page.locator('[data-assay-search]').fill('薄荷');
-await page.locator('[data-assay-product-choice="薄荷"]').click();
+assert(await page.locator('select[data-assay-search]').count() === 1, '切换气相后没有品名下拉选择');
+const gcProductOptions = await page.locator('[data-assay-search] option').allTextContents();
+assert(gcProductOptions.length === 15 && gcProductOptions[0] === '请选择品名（共 14 个）',
+  `气相品名下拉应列出14个品名，实际 ${JSON.stringify(gcProductOptions)}`);
+assert(!gcProductOptions.includes('薄荷脑'), '气相下拉不应出现成分名');
+await page.locator('[data-assay-search]').selectOption('薄荷');
 const visibleTechs = await page.locator('[data-assay-template-button]').evaluateAll(buttons =>
   buttons.map(button => ASSAY_TEMPLATES.find(t => t.id === button.dataset.assayTemplateButton)?.tech)
 );

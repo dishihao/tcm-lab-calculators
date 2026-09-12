@@ -1166,7 +1166,8 @@ function renderAssayPicker(tech, tpl){
         (a.kind === b.kind ? templateChoiceLabel(a).localeCompare(templateChoiceLabel(b), 'zh-CN')
           : (a.kind === '原料' ? -1 : 1)))
     : [];
-  const products = [...new Set(templates.map(template => template.product))];
+  const products = [...new Set(templates.map(template => template.product))]
+    .sort((a, b) => a.localeCompare(b, 'zh-CN'));
   const recordCount = new Set(templates.map(template => template.recordKey)).size;
   const rawCount = new Set(templates.filter(t => t.kind === '原料').map(t => t.recordKey)).size;
   const finishedCount = recordCount - rawCount;
@@ -1182,10 +1183,12 @@ function renderAssayPicker(tech, tpl){
           <button type="button" data-change-assay-product>更换品名</button>
         </div>` : `
         <div class="quality-search-row">
-          <input class="quality-search" type="search" data-assay-search
-            placeholder="输入品名搜索，例如：人参、女贞子、红花" autocomplete="off">
+          <select class="quality-search" data-assay-search
+            aria-label="选择${tech === 'gc' ? '气相' : '液相'}品名">
+            <option value="">请选择品名（共 ${products.length} 个）</option>
+            ${products.map(product => `<option value="${esc(product)}">${esc(product)}</option>`).join('')}
+          </select>
         </div>`}
-      <div class="quality-results" data-assay-results hidden></div>
       <div class="quality-step-two${selectedProduct ? '' : ' disabled'}">
         <div class="quality-step-title"><b>第二步：选择原料/成品及成分模板</b>
           ${selectedProduct ? `<span>找到 ${productTemplates.length} 个成分模板</span>` : '<span>请先选择品名</span>'}
@@ -1780,32 +1783,6 @@ function changeAssayProduct(){
   showTab('assay');
 }
 
-function renderAssaySearchResults(query){
-  const box = document.querySelector('[data-assay-results]');
-  if (!box) return;
-  const q = String(query || '').trim().toLowerCase();
-  if (!q){
-    box.innerHTML = '<div class="quality-search-hint">输入品名后显示匹配结果。</div>';
-    box.hidden = false;
-    return;
-  }
-  const groups = [...new Set(assayTemplatesForTech().map(template => template.product))]
-    .filter(product => product.toLowerCase().includes(q))
-    .slice(0, 40);
-  box.innerHTML = groups.length
-    ? groups.map(product => {
-      const templates = templatesForProduct(product);
-      const raw = new Set(templates.filter(t => t.kind === '原料').map(t => t.recordKey)).size;
-      const finished = new Set(templates.filter(t => t.kind === '成品').map(t => t.recordKey)).size;
-      return `<button type="button" class="quality-result" data-assay-product-choice="${esc(product)}">
-        <span>${esc(product)}</span>
-        <small>${templates.length} 个成分模板（原料记录 ${raw}，成品记录 ${finished}）</small>
-      </button>`;
-    }).join('')
-    : '<div class="quality-search-hint">没有匹配的预设品名，可使用下方自定义品种。</div>';
-  box.hidden = false;
-}
-
 function switchAssayTech(nextTech){
   const tech = TECH[nextTech] ? nextTech : 'hplc';
   const current = assayTemplate(get(AP + 'template'));
@@ -2247,10 +2224,6 @@ function showTab(id){
 
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.matches('[data-assay-search]')){
-    renderAssaySearchResults(t.value);
-    return;
-  }
   if (t.matches('[data-identification-search]')){
     renderIdentificationSearchResults(t.dataset.identificationSearch, t.value);
     return;
@@ -2266,6 +2239,10 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.matches('[data-assay-search]')){
+    if (t.value) selectAssayProduct(t.value);
+    return;
+  }
   if (t.matches('[data-assay-template-picker]')){
     if (t.value) applyAssayTemplate(t.value);
     return;
@@ -2301,11 +2278,6 @@ document.addEventListener('click', e => {
   const initialize = e.target.closest('[data-initialize-project]');
   if (initialize){
     initializeProject(initialize.dataset.initializeProject);
-    return;
-  }
-  const assayProduct = e.target.closest('[data-assay-product-choice]');
-  if (assayProduct){
-    selectAssayProduct(assayProduct.dataset.assayProductChoice);
     return;
   }
   const assayTemplateButton = e.target.closest('[data-assay-template-button]');
@@ -2380,9 +2352,6 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('focusin', e => {
-  if (e.target.matches('[data-assay-search]')){
-    renderAssaySearchResults(e.target.value);
-  }
   if (e.target.matches('[data-identification-search]')){
     renderIdentificationSearchResults(e.target.dataset.identificationSearch, e.target.value);
   }
@@ -2408,12 +2377,6 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && e.target.matches('[data-quality-search]')){
     const box = document.querySelector(`[data-quality-results="${CSS.escape(e.target.dataset.qualitySearch)}"]`);
-    if (box) box.hidden = true;
-    e.target.blur();
-    return;
-  }
-  if (e.key === 'Escape' && e.target.matches('[data-assay-search]')){
-    const box = document.querySelector('[data-assay-results]');
     if (box) box.hidden = true;
     e.target.blur();
     return;
