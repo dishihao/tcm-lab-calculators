@@ -2139,6 +2139,10 @@ function initializeAssayProject(){
     if (selectedProduct) store[AP + 'selectedProduct'] = selectedProduct;
     store[AP + 'template'] = '';
   }
+  // 初始化是明确清空，不应立即被自动补空逻辑反向填回。
+  if (typeof GcPubiaoDefaults !== 'undefined' && template?.tech === 'gc') {
+    store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
+  }
   store.__assayTemplateStates = states;
   build();
   showTab('assay');
@@ -2186,6 +2190,14 @@ function seedDefaults(){
 
 function build(){
   seedDefaults();
+  const gcTemplate = assayTemplate(get(AP + 'template'));
+  if (typeof GcPubiaoDefaults !== 'undefined' && gcTemplate?.tech === 'gc'
+      && get(AP + 'mode') === gcTemplate.mode && GcPubiaoDefaults.entries[gcTemplate.id]
+      && store[AP + '__pubiaoDefaultsVersion'] !== GcPubiaoDefaults.version) {
+    GcPubiaoDefaults.fill(gcTemplate.id, store, GC_WORD_TABLE_LAYOUTS[gcTemplate.id]);
+    // 随各模板快照保存，尊重之后的手动修改或主动清空。
+    store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
+  }
 
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
     .concat(IDENTIFICATION_PROJECTS.map(project => ({ id:project.id, tab:project.tab })))
