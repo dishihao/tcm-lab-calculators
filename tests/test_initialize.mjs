@@ -168,25 +168,14 @@ const gcTemplateAfterInit = await page.evaluate(() => ({
 assert(JSON.stringify(gcTemplateAfterInit) === JSON.stringify(gcTemplateBeforeInit),
   `精确气相初始化不应改变模板、标准原文、公开路由或可见布局: ${JSON.stringify(gcTemplateBeforeInit)} -> ${JSON.stringify(gcTemplateAfterInit)}`);
 
+// 显微、薄层、理化的初始化按钮已随项目去掉。
 for (const item of ['microscopy', 'tlc', 'physicochemical']) {
-  const template = await page.evaluate(id => IDENTIFICATION_TEMPLATES.find(t => t.item === id), item);
-  assert(template, `${item}: 没有鉴别模板`);
-  await page.locator(`[data-tab="${item}"]`).click();
-  await page.locator(`[data-identification-search="${item}"]`).fill(template.baseProduct);
-  await page.locator(`[data-identification-product="${template.baseProduct}"]`).click();
-  await page.locator(`[data-identification-template="${template.id}"]`).click();
-  await page.evaluate(project => {
-    store[`${project}.sampleNo`]='TEST-001';store[`${project}.result`]='测试填写内容';store[`${project}.conclusion`]='符合规定';
-  },item);
-  await acceptInitialize(page, item);
-  assert(await page.evaluate(project => ['sampleNo','result','conclusion'].every(key => !store[`${project}.${key}`]), item), `${item}: 初始化没有清空历史录入数据`);
-  assert(await field(page, `${item}.result`).count() === 0, `${item}: 初始化不应创建原记录没有的填写表`);
-  assert(await page.locator(`[data-identification-template="${template.id}"].selected`).count() === 1,
-    `${item}: 初始化后没有保留鉴别模板`);
+  assert(await page.locator(`[data-initialize-project="${item}"]`).count() === 0,
+    `${item}: 鉴别项目已去掉，不应再有初始化按钮`);
 }
 
-assert(await page.locator('[data-initialize-project]').count() === 9, '初始化按钮没有覆盖全部九个项目');
+assert(await page.locator('[data-initialize-project]').count() === 6, '初始化按钮没有覆盖当前六个项目');
 await page.screenshot({ path: 'C:/tmp/initialize-buttons.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log('PASS: 九个项目初始化按钮均能清空检验数据并保留当前模板标准');
+console.log('PASS: 六个项目初始化按钮均能清空检验数据并保留当前模板标准');

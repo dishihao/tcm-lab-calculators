@@ -524,6 +524,14 @@ select.quality-search{cursor:pointer; min-height:32px}
   background:#fafafa; color:#777;
   font-family:"Microsoft YaHei","微软雅黑",sans-serif;
 }
+/* 未选择品种时不显示数据表，只给一句提示 */
+.record-empty{
+  margin:18px 0; padding:18px;
+  border:1px dashed #bbb; border-radius:5px;
+  background:#fafafa; color:#777;
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+  text-align:center;
+}
 .identification-content{
   margin:14px 0; padding:14px 16px;
   border:1px solid #cfc8bd; border-radius:5px; background:#fff;
@@ -624,11 +632,11 @@ select.quality-search{cursor:pointer; min-height:32px}
 .word-table-scroll .word-record-table{min-width:0}
 .word-record-table .word-cell-input{
   width:100%; box-sizing:border-box; border:0; background:transparent;
-  color:var(--pen); font:inherit; text-align:inherit;
+  color:var(--pen); font:inherit; text-align:center;
 }
 .word-record-table .word-cell-output{
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;
-  background:transparent; color:var(--ink); font:inherit; text-align:inherit;
+  background:transparent; color:var(--ink); font:inherit; text-align:center;
 }
 /* 标准／原记录确定的固定参数：不需要检验人员修改或填写，用黑体与手填值区分。 */
 .word-record-table .word-standard-value{

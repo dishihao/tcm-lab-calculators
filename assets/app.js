@@ -383,6 +383,10 @@ function qualityStandardText(t){
 
 /* ---------------------------------------------------------------- 鉴别项目模板 */
 
+/* 显微、薄层、理化三个鉴别项目已按要求从页面去掉：不再生成页签与原记录表格。
+   模板数据与渲染代码保留，需要恢复时把 IDENTIFICATION_TABS_ENABLED 改回 true 即可。 */
+const IDENTIFICATION_TABS_ENABLED = false;
+
 const IDENTIFICATION_PROJECTS = [
   { id:'microscopy', tab:'显微', section:'【鉴别】显微', resultLabel:'显微观察结果',
     extraFields:[['microscopeModel', '生物显微镜型号'], ['microscopeNo', '生物显微镜编号']] },
@@ -1155,16 +1159,17 @@ function renderSheet(c){
         data-initialize-project="${c.id}" title="清空当前项目的检验录入值，保留已选品种模板">初始化</button>
     </div>
     ${renderQualityPicker(c)}
-    <div class="method">${esc(tpl ? tpl.method : c.method)}</div>
-    ${tpl ? window.QuantitativeRecordTables.render(tpl, get) : renderTable(c)}
+    ${tpl ? `
+    <div class="method">${esc(tpl.method)}</div>
+    ${window.QuantitativeRecordTables.render(tpl, get)}
     ${renderDp(c)}
     <div class="formula-wrap">
       <div class="formula">${c.formula()}</div>
       <div class="subst" id="${c.id}.subst"></div>
     </div>
     ${renderVerdict(c)}
-    ${tpl ? `<div class="note">当前模板：${esc(tpl.label)}；标准原文及法定判定限度来自 ${esc(tpl.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用标准。</div>` : ''}
-    ${c.note && !tpl ? `<div class="note">${c.note}</div>` : ''}
+    <div class="note">当前模板：${esc(tpl.label)}；标准原文及法定判定限度来自 ${esc(tpl.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用标准。</div>`
+      : `<div class="record-empty">请先选择品名和原料/成品模板；选定后显示该品种原记录中需要填写或计算的表格。</div>`}
   </section>`;
 }
 
@@ -1265,6 +1270,27 @@ function renderAssaySheet(){
     ? preciseGcLayout(tpl) : tpl && tpl.tech === 'hplc' && mode === tpl.mode
       ? window.HplcRecordTables?.layout(tpl) : null;
   const hplcPending = tpl?.tech === 'hplc' && mode === tpl.mode && !preciseLayout;
+
+  // 未选择品种（成分模板或自定义品种）时不渲染任何数据表，避免出现空白的通用表。
+  if (!tpl && !String(get(pre + 'productName') || '').trim()) {
+    return `
+    <section class="sheet" data-sheet="assay">
+      <div class="sheet-heading">
+        <h2 class="sec">【含量测定】</h2>
+        <button type="button" class="initialize-button no-print"
+          data-initialize-project="assay" title="清空当前项目的检验录入值，保留已选品种模板">初始化</button>
+      </div>
+      <div class="analyte-bar no-print">
+        <span>方法：</span>${techSel}${modeSel}
+        <label class="tb-chk" style="color:#333">
+          <input type="checkbox" data-k="${pre}dryBasis" ${dry ? 'checked' : ''}>
+          按干燥品计算
+        </label>
+      </div>
+      ${productPicker}
+      <div class="record-empty">请先选择品名和成分模板（或套用自定义品种）；选定后显示该品种原记录中需要填写或计算的表格。</div>
+    </section>`;
+  }
 
   const legacyRefRows = mode === 'internal' ? `
       <tr><th class="rowlab" style="width:38%">内标物名称</th>
@@ -2203,8 +2229,9 @@ function build(){
     store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
   }
 
+  const identificationProjects = IDENTIFICATION_TABS_ENABLED ? IDENTIFICATION_PROJECTS : [];
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
-    .concat(IDENTIFICATION_PROJECTS.map(project => ({ id:project.id, tab:project.tab })))
+    .concat(identificationProjects.map(project => ({ id:project.id, tab:project.tab })))
     .concat([{ id:'assay', tab:ASSAY.tab }])
     .concat(window.EnvironmentRecorder
       ? [{ id:window.EnvironmentRecorder.id, tab:window.EnvironmentRecorder.tab }]
@@ -2217,7 +2244,7 @@ function build(){
 
   $('#sheets').innerHTML =
       CALCS.map(c => renderSheet(c)).join('')
-    + IDENTIFICATION_PROJECTS.map(project => renderIdentificationSheet(project)).join('')
+    + identificationProjects.map(project => renderIdentificationSheet(project)).join('')
     + renderAssaySheet()
     + (window.EnvironmentRecorder ? window.EnvironmentRecorder.render() : '');
 
