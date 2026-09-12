@@ -111,15 +111,14 @@ const gcTemplateBeforeInit = await page.evaluate(() => {
   return { id: store['assay.template'], standard, routes, geometry, fixedLabels };
 });
 for (const [key, value] of Object.entries({
-  'assay.refBatch': 'REF-INIT', 'assay.refInjection': '0.8',
-  'assay.internalBatch': 'IS-INIT', 'assay.sampleInjection.1': '1.0', 'assay.sampleInjection.2': '1.1',
+  'assay.refBatch': 'REF-INIT', 'assay.internalBatch': 'IS-INIT',
   'assay.refA.0': '101', 'assay.refA.1': '102', 'assay.refA.2': '103', 'assay.refA.3': '104', 'assay.refA.4': '105',
   'assay.Cref': '2', 'assay.Cis': '1', 'assay.Q': '0',
   'assay.refIS.0': '200', 'assay.refIS.1': '200', 'assay.refIS.2': '200', 'assay.refIS.3': '200', 'assay.refIS.4': '200',
   'assay.smpA.1.0': '11', 'assay.smpA.1.1': '12', 'assay.smpA.1.2': '13',
   'assay.smpA.2.0': '21', 'assay.smpA.2.1': '22', 'assay.smpA.2.2': '23',
   'assay.smpIS.1.0': '200', 'assay.smpIS.1.1': '200', 'assay.smpIS.2.0': '200', 'assay.smpIS.2.1': '200',
-  'assay.Ws.1': '1', 'assay.Ws.2': '1', 'assay.f.1': '10', 'assay.f.2': '10',
+  'assay.Ws.1': '1', 'assay.Ws.2': '1',
 })) await field(page, key).fill(value);
 assert(await page.locator('#assay\\.out\\.MEAN').innerText() !== '', '精确 GC 初始化前没有计算输出');
 await acceptInitialize(page, 'assay');
@@ -130,10 +129,22 @@ for (const key of [
   'assay.smpIS.1.0', 'assay.smpIS.1.1', 'assay.smpIS.2.0', 'assay.smpIS.2.1',
 ]) assert(await field(page, key).inputValue() === '', `精确气相初始化后没有清空 ${key}`);
 for (const key of [
-  'assay.refBatch', 'assay.refInjection', 'assay.internalBatch',
-  'assay.sampleInjection.1', 'assay.sampleInjection.2', 'assay.refA.0', 'assay.refA.4',
+  'assay.refBatch', 'assay.internalBatch',
+  'assay.refA.0', 'assay.refA.4',
   'assay.smpA.1.0', 'assay.smpA.2.2',
 ]) assert(await field(page, key).inputValue() === '', `精确气相初始化后没有清空 ${key}`);
+// 标准固定参数不是可填格：初始化既不清空它们，也不需要重新填写。
+for (const [key, text] of [
+  ['assay.refInjection', '1'], ['assay.sampleInjection.1', '1'], ['assay.sampleInjection.2', '1'],
+  ['assay.f.1', '10'], ['assay.f.2', '10'],
+]) {
+  assert(await field(page, key).count() === 0, `标准固定参数 ${key} 不应再是可填输入格`);
+  const spans = page.locator(`[data-fixed-field="${key}"]`);
+  assert(await spans.count() === 1, `标准固定参数 ${key} 应显示为固定文字`);
+  assert((await spans.innerText()).trim() === text, `标准固定参数 ${key} 应显示 ${text}`);
+  const font = await spans.evaluate(el => getComputedStyle(el).fontFamily);
+  assert(/黑体|SimHei/i.test(font), `标准固定参数 ${key} 应为黑体，实际 ${font}`);
+}
 for (const key of ['assay.out.Aref', 'assay.out.A.1', 'assay.out.A.2', 'assay.out.MEAN'])
   assert(await page.locator(`#${key.replaceAll('.', '\\.')}`).innerText() === '', `精确气相初始化后没有清空 ${key}`);
 assert(await field(page, 'assay.refSource').count() === 0, '对照品来源不应为可填参数');

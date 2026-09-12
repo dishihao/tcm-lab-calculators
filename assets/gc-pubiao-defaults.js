@@ -1,9 +1,10 @@
-/* 蒲标网已核实的含量测定参数。只向现有记录的空白输入格回填进样量和样品稀释倍数。
- * 对照品浓度、内标浓度由本批次实际称量与配液决定，一律不预填。
+/* 标准或原检验记录确定的进样量与样品稀释倍数。表格里这三个量是不需要检验人员修改或
+ * 填写的固定文字（黑体），每次渲染都以本表的值同步；未收录的品种仍按可填格处理。
+ * 对照品浓度、内标浓度由本批次实际称量与配液决定，一律不填。
  * 不填称样量、纯度、水分、批号、峰面积；不使用鉴别项配液参数。
  */
 const GcPubiaoDefaults = (() => {
-  const version = '20260912-2';
+  const version = '20260912-3';
   const entries = {};
   // 20260910-1 曾把标准配液目标浓度写进空白格。本次不再写入；
   // 升级时只撤掉那些“仍是我们写进去的值”的格子，检验人员自己填过的值不动。
@@ -96,7 +97,8 @@ const GcPubiaoDefaults = (() => {
       }
     }
     for (const [key, value] of Object.entries(entry.values)) {
-      if (inputs.has(key) && (state[key] == null || String(state[key]).trim() === '')) {
+      // 这些格子已改为不可编辑的固定文字，标准值始终为准。
+      if (inputs.has(key) && state[key] !== value) {
         state[key] = value;
         count++;
       }

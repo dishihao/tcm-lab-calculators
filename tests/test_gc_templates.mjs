@@ -309,8 +309,10 @@ assert((await page.locator('[data-assay-reference-table]').innerText()).includes
   '丁香原料对照品表缺少记录中的进样量行');
 assert(!(await page.locator('[data-assay-sample-table]').innerText()).includes('水分Q'),
   '丁香原料供试品表不应显示水分行');
-assert(await field(page, 'assay.sampleInjection.1').count() === 1,
+assert(await page.locator('[data-fixed-field="assay.sampleInjection.1"]').count() === 1,
   '丁香原料供试品表缺少第一份样品进样量');
+assert((await page.locator('[data-fixed-field="assay.sampleInjection.1"]').innerText()).trim() === '1',
+  '丁香原料进样量应按标准显示为固定值1');
 
 await chooseTemplate(page, 'clove-eugenol-finished');
 assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'clove-eugenol-finished',
@@ -430,15 +432,14 @@ assert(patchouliReferenceTable.includes('正十八烷批号') && patchouliRefere
   '广藿香内标法对照品表没有按记录显示两种物质的批号');
 assert(patchouliReferenceTable.includes('正十八烷来源') && patchouliReferenceTable.includes('百秋李醇来源'),
   '广藿香内标法对照品表没有按记录显示两种物质的来源');
-// 精确 GC 表中的批次/来源/进样量/峰面积都必须进入现有 assay.<field>
-// 状态快照；切换到另一份记录后不能串值。
+// 精确 GC 表中的批号、称样量和峰面积必须进入现有 assay.<field> 状态快照；
+// 进样量与稀释倍数是标准固定参数，在表里是不可编辑的黑体文字。
 await field(page, 'assay.refBatch').fill('REF-PATCHOULI');
 await page.evaluate(() => { store['assay.refSource'] = 'SRC-PATCHOULI'; store['assay.refDrying'] = 'OLD'; });
-await field(page, 'assay.refInjection').fill('0.8');
+await field(page, 'assay.Ws.1').fill('1.11');
+await field(page, 'assay.Ws.2').fill('1.12');
 await fillPeaks(page, 'assay.refA', [101, 102, 103, 104, 105]);
 await field(page, 'assay.internalBatch').fill('IS-PATCHOULI');
-await field(page, 'assay.sampleInjection.1').fill('1.0');
-await field(page, 'assay.sampleInjection.2').fill('1.1');
 await fillPeaks(page, 'assay.smpA.1', [11, 12, 13]);
 await fillPeaks(page, 'assay.smpA.2', [21, 22, 23]);
 
@@ -447,30 +448,28 @@ const bruceaReferenceTable = await page.locator('[data-assay-reference-table]').
 assert(bruceaReferenceTable.includes('苯甲酸苯酯批号') && bruceaReferenceTable.includes('油酸批号'),
   '鸦胆子内标法对照品表没有切换为本记录物质名称');
 await field(page, 'assay.refBatch').fill('REF-BRUCEA');
-await field(page, 'assay.refInjection').fill('0.9');
+await field(page, 'assay.Ws.1').fill('2.21');
+await field(page, 'assay.Ws.2').fill('2.22');
 await fillPeaks(page, 'assay.refA', [201, 202, 203, 204, 205]);
 await field(page, 'assay.internalBatch').fill('IS-BRUCEA');
-await field(page, 'assay.sampleInjection.1').fill('2.0');
-await field(page, 'assay.sampleInjection.2').fill('2.1');
 await fillPeaks(page, 'assay.smpA.1', [31, 32, 33]);
 await fillPeaks(page, 'assay.smpA.2', [41, 42, 43]);
 assert(await field(page, 'assay.refBatch').inputValue() === 'REF-BRUCEA'
   && await page.locator('[data-fixed-field="assay.refSource"]').innerText() === '中检院'
-  && await field(page, 'assay.sampleInjection.1').inputValue() === '2.0'
-  && await field(page, 'assay.sampleInjection.2').inputValue() === '2.1'
+  && await field(page, 'assay.Ws.1').inputValue() === '2.21'
   && await field(page, 'assay.refA.0').inputValue() === '201'
   && await field(page, 'assay.smpA.2.2').inputValue() === '43',
   '鸦胆子切回前哨兵值没有正确写入');
 await chooseTemplate(page, 'patchouli-patchoulol');
 assert(await field(page, 'assay.refBatch').inputValue() === 'REF-PATCHOULI'
   && await page.locator('[data-fixed-field="assay.refSource"]').innerText() === '中检院'
-  && await field(page, 'assay.refInjection').inputValue() === '0.8',
-  '切回广藿香后没有恢复其对照品批号、来源和进样量');
+  && await field(page, 'assay.Ws.1').inputValue() === '1.11',
+  '切回广藿香后没有恢复其对照品批号、来源和称样量');
 assert(await field(page, 'assay.internalBatch').inputValue() === 'IS-PATCHOULI',
   '切回广藿香后没有恢复其对照品表数据');
-assert(await field(page, 'assay.sampleInjection.1').inputValue() === '1.0'
-  && await field(page, 'assay.sampleInjection.2').inputValue() === '1.1',
-  '切回广藿香后没有恢复两份供试品进样量');
+assert(await page.locator('[data-fixed-field="assay.f.1"]').innerText() === '10'
+  && await page.locator('[data-fixed-field="assay.refInjection"]').innerText() === '1',
+  '固定参数应按当前模板显示广藿香标准值');
 assert(await field(page, 'assay.refA.0').inputValue() === '101'
   && await field(page, 'assay.refA.4').inputValue() === '105'
   && await field(page, 'assay.smpA.1.0').inputValue() === '11'
@@ -499,10 +498,10 @@ await fillPeaks(page, 'assay.refA', [100, 100, 100, 100, 100]);
 await field(page, 'assay.Cref').fill('1');
 for (const sample of [1, 2]) {
   await field(page, `assay.Ws.${sample}`).fill('1');
-  await field(page, `assay.f.${sample}`).fill('10');
   await fillPeaks(page, `assay.smpA.${sample}`, [50, 50]);
 }
-assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '0.5', '外标法百分比计算错误');
+assert(await page.locator('#assay\\.out\\.MEAN').innerText() === '1.2',
+  '外标法百分比计算错误（八角茴香稀释倍数按标准固定25，1.25 修约到1位为1.2）');
 
 // 内标法：f=(A内×C对)/(A对×C内)=4，两个样品含量均为 2.00%。
 await chooseTemplate(page, 'patchouli-patchoulol');
@@ -522,7 +521,6 @@ await field(page, 'assay.Cref').fill('2');
 await field(page, 'assay.Q').fill('0');
 for (const sample of [1, 2]) {
   await field(page, `assay.Ws.${sample}`).fill('1');
-  await field(page, `assay.f.${sample}`).fill('10');
   await fillPeaks(page, `assay.smpIS.${sample}`, [200, 200]);
   await fillPeaks(page, `assay.smpA.${sample}`, [50, 50, 200]);
 }

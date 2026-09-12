@@ -12,23 +12,30 @@ try {
   await page.goto(new URL('../index.html',import.meta.url).href);
   await page.evaluate(()=>applyAssayTemplate('mint-menthol'));
   const field = key=>page.locator(`[data-k="assay.${key}"]`);
+  const fixed = key=>page.locator(`[data-fixed-field="assay.${key}"]`);
   assert.equal(await field('Cref').inputValue(),'','只回填进样量与稀释倍数，对照品浓度保持空白');
-  assert.equal(await field('f.1').inputValue(),'50');
+  assert.equal(await field('f.1').count(),0,'稀释倍数是固定文字，不是可填输入格');
+  assert.equal(await field('refInjection').count(),0,'进样量是固定文字，不是可填输入格');
+  assert.equal(await fixed('f.1').innerText(),'50');
+  assert.equal(await fixed('refInjection').innerText(),'1');
+  assert.equal(await fixed('sampleInjection.2').innerText(),'1');
+  const fixedFont = await page.evaluate(()=>getComputedStyle(
+    document.querySelector('[data-assay-reference-table] .word-standard-value')).fontFamily);
+  assert.ok(/黑体|SimHei/i.test(fixedFont),`固定参数应为黑体，实际是 ${fixedFont}`);
   assert.equal(await field('Ws.1').inputValue(),'');
   fs.mkdirSync(new URL('../output/',import.meta.url),{recursive:true});
   await page.locator('[data-assay-reference-table]').screenshot({path:fileURLToPath(new URL('../output/gc-pubiao-mint-reference.png',import.meta.url))});
   await field('Cref').fill('0.2031');
   await field('Ws.1').fill('2.0145');
-  await field('refInjection').fill('');
   await page.evaluate(()=>applyAssayTemplate('star-anise-anethole'));
-  assert.equal(await field('refInjection').inputValue(),'2');
+  assert.equal(await fixed('refInjection').innerText(),'2');
   await page.evaluate(()=>applyAssayTemplate('mint-menthol'));
   assert.equal(await field('Cref').inputValue(),'0.2031');
   assert.equal(await field('Ws.1').inputValue(),'2.0145');
-  assert.equal(await field('refInjection').inputValue(),'','用户主动清空后，不应被切换或刷新反复填回');
+  assert.equal(await fixed('refInjection').innerText(),'1','固定参数跟随当前模板显示标准值');
   await page.reload();
   assert.equal(await field('Cref').inputValue(),'0.2031');
-  assert.equal(await field('refInjection').inputValue(),'');
+  assert.equal(await fixed('refInjection').innerText(),'1');
   // Old saved records must gain missing defaults once without replacing measurements.
   await page.evaluate(()=>{
     localStorage.setItem('tcm-lab-calc-v2',JSON.stringify({store:{
@@ -40,10 +47,10 @@ try {
   await page.reload();
   assert.equal(await field('Cref').inputValue(),'0.202');
   assert.equal(await field('Ws.1').inputValue(),'2.012');
-  assert.equal(await field('f.1').inputValue(),'50');
+  assert.equal(await fixed('f.1').innerText(),'50');
   await page.evaluate(()=>applyAssayTemplate('mugwort-borneol'));
   assert.equal(await field('Cref').inputValue(),'0.102');
-  assert.equal(await field('f.1').inputValue(),'10');
+  assert.equal(await fixed('f.1').innerText(),'10');
   await page.evaluate(()=>{
     store.__assayTemplateStates['patchouli-patchoulol']={'assay.tech':'gc','assay.mode':'external'};
     applyAssayTemplate('patchouli-patchoulol');
@@ -78,19 +85,26 @@ try {
   });
   await page.reload();
   assert.equal(await field('Cref').inputValue(),'','上一版自动写入的对照品浓度应撤除');
-  assert.equal(await field('f.1').inputValue(),'50','撤除浓度后仍应补进样量与稀释倍数');
+  assert.equal(await fixed('f.1').innerText(),'50','撤除浓度后仍应显示标准稀释倍数');
+  assert.equal(await fixed('refInjection').innerText(),'1');
   const audit=await page.evaluate(()=>{
     const result=[];
     for(const t of GC_TEMPLATES){
       applyAssayTemplate(t.id);
       const layout=GC_WORD_TABLE_LAYOUTS[t.id];
-      const original=layout.bindings.filter(b=>b.role==='input'&&!['assay.refDrying','assay.refSource'].includes(b.field)).map(b=>b.field).sort();
+      const fixedFields=Object.keys(GcPubiaoDefaults.entries[t.id]?.values||{}).sort();
+      const skip=b=>['assay.refDrying','assay.refSource'].includes(b.field)||fixedFields.includes(b.field);
+      const original=layout.bindings.filter(b=>b.role==='input'&&!skip(b)).map(b=>b.field).sort();
       const actual=Array.from(document.querySelectorAll('[data-assay-reference-table] input[data-k], [data-assay-sample-table] input[data-k]')).map(el=>el.dataset.k).sort();
-      result.push({id:t.id,original,actual});
+      const shownFixed=Array.from(document.querySelectorAll('[data-assay-reference-table] .word-standard-value, [data-assay-sample-table] .word-standard-value')).map(el=>el.dataset.fixedField).sort();
+      result.push({id:t.id,original,actual,fixedFields,shownFixed});
     }
     return result;
   });
-  for(const item of audit) assert.deepEqual(item.actual,item.original,`${item.id} 不得增减表格输入字段`);
+  for(const item of audit){
+    assert.deepEqual(item.actual,item.original,`${item.id} 不得增减表格输入字段`);
+    assert.deepEqual(item.shownFixed,item.fixedFields,`${item.id} 标准固定参数应显示为不可编辑黑体文字`);
+  }
   assert.deepEqual(errors,[]);
-  console.log(`PASS ${audit.length} GC模板字段不变；只回填进样量与稀释倍数、旧记录迁移、已有值和主动清空保留`);
+  console.log(`PASS ${audit.length} GC模板：标准固定参数为不可编辑黑体、其余字段不变、旧记录迁移与手填值保留`);
 } finally {await browser.close();}

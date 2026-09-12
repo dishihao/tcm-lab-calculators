@@ -818,11 +818,23 @@ function gcWordTableView(layout, tableRole){
   };
 }
 
-function assayWordInput(binding){
+/** 标准固定参数：数值由标准或原检验记录确定，不需要检验人员修改或填写，按固定文字显示。 */
+function assayStandardFixedValue(tpl, key){
+  if (!tpl || tpl.tech !== 'gc' || typeof GcPubiaoDefaults === 'undefined') return null;
+  const entry = GcPubiaoDefaults.entries[tpl.id];
+  if (!entry || !Object.hasOwn(entry.values, key)) return null;
+  return String(entry.values[key]);
+}
+
+function assayWordInput(binding, tpl){
   const key = assayBindingField(binding.field);
   const fixedText = { 'assay.refDrying': '——', 'assay.refSource': '中检院' };
   if (Object.hasOwn(fixedText, key)) {
     return `<span class="word-fixed-text" data-fixed-field="${esc(key)}">${esc(fixedText[key])}</span>`;
+  }
+  const standard = assayStandardFixedValue(tpl, key);
+  if (standard !== null) {
+    return `<span class="word-fixed-text word-standard-value" data-fixed-field="${esc(key)}">${esc(standard)}</span>`;
   }
   const value = get(key);
   const inputMode = binding.inputMode === 'decimal' ? ' inputmode="decimal"' : '';
@@ -836,14 +848,10 @@ function assayWordOutput(binding){
 }
 
 function renderAssayWordTable(tpl, tableRole){
-  if (tpl.tech === 'hplc') return window.HplcRecordTables.render(tpl, tableRole, {
-    input: assayWordInput, output: assayWordOutput
-  });
+  const adapters = { input: binding => assayWordInput(binding, tpl), output: assayWordOutput };
+  if (tpl.tech === 'hplc') return window.HplcRecordTables.render(tpl, tableRole, adapters);
   const layout = preciseGcLayout(tpl);
-  return GcWordTableRenderer.render(gcWordTableView(layout, tableRole), {
-    input: assayWordInput,
-    output: assayWordOutput
-  });
+  return GcWordTableRenderer.render(gcWordTableView(layout, tableRole), adapters);
 }
 
 function renderAssayReferenceTable(tpl){
@@ -2192,11 +2200,11 @@ function build(){
   seedDefaults();
   const gcTemplate = assayTemplate(get(AP + 'template'));
   if (typeof GcPubiaoDefaults !== 'undefined' && gcTemplate?.tech === 'gc'
-      && get(AP + 'mode') === gcTemplate.mode && GcPubiaoDefaults.entries[gcTemplate.id]
-      && store[AP + '__pubiaoDefaultsVersion'] !== GcPubiaoDefaults.version) {
+      && get(AP + 'mode') === gcTemplate.mode && GcPubiaoDefaults.entries[gcTemplate.id]) {
+    // 标准固定参数每次渲染都按标准同步；它们在表里是不可编辑的黑体文字。
+    // 上一版误填进空格的浓度只撤除一次，之后就随各模板快照保存。
     GcPubiaoDefaults.fill(gcTemplate.id, store, GC_WORD_TABLE_LAYOUTS[gcTemplate.id],
       store[AP + '__pubiaoDefaultsVersion']);
-    // 随各模板快照保存，尊重之后的手动修改或主动清空。
     store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
   }
 

@@ -629,6 +629,11 @@ td.spanall{background:#fdfdfd}
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;
   background:transparent; color:var(--ink); font:inherit; text-align:inherit;
 }
+/* 标准／原记录确定的固定参数：不需要检验人员修改或填写，用黑体与手填值区分。 */
+.word-record-table .word-standard-value{
+  font-family:"黑体","SimHei","Microsoft YaHei","微软雅黑",sans-serif;
+  color:var(--ink);
+}
 
 /* 手机端改用三栏记录，上午和下午的温湿度均直接可见 */
 @media screen and (max-width:600px){
