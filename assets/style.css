@@ -124,7 +124,7 @@ table.form td{text-align:center}
 input.cell,input.inline{
   font-family:"KaiTi","楷体","Kaiti SC","SimSun",serif;
   color:var(--pen);
-  font-size:16px;
+  font-size:17px; font-weight:700;
   background:transparent;
   border:none;
   outline:none;
@@ -633,10 +633,12 @@ select.quality-search{cursor:pointer; min-height:32px}
 .word-record-table .word-cell-input{
   width:100%; box-sizing:border-box; border:0; background:transparent;
   color:var(--pen); font:inherit; text-align:center;
+  font-size:1.06em; font-weight:700; letter-spacing:.01em;
 }
 .word-record-table .word-cell-output{
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;
-  background:transparent; color:var(--ink); font:inherit; text-align:center;
+  background:transparent; color:var(--calc); font:inherit; text-align:center;
+  font-size:1.06em; font-weight:700; letter-spacing:.01em;
 }
 /* 标准／原记录确定的固定参数：不需要检验人员修改或填写，用黑体与手填值区分。 */
 .word-record-table .word-standard-value{

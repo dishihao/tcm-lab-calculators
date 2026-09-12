@@ -80,15 +80,22 @@ try {
         const cell = element.closest('td');
         const box = element.getBoundingClientRect();
         const cellBox = cell.getBoundingClientRect();
+        const style = getComputedStyle(element);
         return {
           key: element.dataset.k || element.id,
-          textAlign: getComputedStyle(element).textAlign,
+          output: element.classList.contains('word-cell-output'),
+          textAlign: style.textAlign,
+          weight: Number(style.fontWeight),
+          color: style.color,
           offset: Math.abs((box.left + box.width / 2) - (cellBox.left + cellBox.width / 2)),
         };
       }));
   assert(alignment.length > 10, '没有取到表格数据格');
   for (const item of alignment) {
     assert.equal(item.textAlign, 'center', `${item.key}: 数据没有居中`);
+    assert(item.weight >= 700, `${item.key}: 数据不够醒目（字重 ${item.weight}）`);
+    assert.equal(item.color, item.output ? 'rgb(179, 39, 30)' : 'rgb(18, 54, 158)',
+      `${item.key}: 填写值应为手写蓝、计算结果应为结果红，实际 ${item.color}`);
     assert(item.offset < 2, `${item.key}: 数据没有对齐列中心（偏差 ${item.offset.toFixed(1)}px）`);
   }
 
@@ -96,7 +103,7 @@ try {
   assert.equal(await page.locator('.sheet.active .word-cell-input[style*="width"]').count(), 0,
     '数据格不应再使用固定宽度导致不居中');
   assert.deepEqual(errors, []);
-  console.log(`PASS: 未选品种不出表格（${PROJECTS.length} 个项目），选定后出表格且 ${alignment.length} 个数据格居中`);
+  console.log(`PASS: 未选品种不出表格（${PROJECTS.length} 个项目），选定后出表格且 ${alignment.length} 个数据格居中、加粗、蓝填红算`);
 } finally {
   await browser.close();
 }
