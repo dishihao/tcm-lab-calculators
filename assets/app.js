@@ -2194,7 +2194,8 @@ function build(){
   if (typeof GcPubiaoDefaults !== 'undefined' && gcTemplate?.tech === 'gc'
       && get(AP + 'mode') === gcTemplate.mode && GcPubiaoDefaults.entries[gcTemplate.id]
       && store[AP + '__pubiaoDefaultsVersion'] !== GcPubiaoDefaults.version) {
-    GcPubiaoDefaults.fill(gcTemplate.id, store, GC_WORD_TABLE_LAYOUTS[gcTemplate.id]);
+    GcPubiaoDefaults.fill(gcTemplate.id, store, GC_WORD_TABLE_LAYOUTS[gcTemplate.id],
+      store[AP + '__pubiaoDefaultsVersion']);
     // 随各模板快照保存，尊重之后的手动修改或主动清空。
     store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
   }

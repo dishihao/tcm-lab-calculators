@@ -15,7 +15,7 @@ assert.equal(run("state['assay.refInjection']"), 0, '0不是空项');
 assert.equal(run("state['assay.f.1']"), '50');
 assert.equal(run("state['assay.sampleInjection.2']"), '1');
 run("var fresh = {}; GcPubiaoDefaults.fill('mugwort-borneol', fresh, GC_WORD_TABLE_LAYOUTS['mugwort-borneol']);");
-assert.equal(run("fresh['assay.Cref']"), '0.1');
+assert.equal(run("fresh['assay.Cref']"), undefined, '对照品浓度不预填');
 assert.equal(run("fresh['assay.f.2']"), '10');
 assert.equal(run("fresh['assay.Ws.1']"), undefined);
 assert.equal(run("fresh['assay.refPurity']"), undefined);
@@ -30,8 +30,8 @@ assert.equal(run("anise['assay.refInjection']"), '2');
 assert.equal(run("anise['assay.sampleInjection.1']"), '2');
 assert.equal(run("anise['assay.f.1']"), '25');
 run("var brucea = {}; GcPubiaoDefaults.fill('brucea-oleic', brucea, GC_WORD_TABLE_LAYOUTS['brucea-oleic']);");
-assert.equal(run("brucea['assay.Cref']"), '3.75', '鸦胆子应使用最终进样液的油酸当量浓度');
-assert.equal(run("brucea['assay.Cis']"), '4');
+assert.equal(run("brucea['assay.Cref']"), undefined, '对照品浓度不预填');
+assert.equal(run("brucea['assay.Cis']"), undefined, '内标浓度不预填');
 assert.ok(Math.abs(run("Number(brucea['assay.f.1'])") - 200/3) < 1e-12);
 run("var flax = {}; GcPubiaoDefaults.fill('flax-linoleic', flax, GC_WORD_TABLE_LAYOUTS['flax-linoleic']);");
 assert.equal(run("flax['assay.refInjection']"), '1');
@@ -39,11 +39,24 @@ assert.equal(run("flax['assay.Cref']"), undefined, '不可把150mg精密称量�
 assert.equal(run("flax['assay.f.1']"), undefined, '亚麻子脂肪油换算缺少实测量，不填5');
 run("var elsholtzia = {}; GcPubiaoDefaults.fill('elsholtzia-thymol', elsholtzia, GC_WORD_TABLE_LAYOUTS['elsholtzia-thymol']);");
 assert.equal(run("elsholtzia['assay.refInjection']"), '2');
-assert.equal(run("elsholtzia['assay.Cref']"), '0.3');
+assert.equal(run("elsholtzia['assay.Cref']"), undefined, '对照品浓度不预填');
 assert.equal(run("elsholtzia['assay.f.1']"), '20');
 run("var pine = {}; GcPubiaoDefaults.fill('pine-alpha-pinene', pine, GC_WORD_TABLE_LAYOUTS['pine-alpha-pinene']);");
-assert.equal(run("pine['assay.Cref']"), '0.2');
+assert.equal(run("pine['assay.Cref']"), undefined, '对照品浓度不预填');
 assert.equal(run("pine['assay.f.1']"), '20');
+const allowed = ['assay.f.1','assay.f.2','assay.refInjection','assay.sampleInjection.1','assay.sampleInjection.2'];
+for (const [id,entry] of Object.entries(run('GcPubiaoDefaults.entries'))) {
+  for (const key of Object.keys(entry.values)) {
+    assert.ok(allowed.includes(key), `${id}: 只允许回填进样量与样品稀释倍数，不接受 ${key}`);
+  }
+}
+run("var upgraded = {'assay.Cref':'0.2','assay.f.1':''}; GcPubiaoDefaults.fill('mint-menthol', upgraded, GC_WORD_TABLE_LAYOUTS['mint-menthol'], '20260910-1');");
+assert.equal(run("upgraded['assay.Cref']"), undefined, '上一版自动写入的目标浓度应随升级撤除');
+assert.equal(run("upgraded['assay.f.1']"), '50');
+run("var typed = {'assay.Cref':'0.2','assay.f.1':''}; GcPubiaoDefaults.fill('mint-menthol', typed, GC_WORD_TABLE_LAYOUTS['mint-menthol'], undefined);");
+assert.equal(run("typed['assay.Cref']"), '0.2', '未经过上一版回填的记录不得被撤销');
+run("var userConcentration = {'assay.Cref':'0.2031'}; GcPubiaoDefaults.fill('mint-menthol', userConcentration, GC_WORD_TABLE_LAYOUTS['mint-menthol'], '20260910-1');");
+assert.equal(run("userConcentration['assay.Cref']"), '0.2031', '检验人员手填的浓度即使同版本升级也不撤除');
 for (const [id,entry] of Object.entries(run('GcPubiaoDefaults.entries'))) {
   const layout=run(`GC_WORD_TABLE_LAYOUTS[${JSON.stringify(id)}]`);
   for (const key of Object.keys(entry.values)) {
@@ -53,4 +66,4 @@ for (const [id,entry] of Object.entries(run('GcPubiaoDefaults.entries'))) {
     assert.equal(cell.text.trim(),'',`${id}: ${key} 原表单元格必须为空`);
   }
 }
-console.log('PASS GC 蒲标网空项回填：仅原字段、保留已有值、保留实测空白、方法不符不混填');
+console.log('PASS GC 蒲标网空项回填：只写进样量与稀释倍数、保留已有值、保留实测空白、方法不符不混填');

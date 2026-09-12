@@ -12,7 +12,7 @@ try {
   await page.goto(new URL('../index.html',import.meta.url).href);
   await page.evaluate(()=>applyAssayTemplate('mint-menthol'));
   const field = key=>page.locator(`[data-k="assay.${key}"]`);
-  assert.equal(await field('Cref').inputValue(),'0.2','选薄荷模板后，原有对照品浓度空格应显示蒲标网值');
+  assert.equal(await field('Cref').inputValue(),'','只回填进样量与稀释倍数，对照品浓度保持空白');
   assert.equal(await field('f.1').inputValue(),'50');
   assert.equal(await field('Ws.1').inputValue(),'');
   fs.mkdirSync(new URL('../output/',import.meta.url),{recursive:true});
@@ -50,10 +50,12 @@ try {
   });
   assert.equal(await page.evaluate(()=>store['assay.Cis']),undefined,'错误mode不回填（外标视图无内标输入格）');
   await page.evaluate(()=>{store['assay.mode']='internal';build();});
-  assert.equal(await field('Cis').inputValue(),'1.5','回到正确内标方法后才补空项');
+  assert.equal(await field('Cis').inputValue(),'','内标浓度不预填，按实际配液填写');
   await page.evaluate(()=>applyAssayTemplate('brucea-oleic'));
-  assert.equal(await field('Cref').inputValue(),'3.75');
-  assert.equal(await field('Cis').inputValue(),'4');
+  assert.equal(await field('Cref').inputValue(),'','对照品浓度不预填');
+  assert.equal(await field('Cis').inputValue(),'','内标浓度不预填');
+  await field('Cref').fill('3.75');
+  await field('Cis').fill('4');
   await field('Q').fill('0');
   for(let s=1;s<=2;s++){
     await field(`Ws.${s}`).fill('3');
@@ -67,6 +69,16 @@ try {
     for(let i=0;i<await peaks.count();i++) await peaks.nth(i).fill(value);
   }
   assert.equal((await page.locator('[id="assay.out.MEAN"]').innerText()).trim(),'8.0','鸦胆子多步稀释计算应为8.0%，不可二倍或四倍误算');
+  // 上一版（20260910-1）自动写入的标准目标浓度随升级撤除；检验人员手填的值不撤除。
+  await page.evaluate(()=>{
+    localStorage.setItem('tcm-lab-calc-v2',JSON.stringify({store:{
+      'assay.template':'mint-menthol','assay.tech':'gc','assay.mode':'external',
+      'assay.Cref':'0.2','assay.f.1':'','assay.__pubiaoDefaultsVersion':'20260910-1'
+    }}));
+  });
+  await page.reload();
+  assert.equal(await field('Cref').inputValue(),'','上一版自动写入的对照品浓度应撤除');
+  assert.equal(await field('f.1').inputValue(),'50','撤除浓度后仍应补进样量与稀释倍数');
   const audit=await page.evaluate(()=>{
     const result=[];
     for(const t of GC_TEMPLATES){
@@ -80,5 +92,5 @@ try {
   });
   for(const item of audit) assert.deepEqual(item.actual,item.original,`${item.id} 不得增减表格输入字段`);
   assert.deepEqual(errors,[]);
-  console.log(`PASS ${audit.length} GC模板字段不变；新模板回填、旧记录迁移、已有值和主动清空保留`);
+  console.log(`PASS ${audit.length} GC模板字段不变；只回填进样量与稀释倍数、旧记录迁移、已有值和主动清空保留`);
 } finally {await browser.close();}
