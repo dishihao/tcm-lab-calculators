@@ -3,7 +3,7 @@
  * 不填称样量、纯度、水分、批号、峰面积；不使用鉴别项配液参数。
  */
 const GcPubiaoDefaults = (() => {
-  const version = '20260912-1';
+  const version = '20260912-2';
   const entries = {};
   // 20260910-1 曾把标准配液目标浓度写进空白格。本次不再写入；
   // 升级时只撤掉那些“仍是我们写进去的值”的格子，检验人员自己填过的值不动。
@@ -18,6 +18,13 @@ const GcPubiaoDefaults = (() => {
   }
   function retire(ids, values) {
     for (const id of ids) retired[id] = Object.freeze({...values});
+  }
+  function addRecord(ids, file, values, note) {
+    const entry = Object.freeze({
+      source: `本单位检验记录：${file}`, edition: '本单位检验记录',
+      note, values: Object.freeze(values)
+    });
+    for (const id of ids) entries[id] = entry;
   }
   const fields = (volume, injection) => ({
     'assay.f.1': volume, 'assay.f.2': volume,
@@ -66,6 +73,16 @@ const GcPubiaoDefaults = (() => {
   retire(['pine-alpha-pinene'], {'assay.Cref':'0.2'});
   add(['pine-alpha-pinene'], 49507, fields('20','1'),
     '油松节α-蒎烯：精密加入乙醇20 ml，样品等效体积20 ml；各进样1 μl。');
+  // 以下三个模板没有蒲标网可核实的对应版本，参数直接取自各自的原检验记录。
+  addRecord(['dendrobium-dendrobine'], '182石斛（金钗）原料检验记录.doc',
+    fields('62.5','1'),
+    '金钗石斛：取粉末约0.25 g加0.05%甲酸甲醇25 ml回流，取续滤液2 ml置5 ml量瓶并加内标1 ml，等效样品体积25×5÷2=62.5 ml；各进样1 μl。该记录的方法正文为萘内标法、原表却是外标表，本次不改表不改方法，只补进样量与稀释倍数。');
+  addRecord(['amomum-bornyl-acetate-finished-shanghai'], '31602去壳砂仁成品检验记录（上海2018）',
+    {'assay.f.1':'25','assay.f.2':'25'},
+    '去壳砂仁（上海2018）：取粉末约1 g，精密加入无水乙醇25 ml，等效样品体积25 ml。该记录测定法未写进样量，不猜补。');
+  addRecord(['amomum-bornyl-acetate-finished-beijing'], '31604砂仁米成品检验记录（北京2023年版）',
+    {'assay.f.1':'25','assay.f.2':'25'},
+    '砂仁米（北京2023）：取粉末约1 g，精密加入无水乙醇25 ml，等效样品体积25 ml。该记录测定法未写进样量，不猜补。');
 
   function fill(id, state, layout, fromVersion) {
     const entry = entries[id];
