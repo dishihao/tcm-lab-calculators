@@ -12,8 +12,10 @@ function check(value,where){
     assert(!forbidden.has(key),where+'.'+key+': private source key');check(item,where+'.'+key);
   }
 }
-for(const [file,name]of [['quantitative-record-layouts.js','QUANTITATIVE_RECORD_LAYOUTS'],['hplc-record-layouts.js','HPLC_RECORD_LAYOUTS'],['identification-record-tables.js','IDENTIFICATION_RECORD_TABLES']]){
+for(const [file,name]of [['quantitative-record-layouts.js','QUANTITATIVE_RECORD_LAYOUTS'],['hplc-record-layouts.js','HPLC_RECORD_LAYOUTS'],['identification-record-tables.js','IDENTIFICATION_RECORD_TABLES'],['quality-fixed-defaults.js','QualityFixedDefaults']]){
   vm.runInNewContext(fs.readFileSync(new URL('../assets/'+file,import.meta.url),'utf8'),context);
-  check(context.window[name],name);
+  const value=context.window[name]??vm.runInContext(name,context);
+  assert(value,file+' 未导出 '+name);
+  check(value,name);
 }
 console.log('PASS: all new browser record assets exclude source paths, indices, identities, hashes, binaries and raw XML');

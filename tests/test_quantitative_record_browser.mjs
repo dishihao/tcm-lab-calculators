@@ -50,7 +50,13 @@ try{
     await page.emulateMedia({media:'print'});
     assert(Math.abs((await table.evaluate(t=>t.getBoundingClientRect().width))-width)<0.2,project+' print width changed');
     await page.emulateMedia({media:'screen'});
-    if(project==='moisture')assert(await page.locator('.sheet.active [data-k^="moisture.record."]').count()>0,'source temperature/hour blanks not editable');
+    if(project==='moisture'){
+      // 原记录的温度／时间空格已改为标准或原记录确定的固定文字（黑体），不再是可填输入框。
+      const fixed=await page.locator('.sheet.active [data-fixed-field^="moisture.record."]').count();
+      assert(fixed>0,'source temperature/hour conditions missing');
+      assert.equal(await page.locator('.sheet.active [data-k^="moisture.record."]').count(),0,'fixed moisture conditions must not stay editable');
+      assert.equal(await page.locator('.sheet.active [data-fixed-field^="moisture.record."].word-standard-value').count(),fixed,'fixed conditions must render as standard text');
+    }
     fs.mkdirSync(new URL('../output/record-table-browser/',import.meta.url),{recursive:true});
     await page.locator('.sheet.active').screenshot({path:fileURLToPath(new URL(`../output/record-table-browser/${project}.png`,import.meta.url))});
   }
