@@ -635,6 +635,10 @@ select.quality-search{cursor:pointer; min-height:32px}
   font-family:"黑体","SimHei","Microsoft YaHei","微软雅黑",sans-serif;
   color:var(--ink);
 }
+.assay-system-controls .word-standard-value{
+  font-family:"黑体","SimHei","Microsoft YaHei","微软雅黑",sans-serif;
+  color:var(--ink);
+}
 
 /* 手机端改用三栏记录，上午和下午的温湿度均直接可见 */
 @media screen and (max-width:600px){
