@@ -684,7 +684,7 @@ Expected: 如果 binding 未使用 `data-k` 或初始化未清空新字段则 FA
 Run:
 
 ```powershell
-node tests/test_environment.mjs
+node tests/test_environment_removed.mjs
 node tests/test_gc_word_layout_data.mjs --require-extract --require-asset
 node tests/test_gc_word_table_renderer.mjs
 node tests/test_gc_templates.mjs
