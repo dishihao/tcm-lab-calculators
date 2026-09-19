@@ -91,10 +91,17 @@ try {
     const result=[];
     for(const t of GC_TEMPLATES){
       applyAssayTemplate(t.id);
-      const layout=GC_WORD_TABLE_LAYOUTS[t.id];
-      const fixedFields=Object.keys(GcPubiaoDefaults.entries[t.id]?.values||{}).sort();
-      const skip=b=>['assay.refDrying','assay.refSource'].includes(b.field)||fixedFields.includes(b.field);
-      const original=layout.bindings.filter(b=>b.role==='input'&&!skip(b)).map(b=>b.field).sort();
+      const group=[t,...GC_TEMPLATES.filter(item=>item.recordKey===t.recordKey&&item.id!==t.id)];
+      const prefix=(index,item)=>index===0?'assay.':`assay.component.${item.id}.`;
+      const original=group.flatMap((item,index)=>{
+        const layout=GC_WORD_TABLE_LAYOUTS[item.id];
+        const fixed=Object.keys(GcPubiaoDefaults.entries[item.id]?.values||{});
+        const skip=b=>['assay.refDrying','assay.refSource'].includes(b.field)||fixed.includes(b.field);
+        return layout.bindings.filter(b=>b.role==='input'&&!skip(b))
+          .map(b=>b.field.replace(/^assay\./,prefix(index,item)));
+      }).sort();
+      const fixedFields=group.flatMap((item,index)=>Object.keys(GcPubiaoDefaults.entries[item.id]?.values||{})
+        .map(field=>field.replace(/^assay\./,prefix(index,item)))).sort();
       const actual=Array.from(document.querySelectorAll('[data-assay-reference-table] input[data-k], [data-assay-sample-table] input[data-k]')).map(el=>el.dataset.k).sort();
       const shownFixed=Array.from(document.querySelectorAll('[data-assay-reference-table] .word-standard-value, [data-assay-sample-table] .word-standard-value')).map(el=>el.dataset.fixedField).sort();
       result.push({id:t.id,original,actual,fixedFields,shownFixed});

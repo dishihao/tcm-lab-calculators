@@ -23,7 +23,7 @@ export function sourceObjectSemantic(run){
   return null;
 }
 export function isSourceAverageLine(cell,run){
-  if(run.containerCategory!=='floating-overline'||!/^(?:样品)?平均峰面积A(?:样)?$/u.test(compact(cell.text)))return false;
+  if(run.containerCategory!=='floating-overline'||!/^(?:样品|内标物)?平均峰面积A(?:样|内)?$/u.test(compact(cell.text)))return false;
   const lines=[...String(cell.ooxml||'').matchAll(/<v:line\b[^>]*(?:\/>|>[\s\S]*?<\/v:line>)/gu)];
   if(lines.length!==1)return false;
   const from=lines[0][0].match(/\bfrom="([\d.-]+)pt,([\d.-]+)pt"/u);

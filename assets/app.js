@@ -316,7 +316,7 @@ const GC_TEMPLATES = [
 
 const ASSAY_TEMPLATES = [...HPLC_TEMPLATES, ...GC_TEMPLATES];
 function assayTemplate(id){ return ASSAY_TEMPLATES.find(t => t.id === id); }
-function assayTemplatesForTech(tech = techOf()){ return ASSAY_TEMPLATES.filter(t => t.tech === tech); }
+function assayTemplatesForTech(tech = techOf()){ return ASSAY_TEMPLATES.filter(t => t.tech === tech && !(tech==='hplc' && window.HPLC_RECORD_LAYOUTS?.templates[t.id]?.status==='not-hplc')); }
 function templatesForProduct(name, tech = techOf()){
   return assayTemplatesForTech(tech).filter(t => t.product === name);
 }
@@ -331,15 +331,64 @@ function recordsForProduct(name, tech = techOf()){
 function templateChoiceLabel(t){
   return `${t.product}（${t.recordLabel}）—${t.name}`;
 }
-/** 当前选用的色谱方法 */
-function techOf(){ return get('assay.tech') || 'hplc'; }
-function assayMode(){ return get(AP + 'mode') || 'external'; }
-function assayUnit(){
-  const template = assayTemplate(get(AP + 'template'));
-  return template ? (template.unit || '%') : (get(AP + 'unit') || '%');
+function assayGroupForTemplate(template){
+  if (!template?.recordKey) return template ? [template] : [];
+  return assayTemplatesForTech(template.tech)
+    .filter(item => item.recordKey === template.recordKey)
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
-function dryBasisOf(){
-  return store[AP + 'dryBasis'] === undefined ? true : get(AP + 'dryBasis') === '1';
+function assayGroupFromStore(){
+  const selected = assayTemplate(get(AP + 'template'));
+  if (!selected) return [];
+  const raw = String(get(AP + 'group') || '').split('|').filter(Boolean);
+  if (!raw.length){
+    const group = assayGroupForTemplate(selected);
+    return [selected, ...group.filter(item => item.id !== selected.id)];
+  }
+  const byId = new Map(assayGroupForTemplate(selected).map(item => [item.id, item]));
+  const group = raw.map(id => byId.get(id)).filter(Boolean);
+  return group.length === byId.size ? group : [selected, ...assayGroupForTemplate(selected).filter(item => item.id !== selected.id)];
+}
+function assayPrefixFor(index, template){
+  return index === 0 ? AP : `${AP}component.${template.id}.`;
+}
+function setAssayTemplateDefaults(prefix, template, overwrite = false){
+  const values = {
+    template: template.id,
+    tech: template.tech,
+    mode: template.mode,
+    dryBasis: template.dry ? '1' : '0',
+    name: template.name,
+    formulaText: template.formulaText || '',
+    internalName: template.internalName || '',
+    platesLim: template.plates,
+    rsdLim: template.rsdLimit || RSD_LIM_DEFAULT,
+    limop: template.limop || 'ge',
+    limval: template.limit,
+    limmax: template.upperLimit || '',
+    unit: template.unit || '%',
+    productName: template.product,
+    selectedProduct: template.product
+  };
+  Object.entries(values).forEach(([key, value]) => {
+    const fullKey = prefix + key;
+    if (overwrite || store[fullKey] === undefined) store[fullKey] = value;
+  });
+}
+function ensureAssayGroupState(group){
+  if (!group.length) return;
+  group.forEach((template, index) => setAssayTemplateDefaults(assayPrefixFor(index, template), template));
+  store[AP + 'group'] = group.map(item => item.id).join('|');
+}
+/** 当前选用的色谱方法 */
+function techOf(prefix = AP){ return get(prefix + 'tech') || 'hplc'; }
+function assayMode(prefix = AP){ return get(prefix + 'mode') || 'external'; }
+function assayUnit(prefix = AP){
+  const template = assayTemplate(get(prefix + 'template'));
+  return template ? (template.unit || '%') : (get(prefix + 'unit') || '%');
+}
+function dryBasisOf(prefix = AP){
+  return store[prefix + 'dryBasis'] === undefined ? true : get(prefix + 'dryBasis') === '1';
 }
 
 /**
@@ -347,8 +396,8 @@ function dryBasisOf(){
  * 渲染与判定共用此函数 —— 默认值不写进 store，store 里只放用户真正填过的值，
  * 否则换方法时旧默认值会被当成"用户已填"而不再跟随。
  */
-function platesDefault(){
-  return (TECH[techOf()] || TECH.hplc).plates;
+function platesDefault(prefix = AP){
+  return (TECH[techOf(prefix)] || TECH.hplc).plates;
 }
 
 /** 标准规定留空时平均含量的兜底位数（填了限度就按限度的位数走） */
@@ -690,12 +739,12 @@ function rowsForCalc(c){
 }
 
 /* ---------------- 6. 含量测定（HPLC / GC）单独渲染 ---------------- */
-function assayUnitScale(){
-  return ({ '%':0.1, 'mg/g':1, 'g/kg':1, 'μg/g':1000, 'mg/kg':1000, 'g/g':0.001 })[assayUnit()] || 0.1;
+function assayUnitScale(prefix = AP){
+  return ({ '%':0.1, 'mg/g':1, 'g/kg':1, 'μg/g':1000, 'mg/kg':1000, 'g/g':0.001 })[assayUnit(prefix)] || 0.1;
 }
 
-function assayFormulaScale(){
-  const unit = assayUnit();
+function assayFormulaScale(prefix = AP){
+  const unit = assayUnit(prefix);
   if (unit === '%') return { denominator:' × 1000', suffix:' × 100%' };
   if (unit === 'μg/g' || unit === 'mg/kg') return { denominator:'', suffix:' × 1000' };
   if (unit === 'g/g') return { denominator:' × 1000', suffix:'' };
@@ -708,10 +757,10 @@ const ASSAY = {
   section: '【含量测定】',
   refShots: 5,   // 对照品连续进样针数
   smpShots: 2,   // 每份供试品进样针数
-  formula(){
-    const q = dryBasisOf() ? ' × (1 − Q)' : '';
-    const scale = assayFormulaScale();
-    if (assayMode() === 'internal'){
+  formula(prefix = AP){
+    const q = dryBasisOf(prefix) ? ' × (1 − Q)' : '';
+    const scale = assayFormulaScale(prefix);
+    if (assayMode(prefix) === 'internal'){
       return `f = ${frac(
         '<span style="text-decoration:overline">A</span><sub>内</sub> × C<sub>对</sub>',
         '<span style="text-decoration:overline">A</span><sub>对</sub> × C<sub>内</sub>')}
@@ -786,17 +835,17 @@ function calcDp(c, which){
  *   相对偏差 = 标准规定位数 − 1  （如限度 0.15% → 1.0%），不小于 0
  * which: 'mean' | 'ind' | 'rd'
  */
-function assayDp(which){
-  const own = store[AP + 'dp.' + which];
+function assayDp(which, prefix = AP){
+  const own = store[prefix + 'dp.' + which];
   if (own !== undefined && own !== '') return parseInt(own, 10);
 
   // 平均值位数：用户手改过就用手改的，否则取标准规定的小数位
-  const mOwn = store[AP + 'dp.mean'];
+  const mOwn = store[prefix + 'dp.mean'];
   let meanDp;
   if (mOwn !== undefined && mOwn !== ''){
     meanDp = parseInt(mOwn, 10);
   } else {
-    const lim = store[AP + 'limval'];
+    const lim = store[prefix + 'limval'];
     meanDp = (lim !== undefined && String(lim).trim() !== '')
       ? decimalsOf(lim) : ASSAY_FALLBACK_MEAN_DP;
   }
@@ -828,9 +877,10 @@ function preciseGcLayout(tpl){
   return layout;
 }
 
-function assayBindingField(field){
+function assayBindingField(field, prefix = AP){
   const name = String(field || '');
-  return name.startsWith(AP) ? name : AP + name;
+  if (name.startsWith(AP)) return prefix + name.slice(AP.length);
+  return prefix + name;
 }
 
 function gcWordTableView(layout, tableRole){
@@ -889,15 +939,15 @@ function renderAssaySampleTable(tpl){
   return renderAssayWordTable(tpl, 'sample');
 }
 
-function assayShotFields(layout, stem, fallbackCount){
+function assayShotFields(layout, stem, fallbackCount, prefix = AP){
   if (!layout){
-    return Array.from({length: fallbackCount}, (_, index) => `${AP}${stem}.${index}`);
+    return Array.from({length: fallbackCount}, (_, index) => `${prefix}${stem}.${index}`);
   }
-  const prefix = `${AP}${stem}.`;
+  const fieldPrefix = `${prefix}${stem}.`;
   return layout.bindings
-    .filter(binding => binding.role === 'input' && assayBindingField(binding.field).startsWith(prefix))
-    .map(binding => assayBindingField(binding.field))
-    .sort((left, right) => Number(left.slice(prefix.length)) - Number(right.slice(prefix.length)));
+    .filter(binding => binding.role === 'input' && assayBindingField(binding.field, prefix).startsWith(fieldPrefix))
+    .map(binding => assayBindingField(binding.field, prefix))
+    .sort((left, right) => Number(left.slice(fieldPrefix.length)) - Number(right.slice(fieldPrefix.length)));
 }
 
 /** 结果与计算表 */
@@ -1196,6 +1246,15 @@ function renderAssayPicker(tech, tpl){
     : [];
   const products = [...new Set(templates.map(template => template.product))]
     .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  const recordGroups = [];
+  productTemplates.forEach(template => {
+    let group = recordGroups.find(item => item.recordKey === template.recordKey);
+    if (!group){
+      group = { recordKey: template.recordKey, templates: [] };
+      recordGroups.push(group);
+    }
+    group.templates.push(template);
+  });
   const recordCount = new Set(templates.map(template => template.recordKey)).size;
   const rawCount = new Set(templates.filter(t => t.kind === '原料').map(t => t.recordKey)).size;
   const finishedCount = recordCount - rawCount;
@@ -1218,16 +1277,28 @@ function renderAssayPicker(tech, tpl){
           </select>
         </div>`}
       <div class="quality-step-two${selectedProduct ? '' : ' disabled'}">
-        <div class="quality-step-title"><b>第二步：选择原料/成品及成分模板</b>
-          ${selectedProduct ? `<span>找到 ${productTemplates.length} 个成分模板</span>` : '<span>请先选择品名</span>'}
+        <div class="quality-step-title"><b>第二步：选择原料/成品记录</b>
+          ${selectedProduct ? `<span>找到 ${recordGroups.length} 条记录、${productTemplates.length} 个待测成分</span>` : '<span>请先选择品名</span>'}
         </div>
         ${selectedProduct ? `<div class="quality-template-options">
-          ${productTemplates.map(template => `
-            <button type="button" class="quality-template-option${tpl && tpl.id === template.id ? ' selected' : ''}"
-              data-assay-template-button="${template.id}">
-              <span>${esc(templateChoiceLabel(template))}${template.tech === 'hplc' && window.HPLC_RECORD_LAYOUTS?.templates[template.id]?.status !== 'mapped' ? '（表格待核对）' : ''}${tpl && tpl.id === template.id ? ' ✓' : ''}</span>
-              <small>${esc(template.standardText)}${template.incomplete ? '（自动识别不完整，请核对源文件）' : ''}</small>
-            </button>`).join('')}
+          ${recordGroups.map(group => {
+            const selected = tpl && group.templates.some(template => template.id === tpl.id);
+            const primary = selected ? group.templates.find(template => template.id === tpl.id) : group.templates[0];
+            const ids = group.templates.map(template => template.id).join(' ');
+            const names = [...new Set(group.templates.map(template => template.name))]
+              .sort((left, right) => left.localeCompare(right, 'zh-CN'));
+            const label = `${primary.product}（${primary.recordLabel}）—${names.join('、')}`;
+            const standard = [...new Set(group.templates.map(template => template.standardText).filter(Boolean))].join('；');
+            const review = group.templates.some(template => template.tech === 'hplc'
+              && window.HPLC_RECORD_LAYOUTS?.templates[template.id]?.status !== 'mapped');
+            return `
+              <button type="button" class="quality-template-option${selected ? ' selected' : ''}"
+                data-assay-template-button="${primary.id}" data-assay-template-ids="${esc(ids)}"
+                data-assay-record-group="${esc(group.recordKey)}">
+                <span>${esc(label)}${review ? '（表格待核对）' : ''}${selected ? ' ✓' : ''}</span>
+                <small>${esc(standard)}${group.templates.length > 1 ? '（同一记录的多个成分将在本页分别计算）' : ''}</small>
+              </button>`;
+          }).join('')}
         </div>` : ''}
       </div>
       <div class="assay-custom-row">
@@ -1239,7 +1310,61 @@ function renderAssayPicker(tech, tpl){
     </div>`;
 }
 
-function renderAssaySheet(){
+function renderAssayScoped(tpl, prefix){
+  const originalStore = store;
+  const scopedStore = {};
+  Object.entries(originalStore).forEach(([key, value]) => {
+    if (prefix === AP || !key.startsWith(AP)) scopedStore[key] = value;
+  });
+  Object.keys(originalStore).forEach(key => {
+    if (key.startsWith(prefix)) scopedStore[AP + key.slice(prefix.length)] = originalStore[key];
+  });
+  try {
+    store = scopedStore;
+    setAssayTemplateDefaults(AP, tpl);
+    const html = renderAssaySheet({ forceSingle: true });
+    return prefix === AP ? html : html.replaceAll(AP, prefix);
+  } finally {
+    store = originalStore;
+  }
+}
+
+function renderAssayComponentOnly(html, prefix, template){
+  const holder = document.createElement('div');
+  holder.innerHTML = html.trim();
+  const section = holder.firstElementChild;
+  section.classList.remove('sheet');
+  section.classList.add('assay-component');
+  section.removeAttribute('data-sheet');
+  section.querySelector('.sheet-heading')?.remove();
+  section.querySelector('.method')?.remove();
+  section.querySelector('[data-assay-picker]')?.remove();
+  section.querySelector('.assay-system-controls')?.remove();
+  [...section.querySelectorAll('.analyte-bar')]
+    .find(item => item.querySelector(`[data-k="${prefix}tech"]`))?.remove();
+  section.insertAdjacentHTML('afterbegin', `<div class="assay-component-title">待测成分：${esc(template.name)}</div>`);
+  return section;
+}
+
+function renderGroupedAssaySheet(group){
+  ensureAssayGroupState(group);
+  const baseHolder = document.createElement('div');
+  baseHolder.innerHTML = renderAssayScoped(group[0], AP).trim();
+  const base = baseHolder.firstElementChild;
+  group.slice(1).forEach((template, index) => {
+    const prefix = assayPrefixFor(index + 1, template);
+    const extra = renderAssayComponentOnly(renderAssayScoped(template, prefix), prefix, template);
+    base.append(extra);
+  });
+  return base.outerHTML;
+}
+
+function renderAssaySheet(options = {}){
+  const forceSingle = Boolean(options.forceSingle);
+  if (!forceSingle){
+    const group = assayGroupFromStore();
+    if (group.length > 1) return renderGroupedAssaySheet(group);
+  }
   const pre = AP;
   const tpl = assayTemplate(get(pre + 'template'));
   const mode = assayMode();
@@ -1364,7 +1489,7 @@ function renderAssaySheet(){
         : ii('platesLim', platesDef, 'w120')}；实测 ${ic('plates')}
         <span class="judge none" id="assay.platesJudge">—</span></span>
     </div>` : '';
-  const referenceBlock = hplcPending ? '<div class="note hplc-record-review">该记录的成分或表格对应关系需要核对，暂不套用计算表。</div>' : preciseLayout
+  const referenceBlock = hplcPending ? `<div class="note hplc-record-review">${esc(window.HPLC_RECORD_LAYOUTS?.templates[tpl.id]?.message || '该记录的成分或表格对应关系需要核对，暂不套用计算表。')}</div>` : preciseLayout
     ? `<div class="tscroll word-table-scroll" data-assay-reference-table>${renderAssayReferenceTable(tpl)}</div>${preciseChecks}`
     : `<div class="tscroll"><table class="form generic-assay-table" data-assay-reference-table
         data-assay-table-layout="generic">
@@ -1487,10 +1612,12 @@ function judge(el, val, op, lim, max){
 function setOut(id, txt){
   const el = document.getElementById(id);
   if (!el) return;
+  const unit = el.dataset.unit || '';
   if (txt === '' || txt === null || txt === undefined){
     el.textContent = el.classList.contains('word-cell-output') ? '' : '—'; el.classList.add('empty');
   } else {
-    el.innerHTML = txt; el.classList.remove('empty');
+    el.innerHTML = `${txt}${unit ? `<span class="word-cell-unit">${esc(unit)}</span>` : ''}`;
+    el.classList.remove('empty');
   }
 }
 
@@ -1559,57 +1686,69 @@ function computeCalc(c){
   judge(`${c.id}.judge`, isFinite(r.mean) ? roundTo(r.mean, meanDp, he) : NaN, op, lim);
 }
 
-function computeAssay(){
-  const pre = AP;
+function computeAssay(scope = AP, templateOverride = null){
+  if (scope === AP && !templateOverride){
+    const group = assayGroupFromStore();
+    if (group.length > 1){
+      ensureAssayGroupState(group);
+      group.forEach((template, index) => computeAssay(assayPrefixFor(index, template), template));
+      return;
+    }
+  }
+  const pre = scope;
   const he = useHE();
-  const mode = assayMode();
-  const dry = dryBasisOf();
-  const tpl = assayTemplate(get(pre + 'template'));
-  const unit = assayUnit();
-  const unitScale = assayUnitScale();
-  const formulaScale = assayFormulaScale();
-  const indDp  = assayDp('ind');
-  const meanDp = assayDp('mean');
-  const rdDp   = assayDp('rd');
+  const mode = assayMode(pre);
+  const dry = dryBasisOf(pre);
+  const tpl = templateOverride || assayTemplate(get(pre + 'template'));
+  const unit = assayUnit(pre);
+  const unitScale = assayUnitScale(pre);
+  const formulaScale = assayFormulaScale(pre);
+  const indDp  = assayDp('ind', pre);
+  const meanDp = assayDp('mean', pre);
+  const rdDp   = assayDp('rd', pre);
   const shotLayout = tpl && tpl.tech === 'gc' && mode === tpl.mode
     ? preciseGcLayout(tpl) : tpl && tpl.tech === 'hplc' && mode === tpl.mode
       ? window.HplcRecordTables?.layout(tpl) : null;
   if (tpl?.tech === 'hplc' && mode === tpl.mode && !shotLayout) {
-    judge('assay.judge', NaN, 'ge', NaN);
-    const substitution = document.getElementById('assay.subst');
+    judge(`${pre}judge`, NaN, 'ge', NaN);
+    const substitution = document.getElementById(`${pre}subst`);
     if (substitution) substitution.textContent = '';
     return;
   }
 
   // 标准规定那一行里的成分名，跟着上方"对照品"输入框走
-  const echo = document.getElementById('assay.nameEcho');
+  const echo = document.getElementById(`${pre}nameEcho`);
   if (echo) echo.textContent = get(pre + 'name') || '待测成分';
 
   /* 对照品 */
-  const refA = assayShotFields(shotLayout, 'refA', ASSAY.refShots).map(getN).filter(isFinite);
+  const refA = assayShotFields(shotLayout, 'refA', ASSAY.refShots, pre).map(getN).filter(isFinite);
   const Aref = mean(refA);
   const curveReadback = shotLayout?.quantification === 'curve-readback';
   const rsd  = curveReadback ? getN(pre + 'curveRsd') : refA.length >= 2 ? sd(refA) / Aref * 100 : NaN;
   if (curveReadback) for (const level of [1,2]) {
-    setOut(`assay.out.curveA.${level}`, fmtArea(mean(assayShotFields(shotLayout, `curveA.${level}`, 0).map(getN))));
+    setOut(`${pre}out.curveA.${level}`, fmtArea(mean(assayShotFields(shotLayout, `curveA.${level}`, 0, pre).map(getN))));
   }
-  setOut('assay.out.Aref', fmtArea(Aref));
-  setOut('assay.out.RSD',  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
+  setOut(`${pre}out.Aref`, fmtArea(Aref));
+  setOut(`${pre}out.RSD`,  isFinite(rsd)  ? fmt(rsd, 1, he) : '');
 
   const refIS = mode === 'internal'
-    ? assayShotFields(shotLayout, 'refIS', ASSAY.refShots).map(getN).filter(isFinite)
+    ? assayShotFields(shotLayout, 'refIS', ASSAY.refShots, pre).map(getN).filter(isFinite)
     : [];
   const ISref = mean(refIS);
-  setOut('assay.out.ISref', fmtArea(ISref));
+  setOut(`${pre}out.ISref`, fmtArea(ISref));
+  const isRsd=refIS.length>=2 && ISref!==0 ? sd(refIS)/ISref*100 : NaN;
+  setOut(`${pre}out.ISRSD`, isFinite(isRsd) ? fmt(isRsd,1,he) : '');
 
   // 限度栏留空时按默认限度判定（默认值只渲染在输入框里，不写入 store）
   const rsdLim    = isFinite(getN(pre + 'rsdLim'))    ? getN(pre + 'rsdLim')    : num(RSD_LIM_DEFAULT);
-  const platesLim = isFinite(getN(pre + 'platesLim')) ? getN(pre + 'platesLim') : num(platesDefault());
-  judge('assay.rsdJudge', isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', rsdLim);
-  judge('assay.platesJudge', getN(pre + 'plates'), 'ge', platesLim);
+  const platesLim = isFinite(getN(pre + 'platesLim')) ? getN(pre + 'platesLim') : num(platesDefault(pre));
+  judge(`${pre}rsdJudge`, isFinite(rsd) ? roundTo(rsd, 1, he) : NaN, 'le', rsdLim);
+  judge(`${pre}platesJudge`, getN(pre + 'plates'), 'ge', platesLim);
 
   /* 供试品 */
-  let Cref = getN(shotLayout?.referenceConcentrationField || pre + 'Cref') * (shotLayout?.referenceConcentrationScale || 1);
+  const referenceConcentrationField = shotLayout?.referenceConcentrationField
+    ? assayBindingField(shotLayout.referenceConcentrationField, pre) : pre + 'Cref';
+  let Cref = getN(referenceConcentrationField) * (shotLayout?.referenceConcentrationScale || 1);
   if (get(pre + 'useS') === '1'){
     const S = getN(pre + 'refPurity');
     if (isFinite(S)) Cref = Cref * S / 100;
@@ -1620,18 +1759,18 @@ function computeAssay(){
   const Cis = getN(pre + 'Cis');
   const factor = mode === 'internal' && [ISref, Cref, Aref, Cis].every(isFinite) && Aref !== 0 && Cis !== 0
     ? ISref * Cref / (Aref * Cis) : NaN;
-  setOut('assay.out.factor', isFinite(factor) ? factor.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') : '');
+  setOut(`${pre}out.factor`, isFinite(factor) ? factor.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') : '');
 
   const A = [1,2].map(s => {
-    const shots = assayShotFields(shotLayout, `smpA.${s}`, ASSAY.smpShots).map(getN).filter(isFinite);
+    const shots = assayShotFields(shotLayout, `smpA.${s}`, ASSAY.smpShots, pre).map(getN).filter(isFinite);
     return shots.length ? mean(shots) : NaN;
   });
-  [1,2].forEach(s => setOut(`assay.out.A.${s}`, fmtArea(A[s-1])));
+  [1,2].forEach(s => setOut(`${pre}out.A.${s}`, fmtArea(A[s-1])));
   const AIS = mode === 'internal' ? [1,2].map(s => {
-    const shots = assayShotFields(shotLayout, `smpIS.${s}`, ASSAY.smpShots).map(getN).filter(isFinite);
+    const shots = assayShotFields(shotLayout, `smpIS.${s}`, ASSAY.smpShots, pre).map(getN).filter(isFinite);
     return shots.length ? mean(shots) : NaN;
   }) : [NaN, NaN];
-  [1,2].forEach(s => setOut(`assay.out.IS.${s}`, fmtArea(AIS[s-1])));
+  [1,2].forEach(s => setOut(`${pre}out.IS.${s}`, fmtArea(AIS[s-1])));
 
   const xRaw = [1,2].map(s => {
     const qFactor = qFactorFor(s);
@@ -1643,9 +1782,10 @@ function computeAssay(){
     }
     if (mode === 'internal'){
       const ISi = AIS[s-1];
-      if (![factor, Ai, Cis, f, ISi, Ws, qFactor].every(isFinite)) return NaN;
+      const sampleCis=shotLayout?.bindings.some(b=>assayBindingField(b.field, pre)===`${pre}Cis.${s}`) ? getN(`${pre}Cis.${s}`) : Cis;
+      if (![factor, Ai, sampleCis, f, ISi, Ws, qFactor].every(isFinite)) return NaN;
       const den = ISi * Ws * qFactor;
-      return den === 0 ? NaN : (factor * Ai * Cis * f) / den * unitScale;
+      return den === 0 ? NaN : (factor * Ai * sampleCis * f) / den * unitScale;
     }
     if (![Ai, Cref, f, Aref, Ws, qFactor].every(isFinite)) return NaN;
     const den = Aref * Ws * qFactor;
@@ -1653,9 +1793,9 @@ function computeAssay(){
   });
   const { x, mean: mn, rd } = summarize(xRaw, indDp, he);
 
-  [1,2].forEach(s => setOut(`assay.out.X.${s}`, isFinite(x[s-1]) ? x[s-1].toFixed(indDp) : ''));
-  setOut('assay.out.RD',   isFinite(rd) ? fmt(rd, rdDp, he)   : '');
-  setOut('assay.out.MEAN', isFinite(mn) ? fmt(mn, meanDp, he) : '');
+  [1,2].forEach(s => setOut(`${pre}out.X.${s}`, isFinite(x[s-1]) ? x[s-1].toFixed(indDp) : ''));
+  setOut(`${pre}out.RD`,   isFinite(rd) ? fmt(rd, rdDp, he)   : '');
+  setOut(`${pre}out.MEAN`, isFinite(mn) ? fmt(mn, meanDp, he) : '');
 
   /* 代入过程 */
   const lines = [1,2].map(s => {
@@ -1669,9 +1809,10 @@ function computeAssay(){
     }
     if (mode === 'internal'){
       const ISi = AIS[s-1];
-      if (![factor, Ai, Cis, f, ISi, Ws, qFactor].every(isFinite)) return '';
+      const sampleCis=shotLayout?.bindings.some(b=>assayBindingField(b.field, pre)===`${pre}Cis.${s}`) ? getN(`${pre}Cis.${s}`) : Cis;
+      if (![factor, Ai, sampleCis, f, ISi, Ws, qFactor].every(isFinite)) return '';
       return `X<sub>${s}</sub> = ${frac(
-          `${factor.toFixed(6)} × ${fmtArea(Ai)} × ${Cis} × ${f}`,
+          `${factor.toFixed(6)} × ${fmtArea(Ai)} × ${sampleCis} × ${f}`,
           `${fmtArea(ISi)} × ${Ws}${qText}${formulaScale.denominator}`)}${formulaScale.suffix} = `
         + `<span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
     }
@@ -1682,7 +1823,7 @@ function computeAssay(){
       + `<span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
   }).filter(Boolean);
 
-  const se = document.getElementById('assay.subst');
+  const se = document.getElementById(`${pre}subst`);
   if (se){
     se.innerHTML = lines.join('<br>') + (isFinite(mn)
       ? `<br><span style="text-decoration:overline">X</span> = <span class="sx">${fmt(mn, meanDp, he)} ${esc(unit)}</span>
@@ -1691,9 +1832,9 @@ function computeAssay(){
 
   const partnerMean = getN(pre + 'partnerMean');
   const total = tpl && tpl.totalLabel && isFinite(mn) && isFinite(partnerMean) ? mn + partnerMean : NaN;
-  setOut('assay.out.TOTAL', isFinite(total) ? fmt(total, meanDp, he) : '');
+  setOut(`${pre}out.TOTAL`, isFinite(total) ? fmt(total, meanDp, he) : '');
   const verdictValue = tpl && tpl.totalLabel ? total : mn;
-  judge('assay.judge', isFinite(verdictValue) ? roundTo(verdictValue, meanDp, he) : NaN,
+  judge(`${pre}judge`, isFinite(verdictValue) ? roundTo(verdictValue, meanDp, he) : NaN,
         get(pre + 'limop') || 'ge', getN(pre + 'limval'), getN(pre + 'limmax'));
 }
 
@@ -1708,8 +1849,11 @@ function syncDpSelects(){
     if (s) s.value = String(val);
   };
   CALCS.forEach(c => put(`${c.id}.dp.mean`, calcDp(c, 'mean')));
-  // 含量测定的三个位数都跟着标准规定走，改限度时三个下拉一起更新
-  ['ind', 'mean', 'rd'].forEach(w => put(AP + 'dp.' + w, assayDp(w)));
+  const assayGroup = assayGroupFromStore();
+  (assayGroup.length ? assayGroup : [null]).forEach((template, index) => {
+    const prefix = template ? assayPrefixFor(index, template) : AP;
+    ['ind', 'mean', 'rd'].forEach(which => put(prefix + 'dp.' + which, assayDp(which, prefix)));
+  });
 }
 
 function recompute(){
@@ -1779,6 +1923,11 @@ function applyAssayTemplate(id, customProductName){
   const currentProduct = String(get(AP + 'productName') || '').trim();
   const targetProduct = t ? t.product : String(customProductName || '').trim();
   if (oldId === newId && (t || currentProduct === targetProduct)){
+    if (t){
+      const group = assayGroupForTemplate(t);
+      const ordered = [t, ...group.filter(item => item.id !== t.id)];
+      ensureAssayGroupState(ordered);
+    }
     store[AP + 'productName'] = t ? t.product : (customProductName || '');
     store[AP + 'selectedProduct'] = t ? t.product : '';
     rebuildAfterProjectChange('assay');
@@ -1790,18 +1939,11 @@ function applyAssayTemplate(id, customProductName){
   const dryBasis = get(AP + 'dryBasis');
   const states = clearAssayProjectData();
   if (t){
-    store[AP + 'tech'] = t.tech;
-    store[AP + 'mode'] = t.mode;
-    store[AP + 'dryBasis'] = t.dry ? '1' : '0';
-    store[AP + 'name'] = t.name;
-    store[AP + 'formulaText'] = t.formulaText;
-    store[AP + 'internalName'] = t.internalName || '';
-    store[AP + 'platesLim'] = t.plates;
-    store[AP + 'rsdLim'] = t.rsdLimit || RSD_LIM_DEFAULT;
-    store[AP + 'limop'] = t.limop || 'ge';
-    store[AP + 'limval'] = t.limit;
-    store[AP + 'limmax'] = t.upperLimit || '';
-    store[AP + 'unit'] = t.unit || '%';
+    const group = assayGroupForTemplate(t);
+    const ordered = [t, ...group.filter(item => item.id !== t.id)];
+    ordered.forEach((template, index) =>
+      setAssayTemplateDefaults(assayPrefixFor(index, template), template, true));
+    store[AP + 'group'] = ordered.map(item => item.id).join('|');
   } else {
     store[AP + 'tech'] = tech;
     store[AP + 'mode'] = mode;
@@ -2072,6 +2214,9 @@ function initializeQualityProject(calcId){
 function initializeAssayProject(){
   const templateId = get(AP + 'template');
   const template = assayTemplate(templateId);
+  const group = template
+    ? [template, ...assayGroupForTemplate(template).filter(item => item.id !== template.id)]
+    : [];
   const selectedProduct = template ? template.product : get(AP + 'selectedProduct');
   const customProduct = get(AP + 'productName');
   const tech = techOf();
@@ -2080,21 +2225,8 @@ function initializeAssayProject(){
   const states = clearAssayProjectData();
 
   if (template){
-    store[AP + 'tech'] = template.tech;
-    store[AP + 'mode'] = template.mode;
-    store[AP + 'dryBasis'] = template.dry ? '1' : '0';
-    store[AP + 'name'] = template.name;
-    store[AP + 'formulaText'] = template.formulaText;
-    store[AP + 'internalName'] = template.internalName || '';
-    store[AP + 'platesLim'] = template.plates;
-    store[AP + 'rsdLim'] = template.rsdLimit || RSD_LIM_DEFAULT;
-    store[AP + 'limop'] = template.limop || 'ge';
-    store[AP + 'limval'] = template.limit;
-    store[AP + 'limmax'] = template.upperLimit || '';
-    store[AP + 'unit'] = template.unit || '%';
-    store[AP + 'productName'] = template.product;
-    store[AP + 'selectedProduct'] = template.product;
-    store[AP + 'template'] = templateId;
+    group.forEach((item, index) => setAssayTemplateDefaults(assayPrefixFor(index, item), item, true));
+    store[AP + 'group'] = group.map(item => item.id).join('|');
   } else {
     store[AP + 'tech'] = tech;
     store[AP + 'mode'] = mode;
@@ -2151,13 +2283,19 @@ function seedDefaults(){
 function build(){
   seedDefaults();
   const gcTemplate = assayTemplate(get(AP + 'template'));
-  if (typeof GcPubiaoDefaults !== 'undefined' && gcTemplate?.tech === 'gc'
-      && get(AP + 'mode') === gcTemplate.mode && GcPubiaoDefaults.entries[gcTemplate.id]) {
-    // 标准固定参数每次渲染都按标准同步；它们在表里是不可编辑的黑体文字。
-    // 上一版误填进空格的浓度只撤除一次；品种或模板切换时批次字段不再沿用旧快照。
-    GcPubiaoDefaults.fill(gcTemplate.id, store, GC_WORD_TABLE_LAYOUTS[gcTemplate.id],
-      store[AP + '__pubiaoDefaultsVersion']);
-    store[AP + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
+  const assayGroup = assayGroupFromStore();
+  const gcTemplates = assayGroup.length ? assayGroup : (gcTemplate ? [gcTemplate] : []);
+  if (typeof GcPubiaoDefaults !== 'undefined') {
+    gcTemplates.forEach((template, index) => {
+      const prefix = assayPrefixFor(index, template);
+      const mode = get(prefix + 'mode') || template.mode;
+      if (template.tech !== 'gc' || mode !== template.mode || !GcPubiaoDefaults.entries[template.id]) return;
+      // 标准固定参数每次渲染都按标准同步；它们在表里是不可编辑的黑体文字。
+      // 上一版误填进空格的浓度只撤除一次；品种或模板切换时批次字段不再沿用旧快照。
+      GcPubiaoDefaults.fill(template.id, store, GC_WORD_TABLE_LAYOUTS[template.id],
+        store[prefix + '__pubiaoDefaultsVersion'], prefix);
+      store[prefix + '__pubiaoDefaultsVersion'] = GcPubiaoDefaults.version;
+    });
   }
 
   const identificationProjects = IDENTIFICATION_TABS_ENABLED ? IDENTIFICATION_PROJECTS : [];

@@ -98,6 +98,13 @@ try {
       `${item.key}: 填写值应为手写蓝、计算结果应为结果红，实际 ${item.color}`);
     assert(item.offset < 2, `${item.key}: 数据没有对齐列中心（偏差 ${item.offset.toFixed(1)}px）`);
   }
+  const unitDisplay = await page.evaluate(() => ({
+    input: document.querySelector('[data-k="sulfur.C.1"] .word-cell-unit')?.textContent
+      || document.querySelector('[data-k="sulfur.C.1"]')?.parentElement.querySelector('.word-cell-unit')?.textContent,
+    outputUnit: document.getElementById('sulfur.out.VblankPrime')?.dataset.unit,
+  }));
+  assert.equal(unitDisplay.input, 'mol/L', '左侧缺少单位时输入数值后没有显示 mol/L');
+  assert.equal(unitDisplay.outputUnit, 'ml', '计算结果没有保留右侧 ml 单位');
 
   const dataFontStyles = await page.evaluate(() => {
     const selectors = '.sheet.active .word-cell-input, .sheet.active .word-cell-output';

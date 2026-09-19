@@ -55,7 +55,10 @@ const assayTemplate = await page.evaluate(() =>
   HPLC_TEMPLATES.find(t => !t.incomplete && t.kind === '原料' && t.limit && t.standardText && HPLC_RECORD_LAYOUTS.templates[t.id]?.status === 'mapped')
 );
 await page.locator('[data-assay-search]').selectOption(assayTemplate.product);
-await page.locator(`[data-assay-template-button="${assayTemplate.id}"]`).click();
+const assayButton = page.locator(`[data-assay-template-button="${assayTemplate.id}"], [data-assay-template-ids~="${assayTemplate.id}"]`);
+await assayButton.click();
+const activeAssayTemplate = await page.evaluate(id => ASSAY_TEMPLATES.find(t => t.id === id),
+  await assayButton.getAttribute('data-assay-template-button'));
 await field(page, 'assay.Cref').fill('0.5');
 await field(page, 'assay.refA.0').fill('12345');
 await field(page, 'assay.Ws.1').fill('0.25');
@@ -65,11 +68,11 @@ await acceptInitialize(page, 'assay');
 for (const key of ['assay.Cref', 'assay.refA.0', 'assay.Ws.1']) {
   assert(await field(page, key).inputValue() === '', `含量测定: ${key} 没有清空`);
 }
-assert(await field(page, 'assay.limval').inputValue() === assayTemplate.limit,
+assert(await field(page, 'assay.limval').inputValue() === activeAssayTemplate.limit,
   '含量测定: 初始化后没有恢复模板限度');
-assert(await field(page, 'assay.name').inputValue() === assayTemplate.name,
+assert(await field(page, 'assay.name').inputValue() === activeAssayTemplate.name,
   '含量测定: 初始化后没有保留成分模板');
-assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].selected`).count() === 1,
+assert(await page.locator(`[data-assay-template-button="${assayTemplate.id}"].selected, [data-assay-template-ids~="${assayTemplate.id}"].selected`).count() === 1,
   '含量测定: 初始化后没有保留模板');
 
 // 精确 GC 初始化：清空新增的批次/来源/进样量/峰面积及输出，

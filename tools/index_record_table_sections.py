@@ -17,7 +17,7 @@ for file in DIRECTORY.glob('*.xml'):
     body=part.find('.//'+W+'body')
     current=None;paragraphs=[];tables=[];sequence=[]
     for node in body:
-        text=''.join(t.text or '' for t in node.iter(W+'t'))
+        text=''.join((t.text or '') if t.tag==W+'t' else '\n' if t.tag in (W+'br',W+'cr') else '\t' if t.tag==W+'tab' else '' for t in node.iter())
         if node.tag==W+'tbl':
             tables.append(dict(index=len(tables)+1,heading=current,context=paragraphs[-40:]))
             sequence.append(('table',tables[-1]))
@@ -31,7 +31,11 @@ for file in DIRECTORY.glob('*.xml'):
             if match:current=match.group(1)
     standard=None
     for kind,value in reversed(sequence):
-        if kind=='paragraph' and '标准规定' in value and not re.search(r'RSD|理论板数|重复性',value):standard=value
+        if kind=='paragraph':
+            for line in reversed(value.splitlines()):
+                if '标准规定' in line:
+                    tail=line[line.rfind('标准规定'):]
+                    if not re.search(r'RSD|理论板数|重复性',tail):standard=tail
         elif kind=='table':value['followingStandard']=standard
     result[file.stem]=tables
 (DIRECTORY/'table-section-contexts.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')

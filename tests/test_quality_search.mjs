@@ -83,7 +83,7 @@ await field(page, 'moisture.Ws.1').fill('10');
 await field(page, 'moisture.Vwater.1').fill('0.5');
 await field(page, 'moisture.Ws.2').fill('10');
 await field(page, 'moisture.Vwater.2').fill('0.5');
-assert(await page.locator('#moisture\\.out\\.MEAN').innerText() === '5.0', '第四法水分计算错误');
+assert(await page.locator('#moisture\\.out\\.MEAN').innerText() === '5.0%', '第四法水分计算错误');
 
 const dry = await page.evaluate(() => QUALITY_TEMPLATES.find(t => t.item === 'moisture' && t.methodType === 'dry'));
 await selectTemplate('moisture', dry);

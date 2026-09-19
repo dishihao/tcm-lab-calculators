@@ -39,8 +39,21 @@ try{
       if(await input.count())await input.fill(String(value));
     }
     if(project==='extract'&&await page.locator('[data-k="extract.Q"]').count())await page.locator('[data-k="extract.Q"]').fill('0');
-    const actual=Number(await page.locator(`[id="${project}.out.MEAN"]`).innerText());
+    const actual=Number((await page.locator(`[id="${project}.out.MEAN"]`).innerText()).replace(/[^\d.+-]/g,''));
     assert(Math.abs(actual-({impurity:2,moisture:10,ash:5,extract:10}[project]))<0.06,`${project}: unexpected result ${actual}`);
+    if(project==='moisture'){
+      assert((await page.locator('[id="moisture.out.X.1"]').innerText()).endsWith('%'),
+        '水分单值结果应在数字后显示 % 单位');
+      assert((await page.locator('[id="moisture.out.MEAN"]').innerText()).endsWith('%'),
+        '水分平均结果应在数字后显示 % 单位');
+      const unitRendering=await page.locator('[id="moisture.out.MEAN"]').evaluate(element=>({
+        spans:element.querySelectorAll('.word-cell-unit').length,
+        pseudo:getComputedStyle(element,'::after').content,
+      }));
+      assert.equal(unitRendering.spans,1,'水分结果应只显示一个单位后缀');
+      assert(['none','normal'].includes(unitRendering.pseudo),
+        `水分结果不应通过伪元素重复显示单位：${unitRendering.pseudo}`);
+    }
     const table=page.locator('.sheet.active .word-record-table');
     assert.equal(await table.count(),1);
     const width=await table.evaluate(t=>t.getBoundingClientRect().width);

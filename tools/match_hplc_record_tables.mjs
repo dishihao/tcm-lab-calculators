@@ -1,12 +1,15 @@
 export const normalizedAnalyte = value => String(value ?? '').normalize('NFKC')
-  .replace(/\s+/gu, '').replace(/^[.、:：]+/u, '').toLowerCase();
+  .replace(/\s+/gu, '').replace(/^[.、:：]+/u, '').replace(/^(?:总|游离|结合)蒽醌以/u,'').toLowerCase();
+const logicalLines=context=>context.flatMap(line=>line.split(/[\r\n\v]/u));
+const headingText=line=>normalizedAnalyte(line).replace(/^[\d.、()]*数据记录及计算(?:公式)?[:：]?/u,'');
 
 // Only short analyte headings can select among multiple source pairs. Mentions
 // in reagent/preparation/standard prose are evidence, not a table identity.
 export function nearestAnalyteHeading(context, names) {
   const normalized = names.map(name => [name, normalizedAnalyte(name)]);
-  for (const line of [...context].reverse()) {
-    const text = normalizedAnalyte(line).replace(/[：:。;；]$/u, '');
+  for (const line of logicalLines(context).reverse()) {
+    const text = headingText(line)
+      .replace(/^(?:总|游离|结合)蒽醌[:：]/u,'').replace(/[：:。;；]$/u, '');
     if (!text || text.length > 100) continue;
     const matches = normalized.filter(([, name]) => text === name
       || text === `${name}含量测定` || text === `含量测定${name}`
@@ -21,13 +24,20 @@ export function nearestAnalyteHeading(context, names) {
 }
 
 export function matchHplcTables(template, siblings, candidates) {
+  const group=String(template.standardText||'').match(/游离蒽醌|总蒽醌|结合蒽醌/u)?.[0];
+  let groupMatched=false;
+  if(group){
+    const grouped=candidates.filter(table=>logicalLines(table.context).reverse().map(headingText).find(line=>/^(?:总|游离|结合)蒽醌[:：]/u.test(line))?.startsWith(group));
+    if(grouped.length){candidates=grouped;groupMatched=true;}
+    else if(candidates.some(table=>logicalLines(table.context).some(line=>/^(?:总|游离|结合)蒽醌[:：]/u.test(headingText(line)))))return {status:'source-group-mismatch',tables:[]};
+  }
   const standard=normalizedAnalyte(template.standardText||'');
   const matchingStandard=candidates.filter(table=>standard&&normalizedAnalyte(table.followingStandard||'').includes(standard));
   if(matchingStandard.length)candidates=matchingStandard;
   const correctedName=sourceNameForLimit(template,candidates);
   const selectedName=correctedName||template.name;
   const duplicate=siblings.filter(item=>normalizedAnalyte(item.name)===normalizedAnalyte(template.name)).length>1;
-  if(duplicate&&!correctedName&&!matchingStandard.length)return {status:'duplicate-catalog-analyte',tables:[],evidence:'catalog-name-requires-source-review'};
+  if(duplicate&&!correctedName&&!matchingStandard.length&&!groupMatched)return {status:'duplicate-catalog-analyte',tables:[],evidence:'catalog-name-requires-source-review'};
   const names = [...new Set(siblings.map(sibling => sibling.name))];
   if(correctedName)names.push(correctedName);
   const classified = candidates.map(table => ({table,names:nearestAnalyteHeading(table.context,names)}));

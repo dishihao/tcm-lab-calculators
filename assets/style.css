@@ -645,11 +645,27 @@ select.quality-search{cursor:pointer; min-height:32px}
   font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
   line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
 }
+.word-record-table .word-cell-number-with-unit{
+  position:relative; display:block; width:100%; max-width:100%;
+}
+.word-record-table .word-cell-number-with-unit .word-cell-input{
+  display:block; width:calc(100% - 2em); min-width:0; max-width:none; margin:0 auto;
+}
+.word-record-table .word-cell-number-with-unit .word-cell-unit{
+  position:absolute; right:0; top:50%; transform:translateY(-50%);
+  color:inherit; font:inherit; white-space:nowrap;
+}
 .word-record-table .word-cell-output{
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;
   background:transparent; color:var(--calc); font-family:var(--table-data-font-family); text-align:center;
   font-size:var(--table-data-font-size); font-weight:var(--table-data-font-weight);
   line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
+}
+.assay-component{
+  margin-top:16px; padding-top:12px; border-top:1px dashed var(--border,#c8c8c8);
+}
+.assay-component-title{
+  margin:0 0 8px; font-weight:700; color:var(--ink,#222);
 }
 /* 标准／原记录确定的固定参数：不需要检验人员修改或填写，用黑体与手填值区分。 */
 .word-record-table .word-standard-value{

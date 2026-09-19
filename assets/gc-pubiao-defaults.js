@@ -89,21 +89,24 @@ const GcPubiaoDefaults = (() => {
     fields('10','1'),
     '蛤蚧对二氯苯：取样品5 g，精密加入环己烷10 ml，等效样品体积10 ml；各进样1 μl（依620蛤蚧原料质量标准“精密量取对照品溶液及供试品溶液各1 μl”）。标准是“不得检出”，无含量限度。');
 
-  function fill(id, state, layout, fromVersion) {
+  function fill(id, state, layout, fromVersion, prefix = 'assay.') {
     const entry = entries[id];
     if (!entry || layout?.templateId !== id) return 0;
     const inputs = new Set((layout.bindings || []).filter(b => b.role === 'input').map(b => b.field));
+    const stateKey = key => key.startsWith('assay.') ? prefix + key.slice('assay.'.length) : key;
     let count = 0;
     const gone = retired[id];
     if (gone && retiredVersions.includes(fromVersion)) {
       for (const [key, value] of Object.entries(gone)) {
-        if (inputs.has(key) && String(state[key] ?? '').trim() === value) { delete state[key]; count++; }
+        const scopedKey = stateKey(key);
+        if (inputs.has(key) && String(state[scopedKey] ?? '').trim() === value) { delete state[scopedKey]; count++; }
       }
     }
     for (const [key, value] of Object.entries(entry.values)) {
       // 这些格子已改为不可编辑的固定文字，标准值始终为准。
-      if (inputs.has(key) && state[key] !== value) {
-        state[key] = value;
+      const scopedKey = stateKey(key);
+      if (inputs.has(key) && state[scopedKey] !== value) {
+        state[scopedKey] = value;
         count++;
       }
     }

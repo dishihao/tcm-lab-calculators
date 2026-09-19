@@ -54,7 +54,7 @@ const rows = templates.map(template => {
   if (matches.length !== 1) return {...base,status:matches.length ? 'ambiguous-source' : 'source-not-scanned',tables:[]};
   const source=matches[0];
   if (source.status !== 'ok') return {...base,status:'source-error',reason:source.error,tables:[]};
-  let tables = source.tables.map(table => ({...table,followingStandard:fullContexts[source.id]?.find(item=>item.index===table.index)?.followingStandard,classification:classify(table)}))
+  let tables = source.tables.map(table => ({...table,context:template.item==='assay'?(fullContexts[source.id]?.find(item=>item.index===table.index)?.context||table.context):table.context,followingStandard:fullContexts[source.id]?.find(item=>item.index===table.index)?.followingStandard,classification:classify(table)}))
     .filter(table => table.classification?.project === template.item);
   let status=tables.length ? 'candidate-needs-review' : 'no-candidate-table';
   let resolvedName=null;

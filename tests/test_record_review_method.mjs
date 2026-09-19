@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {nonHplcMethod,hasTrailingMethodWithoutTable} from '../tools/review_record_method.mjs';
+const standard='本品中铬(Cr)不得过2.0mg/kg。';
+const source={paragraphs:['高效液相色谱法','本品含其他成分不少于0.1%。','阿胶中铬(Cr)含量测定','石墨炉原子吸收法',standard]};
+assert.match(nonHplcMethod({standardText:standard},source),/元素检验/u);
+assert.equal(nonHplcMethod({standardText:'不匹配的标准'},source),null);
+assert.equal(nonHplcMethod({standardText:standard},{paragraphs:[...source.paragraphs.slice(0,-1),'注入液相色谱仪测定',standard]}),null,'mixed methods cannot be silently excluded');
+assert.match(nonHplcMethod({standardText:'不得过3.0%。'},{paragraphs:['高效液相色谱仪型号：','照杂质测定法（通则2301）测定。','标准规定：不得过3.0%。']}),/杂质/u,'instrument boilerplate must not override explicit method');
+assert.equal(hasTrailingMethodWithoutTable({paragraphs:['结果计算','甘露糖 照高效液相色谱法测定'],tables:[{context:['结果计算']}]},'甘露糖'),true);
+assert.equal(hasTrailingMethodWithoutTable({paragraphs:['甘露糖 照高效液相色谱法测定','结果计算'],tables:[{context:['结果计算']}]},'甘露糖'),false,'a later source table must not be classified absent');
+console.log('PASS: source method classification is evidence-bounded and notices later source tables');

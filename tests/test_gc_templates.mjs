@@ -27,10 +27,11 @@ const chooseTemplate = async (page, templateId) => {
   const options = await product.locator('option').allTextContents();
   assert(options.includes(template.product), `品名下拉中找不到 ${template.product}`);
   await product.selectOption(template.product);
-  const button = page.locator(`[data-assay-template-button="${template.id}"]`);
+  const button = page.locator(`[data-assay-template-button="${template.id}"], [data-assay-template-ids~="${template.id}"]`);
   assert(await button.count() === 1, `${template.product} 下找不到模板 ${template.id}`);
   await button.click();
-  return template;
+  const activeId = await button.getAttribute('data-assay-template-button');
+  return await page.evaluate(id => ASSAY_TEMPLATES.find(t => t.id === id), activeId);
 };
 
 const browser = await chromium.launch({
@@ -133,10 +134,15 @@ const chosenHplc = await chooseTemplate(page, hplcComplete.id);
 assert(await field(page, 'assay.tech').inputValue() === 'hplc', '液相模板错误切换到气相');
 assert(await field(page, 'assay.name').inputValue() === chosenHplc.name, '液相成分名错误');
 assert(await field(page, 'assay.limval').inputValue() === chosenHplc.limit, '液相判定限度错误');
-assert((await page.locator('.standard-quote').innerText()).includes(chosenHplc.standardText),
+assert((await page.locator('.standard-quote').allTextContents()).join('\n').includes(chosenHplc.standardText),
   '液相标准规定原文错误');
-assert(await page.locator('.word-record-table').count() === 2,
-  '液相应显示本记录的两张表');
+const hplcGroupSize = await page.evaluate(id => {
+  const template = ASSAY_TEMPLATES.find(t => t.id === id);
+  return ASSAY_TEMPLATES.filter(t => t.tech === 'hplc' && t.recordKey === template.recordKey
+    && HPLC_RECORD_LAYOUTS.templates[t.id]?.status === 'mapped').length;
+}, chosenHplc.id);
+assert(await page.locator('.word-record-table').count() === 2 * hplcGroupSize,
+  '液相同一记录的多个成分应在同一页分别显示两张表');
 
 const rangeHplc = await page.evaluate(() => HPLC_TEMPLATES.find(t => t.limop === 'range' && t.upperLimit));
 await chooseTemplate(page, rangeHplc.id);
@@ -158,6 +164,35 @@ const visibleTechs = await page.locator('[data-assay-template-button]').evaluate
 );
 assert(visibleTechs.length > 0 && visibleTechs.every(tech => tech === 'gc'), '气相页面混入液相模板');
 
+// 同一份原料/成品记录的多个待测成分应合并到同一页，而不是拆成多个记录按钮。
+if (await page.locator('[data-change-assay-product]').count()) await page.locator('[data-change-assay-product]').click();
+await page.locator('[data-assay-search]').selectOption('艾叶');
+const mugwortButtons = page.locator('[data-assay-template-button]');
+assert(await mugwortButtons.count() === 2, '艾叶应按原料/成品显示两条记录，而不是四个成分按钮');
+assert((await mugwortButtons.allTextContents()).every(text => text.includes('艾叶') && /桉油精、龙脑/.test(text)),
+  '艾叶记录按钮应同时列出桉油精和龙脑');
+await mugwortButtons.first().click();
+const mugwortTableIds = await page.locator('[data-assay-reference-table] .word-record-table').evaluateAll(tables =>
+  tables.map(table => table.getAttribute('data-word-template-id'))
+);
+assert(mugwortTableIds.length === 2 && mugwortTableIds.includes('mugwort-eucalyptol')
+  && mugwortTableIds.includes('mugwort-borneol'), '艾叶原料两个成分应在同一页显示两张对照品表');
+assert(await page.locator('[data-assay-sample-table] .word-record-table').count() === 2,
+  '艾叶原料两个成分应在同一页显示两张供试品表');
+assert(await page.locator('[data-k^="assay.component.mugwort-borneol."]').count() > 0,
+  '艾叶第二个成分没有独立的录入状态空间');
+assert(await field(page, 'assay.Cref').count() === 1
+  && await field(page, 'assay.component.mugwort-borneol.Cref').count() === 1,
+  '艾叶两个成分都应有独立的对照品浓度输入');
+await field(page, 'assay.Cref').fill('9.9');
+await field(page, 'assay.component.mugwort-borneol.Cref').fill('');
+await page.evaluate(() => build());
+assert(await field(page, 'assay.component.mugwort-borneol.Cref').inputValue() === '',
+  '重建页面时龙脑不应继承桉油精的对照品浓度');
+assert(await page.evaluate(() => store['assay.component.mugwort-borneol.f.1']) === '10'
+  && await page.evaluate(() => store['assay.component.mugwort-borneol.sampleInjection.1']) === '1',
+  '艾叶第二个成分没有回填气相固定进样参数');
+
 for (const templateId of audit.gcIds) {
   const template = await chooseTemplate(page, templateId);
   assert(await field(page, 'assay.name').inputValue() === template.name, `${templateId}: 成分名错误`);
@@ -168,7 +203,7 @@ for (const templateId of audit.gcIds) {
     `${templateId}: 板数错误`);
   assert(await field(page, 'assay.limval').inputValue() === template.limit, `${templateId}: 判定限度错误`);
   assert(await field(page, 'assay.dryBasis').isChecked() === template.dry, `${templateId}: 干燥品口径错误`);
-  assert((await page.locator('.standard-quote').innerText()).includes(template.standardText),
+  assert((await page.locator('.standard-quote').allTextContents()).join('\n').includes(template.standardText),
     `${templateId}: 标准规定原文错误`);
   const exactTables = page.locator('.word-record-table');
   for (const [key, expected] of Object.entries({ 'assay.refDrying': '——', 'assay.refSource': '中检院' })) {
@@ -176,14 +211,18 @@ for (const templateId of audit.gcIds) {
     const fixed = page.locator(`[data-fixed-field="${key}"]`);
     if (await fixed.count()) assert(await fixed.innerText() === expected, `${templateId}: ${key} 固定文字错误`);
   }
-  assert(await exactTables.count() === 2, `${templateId}: 未渲染两张Word精确表`);
+  const groupIds = await page.evaluate(id => {
+    const template = ASSAY_TEMPLATES.find(t => t.id === id);
+    return ASSAY_TEMPLATES.filter(t => t.tech === 'gc' && t.recordKey === template.recordKey).map(t => t.id);
+  }, templateId);
+  assert(await exactTables.count() === 2 * groupIds.length, `${templateId}: 未按同一记录渲染完整Word精确表`);
   assert(await page.locator('.generic-assay-table').count() === 0,
     `${templateId}: 气相混入通用含量表`);
-  assert(await exactTables.nth(0).getAttribute('data-word-template-id') === templateId
-    && await exactTables.nth(0).getAttribute('data-word-table-role') === 'reference',
+  assert(await exactTables.evaluateAll((tables, ids) => tables.filter(table => table.getAttribute('data-word-table-role') === 'reference')
+    .every(table => ids.includes(table.getAttribute('data-word-template-id'))), groupIds),
   `${templateId}: 对照品运行时路由标识错误`);
-  assert(await exactTables.nth(1).getAttribute('data-word-template-id') === templateId
-    && await exactTables.nth(1).getAttribute('data-word-table-role') === 'sample',
+  assert(await exactTables.evaluateAll((tables, ids) => tables.filter(table => table.getAttribute('data-word-table-role') === 'sample')
+    .every(table => ids.includes(table.getAttribute('data-word-template-id'))), groupIds),
   `${templateId}: 供试品运行时路由标识错误`);
   assert(await exactTables.evaluateAll(tables => tables.every(table => !table.hasAttribute('data-source-table-index'))),
     `${templateId}: 公共 DOM 泄露源表索引`);
@@ -419,16 +458,20 @@ await page.emulateMedia({ media: 'screen' });
 await page.setViewportSize({ width: 1440, height: 1000 });
 
 await chooseTemplate(page, 'mugwort-eucalyptol');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'mugwort-eucalyptol',
+assert((await page.locator('[data-assay-reference-table] .word-record-table').evaluateAll(tables =>
+  tables.map(table => table.getAttribute('data-word-template-id')))).includes('mugwort-eucalyptol'),
   '艾叶桉油精运行时路由错误');
 await chooseTemplate(page, 'mugwort-borneol');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'mugwort-borneol',
+assert((await page.locator('[data-assay-reference-table] .word-record-table').evaluateAll(tables =>
+  tables.map(table => table.getAttribute('data-word-template-id')))).includes('mugwort-borneol'),
   '艾叶龙脑运行时路由错误');
 await chooseTemplate(page, 'flax-linoleic');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'flax-linoleic',
+assert((await page.locator('[data-assay-reference-table] .word-record-table').evaluateAll(tables =>
+  tables.map(table => table.getAttribute('data-word-template-id')))).includes('flax-linoleic'),
   '亚麻子亚油酸运行时路由错误');
 await chooseTemplate(page, 'flax-linolenic');
-assert(await page.locator('[data-assay-reference-table] .word-record-table').getAttribute('data-word-template-id') === 'flax-linolenic',
+assert((await page.locator('[data-assay-reference-table] .word-record-table').evaluateAll(tables =>
+  tables.map(table => table.getAttribute('data-word-template-id')))).includes('flax-linolenic'),
   '亚麻子亚麻酸运行时路由错误');
 
 await chooseTemplate(page, 'patchouli-patchoulol');
@@ -637,8 +680,13 @@ assert(missingLayoutPaths.genericTables === 2 && missingLayoutPaths.wordTables =
 await chooseTemplate(page, hplcComplete.id);
 assert(await page.locator('.generic-assay-table').count() === 0,
   '已核对液相记录不应使用通用表');
-assert(await page.locator('.word-record-table').count() === 2,
-  '液相应切回本记录的两张源表');
+const hplcCompleteGroupSize = await page.evaluate(id => {
+  const template = ASSAY_TEMPLATES.find(t => t.id === id);
+  return ASSAY_TEMPLATES.filter(t => t.tech === 'hplc' && t.recordKey === template.recordKey
+    && HPLC_RECORD_LAYOUTS.templates[t.id]?.status === 'mapped').length;
+}, hplcComplete.id);
+assert(await page.locator('.word-record-table').count() === 2 * hplcCompleteGroupSize,
+  '液相应切回本记录的源表');
 
 await page.screenshot({ path: 'C:/tmp/assay-templates.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);

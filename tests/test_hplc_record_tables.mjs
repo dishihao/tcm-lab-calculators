@@ -46,11 +46,11 @@ try{
   await page.emulateMedia({media:'print'});
   assert(Math.abs(await page.locator('.word-record-table').first().evaluate(t=>t.getBoundingClientRect().width)-width)<0.2,'print resized original columns');
   await page.emulateMedia({media:'screen'});
-  for(const kind of ['micro','curve','paired-water']){
+  for(const kind of ['micro','curve','paired-water','internal']){
     const result=await page.evaluate(kind=>{
       const template=HPLC_TEMPLATES.find(t=>{
         const layout=HplcRecordTables.layout(t);
-        return layout&&(kind==='micro'?layout.referenceConcentrationScale===0.001:kind==='curve'?layout.quantification==='curve-readback':layout.sampleTable.waterPerSample);
+        return layout&&(kind==='micro'?layout.referenceConcentrationScale===0.001:kind==='curve'?layout.quantification==='curve-readback':kind==='internal'?t.mode==='internal':layout.sampleTable.waterPerSample);
       });
       if(!template)return null;
       applyAssayTemplate(template.id);
@@ -59,8 +59,12 @@ try{
         const key=b.field;
         if(key==='assay.CrefMicro')store[key]='2000';
         else if(key==='assay.Cref')store[key]='2';
+        else if(key==='assay.Cis')store[key]='0.5';
+        else if(/^assay\.Cis\.[12]$/u.test(key))store[key]='0.25';
         else if(/^assay\.Q(?:\.[12])?$/u.test(key))store[key]='0';
         else if(key.startsWith('assay.refA.'))store[key]='100';
+        else if(key.startsWith('assay.refIS.'))store[key]='200';
+        else if(key.startsWith('assay.smpIS.'))store[key]='100';
         else if(key.startsWith('assay.smpA.')||key.startsWith('assay.curveA.'))store[key]='50';
         else if(key.startsWith('assay.Ws.'))store[key]='1';
         else if(key.startsWith('assay.f.'))store[key]='10';
@@ -71,6 +75,10 @@ try{
     },kind);
     assert(result,`${kind}: missing source fixture`);
     assert.equal(result.mean,result.expected,`${kind}: source concentration conversion is wrong`);
+    if(kind==='internal'){
+      const result=await page.evaluate(()=>{store['assay.Cis.2']='0.5';computeAssay();return [Number(document.getElementById('assay.out.factor').textContent),Number(document.getElementById('assay.out.X.1').textContent),Number(document.getElementById('assay.out.X.2').textContent)];});
+      assert.deepEqual(result,[8,1,2],'internal reference factor and per-sample concentration must remain separate');
+    }
     if(kind==='curve')await page.locator('.sheet.active').screenshot({path:fileURLToPath(new URL('../output/record-table-browser/hplc-curve.png',import.meta.url))});
   }
   if(coverage.pending){
