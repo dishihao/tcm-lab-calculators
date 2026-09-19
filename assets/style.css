@@ -438,7 +438,7 @@ select.quality-search{cursor:pointer; min-height:32px}
   color:inherit; font:inherit; white-space:nowrap;
 }
 .word-record-table .word-cell-number-with-unit.word-cell-percent-value .word-cell-unit{
-  left:calc(50% + 1.1em); right:auto;
+  left:calc(50% + 0.7em); right:auto;
 }
 .word-record-table .word-cell-output{
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;
