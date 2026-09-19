@@ -25,15 +25,13 @@
     const cell=table.cells.find(item=>item.id===binding.cellId);
     if(!cell)return '';
     return table.cells
-      .filter(item=>!item.isGridGap&&item.row===cell.row&&item.column<cell.column&&compact(item.text))
+      .filter(item=>!item.isGridGap&&item.row===cell.row&&item.column<cell.column&&compact(item.text)&&compact(item.text)!=='/')
       .sort((left,right)=>left.column-right.column)
-      .at(-1)?.text||'';
+      [0]?.text||'';
   }
   function unitForBinding(table,binding){
     const unit=fieldUnit(binding.field);
     if(!unit)return '';
-    // 输出结果总是把单位跟在数值后，避免只看左侧标签时丢失量纲。
-    if(binding.role==='output')return unit;
     const label=compact(sourceLabel(table,binding));
     return label.includes(compact(unit))?'':unit;
   }

@@ -103,8 +103,8 @@ try {
       || document.querySelector('[data-k="sulfur.C.1"]')?.parentElement.querySelector('.word-cell-unit')?.textContent,
     outputUnit: document.getElementById('sulfur.out.VblankPrime')?.dataset.unit,
   }));
-  assert.equal(unitDisplay.input, 'mol/L', '左侧缺少单位时输入数值后没有显示 mol/L');
-  assert.equal(unitDisplay.outputUnit, 'ml', '计算结果没有保留右侧 ml 单位');
+  assert.equal(unitDisplay.input, undefined, '左侧已有 mol/L 单位时输入数值不应重复显示');
+  assert.equal(unitDisplay.outputUnit, undefined, '左侧已有 ml 单位时计算结果不应重复显示');
 
   const dataFontStyles = await page.evaluate(() => {
     const selectors = '.sheet.active .word-cell-input, .sheet.active .word-cell-output';
