@@ -917,8 +917,8 @@ function assayWordInput(binding, tpl){
   const inputMode = binding.inputMode === 'decimal' ? ' inputmode="decimal"' : '';
   const input = `<input class="cell word-cell-input" type="text"${inputMode} autocomplete="off"
     data-k="${esc(key)}" value="${esc(value)}" aria-label="${esc(binding.sourceLabel || key)}">`;
-  // 原记录的水分 Q 标签没有带百分号，按用户填写的数值后显示单位。
-  return /(?:^|\.)Q(?:\.|$)/.test(key)
+  // 原记录的水分 Q、对照品纯度标签没有把百分号放在数值后，按用户填写的数值后显示单位。
+  return /(?:^|\.)(?:Q|refPurity)(?:\.|$)/.test(key)
     ? `<span class="word-cell-number-with-unit word-cell-percent-value">${input}<span class="word-cell-unit">%</span></span>`
     : input;
 }

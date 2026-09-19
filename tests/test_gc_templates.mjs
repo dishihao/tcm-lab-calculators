@@ -202,6 +202,9 @@ const qUnitGap=await field(page, 'assay.Q').locator('xpath=..').evaluate(wrapper
   return box.left-(cell.left+cell.width/2);
 });
 assert(qUnitGap<24, `水分 % 与数字距离过远：${qUnitGap.toFixed(1)}px`);
+await field(page, 'assay.refPurity').fill('99');
+assert(await field(page, 'assay.refPurity').locator('xpath=..').locator('.word-cell-unit').innerText() === '%',
+  '对照品纯度数值后没有显示 % 单位');
 
 for (const templateId of audit.gcIds) {
   const template = await chooseTemplate(page, templateId);
