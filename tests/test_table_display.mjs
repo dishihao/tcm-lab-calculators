@@ -34,7 +34,7 @@ try {
     assert.equal(await sheet.locator('.formula-wrap, .verdict, [data-k$=".dp.ind"], [data-k$=".dp.mean"]').count(), 0,
       `${project}: 未选品种时不应出现公式、判定限度或修约位数`);
   }
-  assert.equal(await page.locator('table').count(), 2, '页面上只应剩温湿度记录的两张表');
+  assert.equal(await page.locator('table').count(), 0, '未选择品种时页面不应显示数据表');
 
   // 选定品种后才出表格。
   for (const project of ['impurity', 'moisture', 'ash', 'extract', 'sulfur']) {

@@ -60,8 +60,8 @@ try {
   await page.waitForLoadState('networkidle');
 
   const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabs .tab')].map(tab => tab.dataset.tab));
-  assert.deepEqual(tabs, ['impurity', 'moisture', 'ash', 'extract', 'sulfur', 'assay', 'environment'],
-    '页签应为杂质、水分、总灰分、浸出物、二氧化硫、含量测定、温湿度记录');
+  assert.deepEqual(tabs, ['impurity', 'moisture', 'ash', 'extract', 'sulfur', 'assay'],
+    '页签应为杂质、水分、总灰分、浸出物、二氧化硫、含量测定');
   for (const item of Object.keys(EXPECTED)) {
     assert.equal(await page.locator(`[data-tab="${item}"]`).count(), 0, `${item}: 页签仍存在`);
     assert.equal(await page.locator(`section[data-sheet="${item}"]`).count(), 0, `${item}: 页面仍存在`);

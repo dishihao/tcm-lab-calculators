@@ -2301,10 +2301,7 @@ function build(){
   const identificationProjects = IDENTIFICATION_TABS_ENABLED ? IDENTIFICATION_PROJECTS : [];
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
     .concat(identificationProjects.map(project => ({ id:project.id, tab:project.tab })))
-    .concat([{ id:'assay', tab:ASSAY.tab }])
-    .concat(window.EnvironmentRecorder
-      ? [{ id:window.EnvironmentRecorder.id, tab:window.EnvironmentRecorder.tab }]
-      : []);
+    .concat([{ id:'assay', tab:ASSAY.tab }]);
   if (!tabs.some(t => t.id === curTab)) curTab = tabs[0].id;
 
   $('#tabs').innerHTML = tabs.map(t =>
@@ -2314,8 +2311,7 @@ function build(){
   $('#sheets').innerHTML =
       CALCS.map(c => renderSheet(c)).join('')
     + identificationProjects.map(project => renderIdentificationSheet(project)).join('')
-    + renderAssaySheet()
-    + (window.EnvironmentRecorder ? window.EnvironmentRecorder.render() : '');
+    + renderAssaySheet();
 
   /* 恢复 select 值 */
   $$('select[data-k]').forEach(s => {
