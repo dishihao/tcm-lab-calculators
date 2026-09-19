@@ -192,6 +192,9 @@ assert(await field(page, 'assay.component.mugwort-borneol.Cref').inputValue() ==
 assert(await page.evaluate(() => store['assay.component.mugwort-borneol.f.1']) === '10'
   && await page.evaluate(() => store['assay.component.mugwort-borneol.sampleInjection.1']) === '1',
   '艾叶第二个成分没有回填气相固定进样参数');
+await field(page, 'assay.Q').fill('11');
+assert(await field(page, 'assay.Q').locator('xpath=..').locator('.word-cell-unit').innerText() === '%',
+  '供试品测量表的水分数值后没有显示 % 单位');
 
 for (const templateId of audit.gcIds) {
   const template = await chooseTemplate(page, templateId);
