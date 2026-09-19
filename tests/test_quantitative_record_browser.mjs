@@ -54,6 +54,14 @@ try{
       assert(['none','normal'].includes(unitRendering.pseudo),
         `水分结果不应通过伪元素重复显示单位：${unitRendering.pseudo}`);
     }
+    if(project==='extract'){
+      const qGap=await page.locator('[data-k="extract.Q"]').locator('xpath=..').evaluate(wrapper=>{
+        const unit=wrapper.querySelector('.word-cell-unit').getBoundingClientRect();
+        const cell=wrapper.closest('td').getBoundingClientRect();
+        return unit.left-(cell.left+cell.width/2);
+      });
+      assert(qGap<24, `浸出物水分 % 与数字距离过远：${qGap.toFixed(1)}px`);
+    }
     const table=page.locator('.sheet.active .word-record-table');
     assert.equal(await table.count(),1);
     const width=await table.evaluate(t=>t.getBoundingClientRect().width);

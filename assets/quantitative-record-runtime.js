@@ -38,7 +38,9 @@
     return label.includes(compact(unit))?'':unit;
   }
   function withInputUnit(html,unit){
-    return unit?`<span class="word-cell-number-with-unit">${html}<span class="word-cell-unit">${escape(unit)}</span></span>`:html;
+    if(!unit)return html;
+    const percentClass=unit==='%'?' word-cell-percent-value':'';
+    return `<span class="word-cell-number-with-unit${percentClass}">${html}<span class="word-cell-unit">${escape(unit)}</span></span>`;
   }
   /** 「至恒重」不是小时数，把它后面的「小时」单位去掉，避免读成「至恒重小时」 */
   function withoutTrailingHour(cell){
