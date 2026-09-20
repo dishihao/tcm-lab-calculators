@@ -509,11 +509,11 @@ const CALCS = [
       });
       return { x };   // 汇总（修约→平均→偏差）统一交给 summarize()
     },
-    subst(g, dp, he){
+    subst(g, dp, he, gs, raw){
       return [1,2].map(i => {
         const M = g('M', i), M1 = g('M1', i);
         if (!isFinite(M) || !isFinite(M1) || M === 0) return '';
-        return `X<sub>${i}</sub> = ${frac(M1, M)} × 100% = <span class="sx">${fmt(M1/M*100, dp, he)}%</span>`;
+        return `X<sub>${i}</sub> = ${frac(raw('M1', i), raw('M', i))} × 100% = <span class="sx">${fmt(M1/M*100, dp, he)}%</span>`;
       });
     }
   },
@@ -556,19 +556,19 @@ const CALCS = [
       });
       return { x };   // 汇总（修约→平均→偏差）统一交给 summarize()
     },
-    subst(g, dp, he){
+    subst(g, dp, he, gs, raw, rawGs){
       if (qualityMethodType('moisture') === 'fourth'){
         return [1,2].map(i => {
           const Ws = g('Ws', i), Vwater = g('Vwater', i);
           if (!isFinite(Ws) || !isFinite(Vwater) || Ws === 0) return '';
-          return `X<sub>${i}</sub> = ${frac(Vwater, Ws)} × 100% = `
+          return `X<sub>${i}</sub> = ${frac(raw('Vwater', i), raw('Ws', i))} × 100% = `
                + `<span class="sx">${fmt(Vwater/Ws*100, dp, he)}%</span>`;
         });
       }
       return [1,2].map(i => {
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1b', i);
         if (!isFinite(W0) || !isFinite(Ws) || !isFinite(W1) || Ws === 0) return '';
-        return `X<sub>${i}</sub> = ${frac(`${W0} + ${Ws} − ${W1}`, Ws)} × 100% = `
+        return `X<sub>${i}</sub> = ${frac(`${raw('W0b', i)} + ${raw('Ws', i)} − ${raw('W1b', i)}`, raw('Ws', i))} × 100% = `
              + `<span class="sx">${fmt((W0+Ws-W1)/Ws*100, dp, he)}%</span>`;
       });
     },
@@ -605,11 +605,11 @@ const CALCS = [
       });
       return { x };   // 汇总（修约→平均→偏差）统一交给 summarize()
     },
-    subst(g, dp, he){
+    subst(g, dp, he, gs, raw){
       return [1,2].map(i => {
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1b', i);
         if (!isFinite(W0) || !isFinite(Ws) || !isFinite(W1) || Ws === 0) return '';
-        return `X<sub>${i}</sub> = ${frac(`${W1} − ${W0}`, Ws)} × 100% = `
+        return `X<sub>${i}</sub> = ${frac(`${raw('W1b', i)} − ${raw('W0b', i)}`, raw('Ws', i))} × 100% = `
              + `<span class="sx">${fmt((W1-W0)/Ws*100, dp, he)}%</span>`;
       });
     },
@@ -649,14 +649,14 @@ const CALCS = [
       });
       return { x };   // 汇总（修约→平均→偏差）统一交给 summarize()
     },
-    subst(g, dp, he, gs){
+    subst(g, dp, he, gs, raw, rawGs){
       return [1,2].map(i => {
         const Q = gs('Q', i);
         const W0 = g('W0b', i), Ws = g('Ws', i), W1 = g('W1', i), V = g('V', i), Vs = g('Vs', i);
         if (![W0, Ws, W1, V, Vs, Q].every(isFinite)) return '';
         const den = Ws * (1 - Q/100) * Vs;
         if (den === 0) return '';
-        return `X<sub>${i}</sub> = ${frac(`(${W1} − ${W0}) × ${V}`, `${Ws} × (1 − ${Q}%) × ${Vs}`)} × 100% = `
+        return `X<sub>${i}</sub> = ${frac(`(${raw('W1', i)} − ${raw('W0b', i)}) × ${raw('V', i)}`, `${raw('Ws', i)} × (1 − ${rawGs('Q', i)}%) × ${raw('Vs', i)}`)} × 100% = `
              + `<span class="sx">${fmt((W1-W0)*V/den*100, dp, he)}%</span>`;
       });
     },
@@ -703,7 +703,7 @@ const CALCS = [
       });
       return { x, outputs:{ VblankPrime, Vprime } };
     },
-    subst(g, dp, he, gs){
+    subst(g, dp, he, gs, raw, rawGs){
       const Vblank = gs('Vblank');
       const VblankCorrRaw = gs('VblankCorr');
       const VblankCorr = isFinite(VblankCorrRaw) ? VblankCorrRaw : 0;
@@ -715,7 +715,7 @@ const CALCS = [
         const Vp = isFinite(V) ? V + corr : NaN;
         if (![C, VblankPrime, Vp, M].every(isFinite) || M === 0) return '';
         const result = Math.abs(Vp - VblankPrime) * C * 0.032 * 1e6 / M;
-        return `X<sub>${i}</sub> = ${frac(`|${plainNum(Vp)} − ${plainNum(VblankPrime)}| × ${C} × 0.032 × 10<sup>6</sup>`, M)} = `
+        return `X<sub>${i}</sub> = ${frac(`|${plainNum(Vp)} − ${plainNum(VblankPrime)}| × ${rawGs('C', i)} × 0.032 × 10<sup>6</sup>`, raw('Ws', i))} = `
              + `<span class="sx">${fmt(result, dp, he)} mg/kg</span>`;
       });
     },
@@ -798,6 +798,12 @@ function save(){
 
 const get  = k => (store[k] === undefined ? '' : store[k]);
 const getN = k => num(store[k]);
+/** 源数据的显示文本：计算过程保留检验人员在表格中录入的小数位。 */
+function sourceText(key, fallback = NaN){
+  const raw = store[key];
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') return String(raw).trim();
+  return isFinite(fallback) ? plainNum(fallback) : '';
+}
 const set  = (k, v) => { store[k] = v; };
 
 /** 药典修约规则固定为四舍六入五成双 */
@@ -1657,6 +1663,12 @@ function computeCalc(c){
   const g  = (k, i) => getN(`${c.id}.${k}.${i}`);
   const gs = (k, i) => getN(i && record?.bindings.some(b=>b.field===`${c.id}.${k}.${i}`)
     ? `${c.id}.${k}.${i}` : `${c.id}.${k}`);
+  const raw = (k, i) => sourceText(`${c.id}.${k}.${i}`, g(k, i));
+  const rawGs = (k, i) => {
+    const key = i && record?.bindings.some(b=>b.field===`${c.id}.${k}.${i}`)
+      ? `${c.id}.${k}.${i}` : `${c.id}.${k}`;
+    return sourceText(key, gs(k, i));
+  };
   const he = useHE();
   const indDp  = calcDp(c, 'ind');
   const meanDp = calcDp(c, 'mean');
@@ -1678,7 +1690,7 @@ function computeCalc(c){
   setOut(`${c.id}.out.RD`,   isFinite(r.rd)   ? fmt(r.rd, 1, he)        : '');
   setOut(`${c.id}.out.MEAN`, isFinite(r.mean) ? fmt(r.mean, meanDp, he) : '');
 
-  const sub = c.subst(g, indDp, he, gs).filter(Boolean).join('<br>');
+  const sub = c.subst(g, indDp, he, gs, raw, rawGs).filter(Boolean).join('<br>');
   const se = document.getElementById(`${c.id}.subst`);
   if (se){
     se.innerHTML = sub + (isFinite(r.mean)
@@ -1756,12 +1768,16 @@ function computeAssay(scope = AP, templateOverride = null){
   const referenceConcentrationField = shotLayout?.referenceConcentrationField
     ? assayBindingField(shotLayout.referenceConcentrationField, pre) : pre + 'Cref';
   let Cref = getN(referenceConcentrationField) * (shotLayout?.referenceConcentrationScale || 1);
+  const referenceConcentrationText = (shotLayout?.referenceConcentrationScale || 1) === 1
+    ? sourceText(referenceConcentrationField, Cref) : plainNum(Cref);
   if (get(pre + 'useS') === '1'){
     const S = getN(pre + 'refPurity');
     if (isFinite(S)) Cref = Cref * S / 100;
   }
   const Q = getN(pre + 'Q');
-  const qFor = sample => shotLayout?.sampleTable?.waterPerSample ? getN(`${pre}Q.${sample}`) : Q;
+  const qKeyFor = sample => shotLayout?.sampleTable?.waterPerSample ? `${pre}Q.${sample}` : `${pre}Q`;
+  const qFor = sample => getN(qKeyFor(sample));
+  const qTextFor = sample => sourceText(qKeyFor(sample), qFor(sample));
   const qFactorFor = sample => dry ? (isFinite(qFor(sample)) ? 1-qFor(sample)/100 : NaN) : 1;
   const Cis = getN(pre + 'Cis');
   const factor = mode === 'internal' && [ISref, Cref, Aref, Cis].every(isFinite) && Aref !== 0 && Cis !== 0
@@ -1808,25 +1824,30 @@ function computeAssay(scope = AP, templateOverride = null){
   const lines = [1,2].map(s => {
     const qFactor = qFactorFor(s);
     const Ws = getN(`${pre}Ws.${s}`), f = getN(`${pre}f.${s}`), Ai = A[s-1];
-    const qText = dry ? ` × (1 − ${qFor(s)}%)` : '';
+    const WsText = sourceText(`${pre}Ws.${s}`, Ws);
+    const fText = sourceText(`${pre}f.${s}`, f);
+    const qText = dry ? ` × (1 − ${qTextFor(s)}%)` : '';
     if (curveReadback) {
       const concentration = getN(`${pre}Csample.${s}`);
+      const concentrationText = sourceText(`${pre}Csample.${s}`, concentration);
       if (![concentration,f,Ws,qFactor].every(isFinite) || Ws*qFactor === 0) return '';
-      return `X<sub>${s}</sub> = ${frac(`${concentration} × ${f}`, `${Ws}${qText}`)} × ${unitScale} = <span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
+      return `X<sub>${s}</sub> = ${frac(`${concentrationText} × ${fText}`, `${WsText}${qText}`)} × ${unitScale} = <span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
     }
     if (mode === 'internal'){
       const ISi = AIS[s-1];
-      const sampleCis=shotLayout?.bindings.some(b=>assayBindingField(b.field, pre)===`${pre}Cis.${s}`) ? getN(`${pre}Cis.${s}`) : Cis;
+      const hasSampleCis = shotLayout?.bindings.some(b=>assayBindingField(b.field, pre)===`${pre}Cis.${s}`);
+      const sampleCis=hasSampleCis ? getN(`${pre}Cis.${s}`) : Cis;
+      const sampleCisText=hasSampleCis ? sourceText(`${pre}Cis.${s}`, sampleCis) : sourceText(`${pre}Cis`, Cis);
       if (![factor, Ai, sampleCis, f, ISi, Ws, qFactor].every(isFinite)) return '';
       return `X<sub>${s}</sub> = ${frac(
-          `${factor.toFixed(6)} × ${fmtArea(Ai)} × ${sampleCis} × ${f}`,
-          `${fmtArea(ISi)} × ${Ws}${qText}${formulaScale.denominator}`)}${formulaScale.suffix} = `
+          `${factor.toFixed(6)} × ${fmtArea(Ai)} × ${sampleCisText} × ${fText}`,
+          `${fmtArea(ISi)} × ${WsText}${qText}${formulaScale.denominator}`)}${formulaScale.suffix} = `
         + `<span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
     }
     if (![Ai, Cref, f, Aref, Ws, qFactor].every(isFinite)) return '';
     return `X<sub>${s}</sub> = ${frac(
-        `${fmtArea(Ai)} × ${Cref} × ${f}`,
-        `${fmtArea(Aref)} × ${Ws}${qText}${formulaScale.denominator}`)}${formulaScale.suffix} = `
+        `${fmtArea(Ai)} × ${referenceConcentrationText} × ${fText}`,
+        `${fmtArea(Aref)} × ${WsText}${qText}${formulaScale.denominator}`)}${formulaScale.suffix} = `
       + `<span class="sx">${x[s-1].toFixed(indDp)} ${esc(unit)}</span>`;
   }).filter(Boolean);
 

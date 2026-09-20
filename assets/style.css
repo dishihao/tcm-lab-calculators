@@ -442,17 +442,14 @@ select.quality-search{cursor:pointer; min-height:32px}
   line-height:var(--table-data-line-height); letter-spacing:var(--table-data-letter-spacing);
 }
 .word-record-table .word-cell-number-with-unit{
-  position:relative; display:block; width:100%; max-width:100%;
+  display:inline-flex; width:100%; max-width:100%; box-sizing:border-box;
+  align-items:center; justify-content:center; gap:2px; vertical-align:middle;
 }
 .word-record-table .word-cell-number-with-unit .word-cell-input{
-  display:block; width:calc(100% - 2em); min-width:0; max-width:none; margin:0 auto;
+  display:block; width:auto; min-width:0; max-width:none; flex:1 1 auto; margin:0;
 }
 .word-record-table .word-cell-number-with-unit .word-cell-unit{
-  position:absolute; right:0; top:50%; transform:translateY(-50%);
-  color:inherit; font:inherit; white-space:nowrap;
-}
-.word-record-table .word-cell-number-with-unit.word-cell-percent-value .word-cell-unit{
-  left:calc(50% + 0.7em); right:auto;
+  position:static; flex:0 0 auto; color:inherit; font:inherit; white-space:nowrap;
 }
 .word-record-table .word-cell-output{
   display:block; width:100%; min-height:0; margin:0; padding:0; border:0;

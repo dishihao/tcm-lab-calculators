@@ -195,13 +195,14 @@ assert(await page.evaluate(() => store['assay.component.mugwort-borneol.f.1']) =
 await field(page, 'assay.Q').fill('11');
 assert(await field(page, 'assay.Q').locator('xpath=..').locator('.word-cell-unit').innerText() === '%',
   '供试品测量表的水分数值后没有显示 % 单位');
-const qUnitGap=await field(page, 'assay.Q').locator('xpath=..').evaluate(wrapper=>{
-  const unit=wrapper.querySelector('.word-cell-unit');
+const qUnitLayout=await field(page, 'assay.Q').locator('xpath=..').evaluate(wrapper=>{
+  const input=wrapper.querySelector('[data-k="assay.Q"]').getBoundingClientRect();
+  const unit=wrapper.querySelector('.word-cell-unit').getBoundingClientRect();
   const cell=wrapper.closest('td').getBoundingClientRect();
-  const box=unit.getBoundingClientRect();
-  return box.left-(cell.left+cell.width/2);
+  return {gap:unit.left-input.right, unitRight:unit.right, cellRight:cell.right};
 });
-assert(qUnitGap<24, `水分 % 与数字距离过远：${qUnitGap.toFixed(1)}px`);
+assert(qUnitLayout.gap>=0, `水分 % 遮挡数值：${qUnitLayout.gap.toFixed(1)}px`);
+assert(qUnitLayout.unitRight<=qUnitLayout.cellRight+1, '水分 % 超出单元格');
 await field(page, 'assay.refPurity').fill('99');
 assert(await field(page, 'assay.refPurity').locator('xpath=..').locator('.word-cell-unit').innerText() === '%',
   '对照品纯度数值后没有显示 % 单位');

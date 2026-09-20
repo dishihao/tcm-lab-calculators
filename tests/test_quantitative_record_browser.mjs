@@ -55,12 +55,14 @@ try{
         `水分结果不应通过伪元素重复显示单位：${unitRendering.pseudo}`);
     }
     if(project==='extract'){
-      const qGap=await page.locator('[data-k="extract.Q"]').locator('xpath=..').evaluate(wrapper=>{
+      const qLayout=await page.locator('[data-k="extract.Q"]').locator('xpath=..').evaluate(wrapper=>{
+        const input=wrapper.querySelector('[data-k="extract.Q"]').getBoundingClientRect();
         const unit=wrapper.querySelector('.word-cell-unit').getBoundingClientRect();
         const cell=wrapper.closest('td').getBoundingClientRect();
-        return unit.left-(cell.left+cell.width/2);
+        return { gap:unit.left-input.right, unitRight:unit.right, cellRight:cell.right };
       });
-      assert(qGap<24, `浸出物水分 % 与数字距离过远：${qGap.toFixed(1)}px`);
+      assert(qLayout.gap>=0, `浸出物水分 % 遮挡数值：${qLayout.gap.toFixed(1)}px`);
+      assert(qLayout.unitRight<=qLayout.cellRight+1, '浸出物水分 % 超出单元格');
     }
     const table=page.locator('.sheet.active .word-record-table');
     assert.equal(await table.count(),1);
@@ -81,6 +83,32 @@ try{
     fs.mkdirSync(new URL('../output/record-table-browser/',import.meta.url),{recursive:true});
     await page.locator('.sheet.active').screenshot({path:fileURLToPath(new URL(`../output/record-table-browser/${project}.png`,import.meta.url))});
   }
+  await page.evaluate(() => {
+    applyAssayProduct('公式精度测试品种');
+    Object.assign(store, {
+      'assay.name':'测试成分', 'assay.tech':'hplc', 'assay.mode':'external',
+      'assay.dryBasis':'1', 'assay.Cref':'1.00', 'assay.Q':'11.10',
+      'assay.Ws.1':'2.6272', 'assay.Ws.2':'2.5841',
+      'assay.f.1':'10', 'assay.f.2':'10', 'assay.plates':'10000', 'assay.limval':'0'
+    });
+    for(let i=0;i<5;i++) store[`assay.refA.${i}`]='100.00';
+    for(const sample of [1,2]) for(let i=0;i<2;i++) store[`assay.smpA.${sample}.${i}`]='50.00';
+    computeAssay();
+    showTab('assay');
+  });
+  const assaySubstitution=await page.locator('#assay\\.subst').innerText();
+  assert(assaySubstitution.includes('11.10%'), '含量测定公式没有保留水分源数据的两位小数');
+  assert(assaySubstitution.includes('2.6272') && assaySubstitution.includes('2.5841'),
+    '含量测定公式没有保留取样量源数据的四位小数');
+  const moisturePrecisionTemplate=await page.evaluate(() => QUALITY_TEMPLATES.find(item =>
+    item.item==='moisture' && item.methodType!=='fourth' && QUANTITATIVE_RECORD_LAYOUTS.templates[item.id]?.status==='mapped'));
+  await page.evaluate(id => { applyQualityTemplate('moisture',id); showTab('moisture'); }, moisturePrecisionTemplate.id);
+  for(const [key,value] of Object.entries({W0b:'100.00',Ws:'10.00',W1b:'109.00'})){
+    for(const sample of [1,2]) await page.locator(`[data-k="moisture.${key}.${sample}"]`).fill(value);
+  }
+  const moistureSubstitution=await page.locator('#moisture\\.subst').innerText();
+  assert(moistureSubstitution.includes('100.00 + 10.00 − 109.00'),
+    '质量项目公式没有保留源数据的小数位');
   assert.deepEqual(errors,[]);
   console.log(`PASS: ${coverage.mapped}/${coverage.templates} mapped quantitative presets, ${coverage.models} distinct models; source bindings, computations, inline parameters and mobile widths`);
 }finally{await browser.close();}
