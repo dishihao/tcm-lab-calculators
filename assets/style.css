@@ -419,6 +419,20 @@ select.quality-search{cursor:pointer; min-height:32px}
 .word-record-table{
   table-layout:fixed; border-collapse:collapse; max-width:none; min-width:0;
 }
+.word-record-table td.word-cell-editable,
+.word-clipped-source-cell.word-cell-editable,
+.form td:has(input.cell, input.inline, input.word-cell-input, .peaks input){
+  background-color:#edf5ff !important;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+.word-record-table td.word-cell-fixed,
+.word-record-table td.word-cell-computed,
+.word-clipped-source-cell.word-cell-fixed,
+.word-clipped-source-cell.word-cell-computed,
+.form td:has(.word-fixed-text, .word-standard-value, .out){
+  background-color:#f2f3f5 !important;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
 .word-border-overhang{z-index:2}
 .word-table-scroll .word-record-table{min-width:0}
 .word-record-table .word-cell-input{

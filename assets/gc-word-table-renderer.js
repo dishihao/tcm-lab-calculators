@@ -392,6 +392,13 @@
     return [paragraphStyle, runStyle].filter(Boolean).join(';');
   }
 
+  function cellRoleClass(binding, content) {
+    if (binding?.role === 'output') return 'word-cell-computed';
+    if (binding?.role === 'input') return /<input\b/u.test(content)
+      ? 'word-cell-editable' : 'word-cell-fixed';
+    return /word-fixed-text|word-standard-value/u.test(content) ? 'word-cell-fixed' : '';
+  }
+
   function validate(table) {
     if (!table || typeof table !== 'object' || Array.isArray(table)) throw new Error('templateId=unknown tableRole=unknown cellId=table invalid table');
     if (typeof table.templateId !== 'string' || !table.templateId) fail(table, 'table', 'invalid templateId');
@@ -500,7 +507,8 @@
         const rowContentStyle = renderRowContentStyle(row, table, rowIndex, cell);
         if (rowContentStyle) content = `<div class="word-row-content" style="${rowContentStyle}">${content}</div>`;
         const style = renderCellStyle(cell, table);
-        return `<td data-word-cell-id="${escapeHtml(cell.id)}"${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
+        const roleClass = cellRoleClass(binding, content);
+        return `<td class="${roleClass}" data-word-cell-id="${escapeHtml(cell.id)}"${cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : ''}${cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : ''}${style ? ` style="${style}"` : ''}>${content}</td>`;
       }).join('');
       return `<tr data-word-row-height-rule="${heightRule}">${cells}</tr>`;
     }).join('');
@@ -531,7 +539,8 @@
         height ? `height:${pt(height, table, cell.id, 'clipped cell height', { nonNegative: true })}` : '',
         renderCellStyle(cell, table),
       ].filter(Boolean).join(';');
-      return `<div class="word-clipped-source-cell" data-word-clipped-cell-id="${escapeHtml(cell.id)}" style="${cellStyle}"><div class="word-bound-content" style="${renderBoundContentStyle(cell, table)}">${content}</div></div>`;
+      const roleClass = cellRoleClass(binding, content);
+      return `<div class="word-clipped-source-cell${roleClass ? ` ${roleClass}` : ''}" data-word-clipped-cell-id="${escapeHtml(cell.id)}" style="${cellStyle}"><div class="word-bound-content" style="${renderBoundContentStyle(cell, table)}">${content}</div></div>`;
     }).join('');
     const indentCanvasStyle = indentPt < 0
       ? `box-sizing:content-box;padding-left:${pt(-indentPt, table, 'table', 'negative renderIndentPt', { nonNegative: true })};width:${pt(canvasWidth, table, 'table', 'renderCanvasWidthPt', { nonNegative: true })}`

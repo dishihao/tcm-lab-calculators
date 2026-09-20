@@ -105,6 +105,32 @@ try {
   }));
   assert.equal(unitDisplay.input, undefined, '左侧已有 mol/L 单位时输入数值不应重复显示');
   assert.equal(unitDisplay.outputUnit, undefined, '左侧已有 ml 单位时计算结果不应重复显示');
+  await page.evaluate(() => {
+    const template = QUALITY_TEMPLATES.find(item => item.item === 'moisture' && item.label === '北沙参（原料）');
+    applyQualityTemplate('moisture', template.id);
+    showTab('moisture');
+  });
+  const cellBackgrounds = await page.evaluate(() => {
+    const editable = document.querySelector('[data-k="moisture.Ws.1"]')?.closest('td');
+    const fixed = document.querySelector('.sheet.active [data-fixed-field^="moisture.record."]')?.closest('td');
+    const computed = document.querySelector('.sheet.active .word-cell-output')?.closest('td');
+    return {
+      editable: editable ? getComputedStyle(editable).backgroundColor : '',
+      fixed: fixed ? getComputedStyle(fixed).backgroundColor : '',
+      computed: computed ? getComputedStyle(computed).backgroundColor : '',
+      editableClass: editable?.className || '',
+      fixedClass: fixed?.className || '',
+      computedClass: computed?.className || '',
+    };
+  });
+  assert(cellBackgrounds.editable && cellBackgrounds.editable !== cellBackgrounds.fixed,
+    `可填写格与不可填写格背景没有区分：${JSON.stringify(cellBackgrounds)}`);
+  assert.equal(cellBackgrounds.editable, 'rgb(237, 245, 255)', '可填写格应使用浅蓝背景');
+  assert.equal(cellBackgrounds.fixed, 'rgb(242, 243, 245)', '固定格应使用浅灰背景');
+  assert.equal(cellBackgrounds.computed, 'rgb(242, 243, 245)', '计算结果格应使用浅灰背景');
+  assert(cellBackgrounds.editableClass.includes('word-cell-editable'), '可填写格缺少可填写标识');
+  assert(cellBackgrounds.fixedClass.includes('word-cell-fixed'), '固定格缺少不可填写标识');
+  assert(cellBackgrounds.computedClass.includes('word-cell-computed'), '计算结果格缺少不可填写标识');
 
   const dataFontStyles = await page.evaluate(() => {
     const selectors = '.sheet.active .word-cell-input, .sheet.active .word-cell-output';
