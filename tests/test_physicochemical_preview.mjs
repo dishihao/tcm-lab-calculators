@@ -33,6 +33,14 @@ try {
   assert.equal(await page.locator('.standard-answer').count(), 0, '天平型号和编号不得从标准填入');
   assert(await page.locator('.standard-blank').count() >= 2, '仪器填写横线应保留');
 
+  for (const id of ['id-physicochemical-1086la8', 'id-physicochemical-18zciaj']) {
+    await page.evaluate(id => applyIdentificationTemplate('physicochemical', id), id);
+    assert.deepEqual(await page.locator('.standard-answer:not([hidden])').allTextContents(),
+      ['透明状黏液层薄', '为种子宽度的1/5以下', '透明状黏液层较厚', '超过种子宽度的1/2以上'],
+      `${id}: 葶苈子应在横线上显示四处标准答案`);
+    assert((await page.locator('.standard-preview-status').innerText()).includes('已核实 4 处'));
+  }
+
   const catalog = await page.evaluate(() => PHYSICOCHEMICAL_TEMPLATES.map(t => t.id));
   assert.equal(catalog.length, 203);
   let shortRecords = 0;

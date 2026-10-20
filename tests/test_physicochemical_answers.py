@@ -89,6 +89,17 @@ class AnswerMappingTests(unittest.TestCase):
         self.assertEqual(match_answers(split_runs([(record, False)]),
             ['取本品粉末1g，加水20ml，取滤液1ml，加试液，即显红色。']), ['', ''])
 
+    def test_observation_label_does_not_block_real_tinglizi_standard_answers(self):
+        record = '观察到：取本品少量，加水浸泡后，用放大镜观察，南葶苈子____，厚度约____。北葶苈子____，厚度可____'
+        standard = ('【鉴别】（1）取本品少量，加水浸泡后，用放大镜观察，南葶苈子透明状黏液层薄，'
+                    '厚度约为种子宽度的1/5以下。北葶苈子透明状黏液层较厚，厚度可超过种子宽度的1/2以上。')
+        self.assertEqual(match_answers(split_runs([(record, False)]), [standard]),
+                         ['透明状黏液层薄', '为种子宽度的1/5以下', '透明状黏液层较厚', '超过种子宽度的1/2以上'])
+        self.assertEqual(match_answers(split_runs([(record.replace('加水', '加乙醇'), False)]), [standard]),
+                         ['', '', '', ''])
+        self.assertEqual(match_answers(split_runs([(record.replace('观察到：', '未观察到：'), False)]), [standard]),
+                         ['', '', '', ''])
+
 
 if __name__ == '__main__':
     unittest.main()

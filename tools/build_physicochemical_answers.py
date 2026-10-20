@@ -92,7 +92,9 @@ def match_answers(runs, standard_paragraphs):
         if not indices:
             continue
         sentence = re.sub(r'^(?:\(\d+\)|\d+[.、])', '', sentence)
-        sentence = re.sub(r'^(?:测定法|检验结果|实验方法及结果)[:：]', '', sentence)
+        # A leading record prompt is editorial, not an experimental condition.
+        # Strip only this explicit allowlist; "未观察到" and other qualifiers stay.
+        sentence = re.sub(r'^(?:测定法|检验结果|实验方法及结果|观察到)[:：]', '', sentence)
         parts = re.split(r'(\x01\d+\x02)', sentence)
         static_length = sum(len(p) for p in parts if not p.startswith('\x01'))
         if static_length < 8:
