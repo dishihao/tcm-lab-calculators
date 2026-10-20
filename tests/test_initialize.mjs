@@ -171,14 +171,15 @@ const gcTemplateAfterInit = await page.evaluate(() => ({
 assert(JSON.stringify(gcTemplateAfterInit) === JSON.stringify(gcTemplateBeforeInit),
   `精确气相初始化不应改变模板、标准原文、公开路由或可见布局: ${JSON.stringify(gcTemplateBeforeInit)} -> ${JSON.stringify(gcTemplateAfterInit)}`);
 
-// 显微、薄层、理化的初始化按钮已随项目去掉。
-for (const item of ['microscopy', 'tlc', 'physicochemical']) {
+// 显微、薄层仍隐藏；理化已单独恢复。
+for (const item of ['microscopy', 'tlc']) {
   assert(await page.locator(`[data-initialize-project="${item}"]`).count() === 0,
     `${item}: 鉴别项目已去掉，不应再有初始化按钮`);
 }
 
-assert(await page.locator('[data-initialize-project]').count() === 6, '初始化按钮没有覆盖当前六个项目');
+assert(await page.locator('[data-initialize-project="physicochemical"]').count() === 1, '理化缺少初始化按钮');
+assert(await page.locator('[data-initialize-project]').count() === 7, '初始化按钮没有覆盖当前七个项目');
 await page.screenshot({ path: 'C:/tmp/initialize-buttons.png', fullPage: true });
 assert(errors.length === 0, `页面脚本错误: ${errors.join('; ')}`);
 await browser.close();
-console.log('PASS: 六个项目初始化按钮均能清空检验数据并保留当前模板标准');
+console.log('PASS: 计算项目初始化均能清空检验数据并保留模板，理化初始化入口存在');

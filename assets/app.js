@@ -441,9 +441,8 @@ function qualityStandardText(t){
 
 /* ---------------------------------------------------------------- 鉴别项目模板 */
 
-/* 显微、薄层、理化三个鉴别项目已按要求从页面去掉：不再生成页签与原记录表格。
-   模板数据与渲染代码保留，需要恢复时把 IDENTIFICATION_TABS_ENABLED 改回 true 即可。 */
-const IDENTIFICATION_TABS_ENABLED = false;
+/* 仅开放理化鉴别；显微、薄层的模板与代码保留供离线核对。 */
+const ENABLED_IDENTIFICATION_PROJECTS = new Set(['physicochemical']);
 
 const IDENTIFICATION_PROJECTS = [
   { id:'microscopy', tab:'显微', section:'【鉴别】显微', resultLabel:'显微观察结果',
@@ -454,7 +453,8 @@ const IDENTIFICATION_PROJECTS = [
 ];
 const IDENTIFICATION_PROJECT_BY_ID = new Map(IDENTIFICATION_PROJECTS.map(project => [project.id, project]));
 const ALL_IDENTIFICATION_TEMPLATES = typeof IDENTIFICATION_TEMPLATES === 'undefined'
-  ? [] : IDENTIFICATION_TEMPLATES;
+  ? (typeof PHYSICOCHEMICAL_TEMPLATES === 'undefined' ? [] : PHYSICOCHEMICAL_TEMPLATES)
+  : IDENTIFICATION_TEMPLATES;
 const IDENTIFICATION_TEMPLATE_BY_ID = new Map(ALL_IDENTIFICATION_TEMPLATES.map(template => [template.id, template]));
 const IDENTIFICATION_TEMPLATES_BY_ITEM = new Map(
   IDENTIFICATION_PROJECTS.map(project => [
@@ -1163,9 +1163,7 @@ function renderIdentificationBlocks(template){
   return (template.blocks || []).map(block => `
     <section class="identification-block">
       ${block.title ? `<h3>${esc(block.title)}</h3>` : ''}
-      <div class="identification-lines">
-        ${(block.lines || []).map(line => `<p>${esc(line)}</p>`).join('')}
-      </div>
+      <div class="identification-lines">${(block.lines || []).map(line => `<p>${esc(line)}</p>`).join('')}</div>
     </section>`).join('');
 }
 
@@ -1211,12 +1209,11 @@ function renderIdentificationSheet(project){
       ${template ? `
         <div class="identification-content">
           <div class="identification-source"><b>当前模板：</b>${esc(template.label)}</div>
-          <div class="identification-table-status">${window.IDENTIFICATION_RECORD_TABLES?.[template.id] === 'no-table'
-            ? '该品种原记录的本项目没有独立的填写或计算表格。'
-            : '该品种的原记录表格尚待核对。'}</div>
+          ${renderIdentificationBlocks(template)}
         </div>
+        ${renderIdentificationRecord(project)}
         <div class="note">模板原文来自 ${esc(template.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用鉴别内容。</div>`
-        : '<div class="identification-empty">选择品名和原料/成品模板后，显示对应原记录中需要填写或计算的表格。</div>'}
+        : '<div class="identification-empty">选择品名和原料/成品模板后，显示对应鉴别原文，填写实验现象及结果并选择结论。</div>'}
     </section>`;
 }
 
@@ -2326,7 +2323,7 @@ function build(){
     });
   }
 
-  const identificationProjects = IDENTIFICATION_TABS_ENABLED ? IDENTIFICATION_PROJECTS : [];
+  const identificationProjects = IDENTIFICATION_PROJECTS.filter(project => ENABLED_IDENTIFICATION_PROJECTS.has(project.id));
   const tabs = CALCS.map(c => ({ id:c.id, tab:c.tab }))
     .concat(identificationProjects.map(project => ({ id:project.id, tab:project.tab })))
     .concat([{ id:'assay', tab:ASSAY.tab }]);
