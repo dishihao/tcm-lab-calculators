@@ -361,6 +361,34 @@ select.quality-search{cursor:pointer; min-height:32px}
 }
 .identification-lines{white-space:pre-wrap; overflow-wrap:anywhere}
 .identification-lines p{margin:5px 0}
+.standard-preview{margin:16px 0; border:1px solid #dce3e7; background:#fff}
+.standard-preview-status{display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; padding:12px 16px; color:#52616a; font:13px "Microsoft YaHei",sans-serif; border-bottom:1px solid #e3e8eb}
+.standard-preview-status b{color:#203a40; margin-right:auto}
+.standard-preview-tools{display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:9px 16px; color:#6b7a82; font:12px "Microsoft YaHei",sans-serif}
+.standard-preview-tools button{border:1px solid transparent; background:transparent; color:#137d78; padding:4px 9px; border-radius:4px; font:inherit; cursor:pointer}
+.standard-preview-tools button[aria-pressed="true"]{border-color:#b0d8d3; background:#eaf6f3; font-weight:bold}
+.standard-preview-legend{margin-left:auto}
+.standard-paper-scroll{width:100%; max-height:72vh; overflow:auto; padding:20px 0; background:#f4f6f7; box-sizing:border-box}
+.standard-paper-size{position:relative; overflow:hidden; margin:0 auto}
+.standard-paper{box-sizing:content-box; width:664px; padding:28px; margin:0; transform-origin:0 0; background:white; color:#333; box-shadow:0 1px 6px #00000012; font:16px/1.75 "SimSun","宋体",serif; text-align:left}
+.standard-paper .identification-block{margin:0; padding:0; border:0}
+.standard-paper .identification-block + .identification-block{margin-top:18px}
+.standard-paper .identification-block h3{font:bold 16px/1.75 "SimSun","宋体",serif; color:#333; margin:0 0 9px}
+.standard-paper .identification-lines{white-space:normal}
+.standard-paper .identification-lines p{white-space:pre-wrap; overflow-wrap:anywhere; margin:0 0 6px}
+.standard-blank{position:relative; display:inline-block; border-bottom:1px solid #6b6b6b; line-height:1; vertical-align:baseline; white-space:pre; color:#555}
+.standard-blank-space{visibility:hidden; font-weight:normal}
+.standard-answer{position:absolute; left:50%; bottom:0; transform:translateX(-50%); transform-origin:50% 100%; color:#c00000; font-weight:bold; white-space:pre; line-height:1; pointer-events:none}
+.standard-blank.answered{border-bottom-color:#c00000}
+.standard-preview-source{padding:10px 16px; color:#6b7a82; font:12px/1.7 "Microsoft YaHei",sans-serif; border-top:1px solid #e3e8eb; overflow-wrap:anywhere}
+.standard-preview-source span{display:block}
+.standard-review-note{padding:9px 16px; color:#8f6220; background:#fff8e8; font:13px/1.6 "Microsoft YaHei",sans-serif}
+.standard-short-answers{margin:0; padding:10px 16px; color:#8f6220; background:#fff8e8; font:13px/1.7 "Microsoft YaHei",sans-serif}
+.standard-short-answers summary{cursor:pointer}
+.standard-short-answers ul{margin:8px 0 0; padding-left:24px}
+.standard-short-answers b{color:#c00000}
+.identification-batch-notes{margin:14px 0; font-family:"Microsoft YaHei",sans-serif}
+.identification-batch-notes summary{cursor:pointer; color:#5d6d73; font-size:13px}
 .identification-record{
   margin:16px 0; padding:14px 16px;
   border:1px solid #222; background:#fff;
@@ -483,6 +511,11 @@ select.quality-search{cursor:pointer; min-height:32px}
     box-shadow:none; margin:0; padding:0; max-width:none;
   }
   .sheet.active{display:block}
+  .standard-preview{border:0; margin:0}
+  .standard-preview-status,.standard-preview-source,.standard-review-note{display:none}
+  .standard-paper-scroll{max-height:none; overflow:visible; padding:0; background:none}
+  .standard-paper-size{width:auto !important; height:auto !important; overflow:visible}
+  .standard-paper{transform:none !important; padding:0; margin:0 auto; box-shadow:none; width:664px}
   .tscroll{overflow:visible}
   .tscroll table{min-width:0}
   .word-table-scroll{overflow:visible}

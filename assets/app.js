@@ -1207,13 +1207,15 @@ function renderIdentificationSheet(project){
       </div>
       ${renderIdentificationPicker(project)}
       ${template ? `
-        <div class="identification-content">
-          <div class="identification-source"><b>当前模板：</b>${esc(template.label)}</div>
-          ${renderIdentificationBlocks(template)}
-        </div>
-        ${renderIdentificationRecord(project)}
+        ${project.id === 'physicochemical'
+          ? PhysicochemicalStandards.render(template, get('physicochemical.previewScale'))
+          : `<div class="identification-content">${renderIdentificationBlocks(template)}</div>`}
+        <details class="identification-batch-notes no-print"${get(`${project.id}.result`) || get(`${project.id}.sampleNo`) ? ' open' : ''}>
+          <summary>本批检验记录（选填）</summary>
+          ${renderIdentificationRecord(project)}
+        </details>
         <div class="note">模板原文来自 ${esc(template.sourceFile)}。原料、成品及不同炮制/地区记录分别保存，不共用鉴别内容。</div>`
-        : '<div class="identification-empty">选择品名和原料/成品模板后，显示对应鉴别原文，填写实验现象及结果并选择结论。</div>'}
+        : '<div class="identification-empty">选择品名和原料/成品模板后，按 A4 记录宽度显示鉴别原文，已确认的质量标准答案以红字填在原下划线上。</div>'}
     </section>`;
 }
 
@@ -2346,12 +2348,14 @@ function build(){
 
   showTab(curTab);
   recompute();
+  if (typeof PhysicochemicalStandards !== 'undefined') PhysicochemicalStandards.fitAnswers();
 }
 
 function showTab(id){
   curTab = id;
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
   $$('.sheet').forEach(s => s.classList.toggle('active', s.dataset.sheet === id));
+  if (id === 'physicochemical' && typeof PhysicochemicalStandards !== 'undefined') PhysicochemicalStandards.fitAnswers();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -2414,6 +2418,13 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('click', e => {
+  const standardScale = e.target.closest('[data-standard-scale]');
+  if (standardScale){
+    set('physicochemical.previewScale', standardScale.dataset.standardScale);
+    PhysicochemicalStandards.setScale(standardScale.dataset.standardScale);
+    save();
+    return;
+  }
   const initialize = e.target.closest('[data-initialize-project]');
   if (initialize){
     initializeProject(initialize.dataset.initializeProject);

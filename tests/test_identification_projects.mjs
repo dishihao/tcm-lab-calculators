@@ -89,6 +89,7 @@ try {
   assert((await page.locator('.sheet.active .identification-lines').innerText()).includes('硫氰酸铵试液'),
     '自然铜成品应显示原记录中的反应步骤');
   const field = key => page.locator(`[data-k="physicochemical.${key}"]`);
+  await page.locator('.identification-batch-notes summary').click();
   await field('sampleNo').fill('LH-20261020');
   await field('result').fill('滴加硫氰酸铵试液，显血红色。');
   await field('conclusion').selectOption('符合规定');
@@ -104,6 +105,7 @@ try {
   await page.locator('[data-initialize-project="physicochemical"]').click();
   for (const key of ['sampleNo', 'result', 'conclusion']) assert.equal(await field(key).inputValue(), '');
   assert.equal(await page.locator(`[data-identification-template="${finished.id}"].selected`).count(), 1);
+  await page.locator('.identification-batch-notes summary').click();
   await field('result').fill('旧批次数据');
   await page.locator(`[data-identification-template="${raw.id}"]`).click();
   assert.equal(await field('result').inputValue(), '', '更换原料/成品应清空旧数据');
@@ -117,13 +119,15 @@ try {
     await page.evaluate(id => applyIdentificationTemplate('physicochemical', id), template.id);
     const actual = await page.locator('.sheet.active .identification-block').evaluateAll(blocks => blocks.map(block => ({
       title: block.querySelector('h3')?.textContent || '',
-      lines: [...block.querySelectorAll('p')].map(p => p.textContent),
+      lines: [...block.querySelectorAll('p')].map(p => p.dataset.sourceText || p.textContent),
     })));
-    assert.deepEqual(actual, JSON.parse(JSON.stringify(template.blocks)), `${template.id}: 原文不完整`);
+    const canonical = blocks => blocks.map(block => ({title:block.title,
+      lines:block.lines.map(text => text.replace(/[\s_＿]+/g, ''))}));
+    assert.deepEqual(canonical(actual), canonical(JSON.parse(JSON.stringify(template.blocks))), `${template.id}: 原文不完整`);
     assert.equal(await field('conclusion').inputValue(), '', `${template.id}: 不应预判结论`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  assert(await field('result').isVisible(), '手机应可填写理化结果');
+  assert(await page.locator('.standard-paper').isVisible(), '手机应可查看标准答案预览');
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '手机页面不应横向溢出');
   await page.setViewportSize({ width: 1440, height: 1000 });
 
