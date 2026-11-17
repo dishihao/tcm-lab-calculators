@@ -524,7 +524,7 @@ const CALCS = [
     tab: '水分',
     section: '【检查】水分',
     method: '照水分测定法（通则 0832 第二法）测定。',
-    dp: { ind:2, mean:1 },
+    dp: { ind:1, mean:1 },
     rows: [
       { t:'in', k:'W0a', lab:'瓶重 W<sub>0</sub>(g)', params:[
           {k:'t1', d:'105', u:'℃', w:'w40'}, {k:'h1', d:'5', u:'小时', w:'w40'} ] },
@@ -827,6 +827,7 @@ function decimalsOf(s){
 function calcDp(c, which){
   const k = store[`${c.id}.dp.${which}`];
   if (k !== undefined && k !== '') return parseInt(k, 10);
+  if (c.id === 'moisture' || which === 'rd') return 1;
   if (which === 'mean'){
     const lim = store[`${c.id}.limval`];
     if (lim !== undefined && String(lim).trim() !== '') return decimalsOf(lim);
@@ -835,15 +836,16 @@ function calcDp(c, which){
 }
 
 /**
- * 含量测定的修约位数，三者都挂在标准规定的位数上：
+ * 含量测定的修约位数：
  *   平均含量 = 标准规定位数      （如限度 0.15% → 0.31%）
  *   含量 X   = 标准规定位数 + 1  （如限度 0.15% → 0.310%）
- *   相对偏差 = 标准规定位数 − 1  （如限度 0.15% → 1.0%），不小于 0
+ *   相对偏差 = 默认一位小数（可手动覆盖）
  * which: 'mean' | 'ind' | 'rd'
  */
 function assayDp(which, prefix = AP){
   const own = store[prefix + 'dp.' + which];
   if (own !== undefined && own !== '') return parseInt(own, 10);
+  if (which === 'rd') return 1;
 
   // 平均值位数：用户手改过就用手改的，否则取标准规定的小数位
   const mOwn = store[prefix + 'dp.mean'];
@@ -1600,8 +1602,8 @@ function renderAssaySheet(options = {}){
       药典所载公式未含纯度 S，故默认不折算；如贵司 SOP 要求按纯度校正，请勾选上方选项。
       ${mode === 'internal' ? '内标法先由对照品与内标物的峰面积、浓度计算校正因子，再计算供试品含量。' : '气相（0521）与液相（0512）外标法公式一致。'}
       ${tpl && tpl.totalLabel ? `<br><b>${esc(tpl.totalLabel)}</b>按合计值判定：先计算当前成分，再把另一成分的平均含量填入表格。` : ''}
-      <br>三个修约位数默认都跟着下方标准规定走：<b>平均含量</b>与标准规定同位，
-      <b>含量 X</b> 多一位，<b>相对偏差</b> 少一位。任一项手动改过后即固定，不再跟随。
+      <br>三个修约位数默认规则：<b>平均含量</b>与标准规定同位，
+      <b>含量 X</b> 多一位，<b>相对偏差</b> 默认保留一位小数。任一项手动改过后即固定，不再跟随。
     </div>
   </section>`;
 }
