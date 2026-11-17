@@ -1695,7 +1695,7 @@ function computeCalc(c){
   const se = document.getElementById(`${c.id}.subst`);
   if (se){
     se.innerHTML = sub + (isFinite(r.mean)
-      ? `<br><span style="text-decoration:overline">X</span> = <span class="sx">${fmt(r.mean, meanDp, he)} ${esc(c.unit || '%')}</span>
+      ? `<br>${meanCalculation(r.x, r.mean, indDp, meanDp, he, c.unit || '%')}
          　　　相对偏差 = <span class="sx">${isFinite(r.rd) ? fmt(r.rd, 1, he) : '—'}%</span>` : '');
   }
 
@@ -1704,6 +1704,11 @@ function computeCalc(c){
   const op  = get(`${c.id}.limop`) || (c.id === 'extract' ? 'ge' : 'le');
   const lim = getN(`${c.id}.limval`);
   judge(`${c.id}.judge`, isFinite(r.mean) ? roundTo(r.mean, meanDp, he) : NaN, op, lim);
+}
+
+function meanCalculation(x, average, indDp, meanDp, he, unit){
+  if (!x.every(isFinite) || !isFinite(average)) return '';
+  return `<span class="mean-calculation"><span style="text-decoration:overline">X</span> = ${frac(x.map(v => v.toFixed(indDp)).join(' + '), '2')} = <span class="sx">${fmt(average, meanDp, he)} ${esc(unit)}</span></span>`;
 }
 
 function computeAssay(scope = AP, templateOverride = null){
@@ -1855,7 +1860,7 @@ function computeAssay(scope = AP, templateOverride = null){
   const se = document.getElementById(`${pre}subst`);
   if (se){
     se.innerHTML = lines.join('<br>') + (isFinite(mn)
-      ? `<br><span style="text-decoration:overline">X</span> = <span class="sx">${fmt(mn, meanDp, he)} ${esc(unit)}</span>
+      ? `<br>${meanCalculation(x, mn, indDp, meanDp, he, unit)}
          　　　相对偏差 = <span class="sx">${isFinite(rd) ? fmt(rd, rdDp, he) : '—'}%</span>` : '');
   }
 

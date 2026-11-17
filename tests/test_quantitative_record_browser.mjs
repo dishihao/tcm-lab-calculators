@@ -8,7 +8,7 @@ const browser=await chromium.launch({headless:true,executablePath:'C:/Program Fi
 try{
   const page=await browser.newPage({viewport:{width:1440,height:1100}});
   const errors=[];page.on('pageerror',error=>errors.push(String(error)));
-  await page.goto(new URL('../index.html',import.meta.url).href);
+  await page.goto(process.env.TEST_BASE_URL || new URL('../index.html',import.meta.url).href);
   const coverage=await page.evaluate(()=>{
     const templates=[...QUALITY_TEMPLATES,...SULFUR_DIOXIDE_TEMPLATES],asset=QUANTITATIVE_RECORD_LAYOUTS,failures=[];
     for(const t of templates)if(!asset.templates[t.id])failures.push('missing status '+t.id);
@@ -41,6 +41,11 @@ try{
     if(project==='extract'&&await page.locator('[data-k="extract.Q"]').count())await page.locator('[data-k="extract.Q"]').fill('0');
     const actual=Number((await page.locator(`[id="${project}.out.MEAN"]`).innerText()).replace(/[^\d.+-]/g,''));
     assert(Math.abs(actual-({impurity:2,moisture:10,ash:5,extract:10}[project]))<0.06,`${project}: unexpected result ${actual}`);
+    const meanStep=page.locator(`[id="${project}.subst"] .mean-calculation`);
+    assert.equal(await meanStep.count(),1,`${project}: 平均值缺少代入计算过程`);
+    const sampleTexts=await Promise.all([1,2].map(i=>page.locator(`[id="${project}.out.X.${i}"]`).innerText()));
+    assert.equal(await meanStep.locator('.num').innerText(),sampleTexts.map(s=>s.replace(/[^\d.+-]/g,'')).join(' + '));
+    assert.equal(await meanStep.locator('.den').innerText(),'2');
     if(project==='moisture'){
       assert(!(await page.locator('[id="moisture.out.X.1"]').innerText()).endsWith('%'),
         '左侧已有 % 单位时水分单值右侧不应重复显示');
@@ -96,6 +101,11 @@ try{
     computeAssay();
     showTab('assay');
   });
+  const assayMeanStep=page.locator('[id="assay.subst"] .mean-calculation');
+  assert.equal(await assayMeanStep.count(),1,'含量测定平均值缺少代入过程');
+  const assayXs=await Promise.all([1,2].map(i=>page.locator(`[id="assay.out.X.${i}"]`).innerText()));
+  assert.equal(await assayMeanStep.locator('.num').innerText(),assayXs.map(s=>s.replace(/[^\d.+-]/g,'')).join(' + '));
+  assert.equal(await assayMeanStep.locator('.den').innerText(),'2');
   const assaySubstitution=await page.locator('#assay\\.subst').innerText();
   assert(assaySubstitution.includes('11.10%'), '含量测定公式没有保留水分源数据的两位小数');
   assert(assaySubstitution.includes('2.6272') && assaySubstitution.includes('2.5841'),
